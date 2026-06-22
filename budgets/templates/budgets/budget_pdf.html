@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+    @page { size: A4; margin: 1.8cm; }
+    body { font-family: Helvetica, Arial, sans-serif; color: #1a1a1a; font-size: 11pt; }
+
+    .header { text-align: center; border-bottom: 3px solid #111; padding-bottom: 16px; margin-bottom: 22px; }
+    .logo { width: 150px; height: 150px; }
+    .business-name { font-size: 30pt; font-weight: bold; color: #111; letter-spacing: 1px; margin-top: 6px; }
+    .business-tagline { font-size: 11pt; color: #666; text-transform: uppercase; letter-spacing: 3px; }
+
+    .doc-title { font-size: 18pt; font-weight: bold; color: #111; margin-bottom: 16px; }
+    .meta { margin-bottom: 18px; font-size: 10pt; color: #444; }
+    .meta b { color: #111; }
+
+    table.items { width: 100%; border-collapse: collapse; margin-top: 8px; }
+    table.items th { background-color: #111; color: #fff; text-align: left; padding: 8px 9px; font-size: 10pt; text-transform: uppercase; letter-spacing: 0.5px; }
+    table.items td { padding: 9px; border-bottom: 1px solid #ddd; }
+    .num { text-align: right; }
+    .item-name { font-size: 12pt; font-weight: bold; color: #111; }
+    .desc { color: #555; font-size: 9.5pt; margin-top: 3px; }
+    .includes { color: #555; font-size: 9.5pt; margin-top: 3px; }
+
+    .total-box { margin-top: 18px; text-align: right; }
+    .total-box .label { font-size: 12pt; font-weight: bold; color: #111; }
+    .total-box .amount { font-size: 22pt; font-weight: bold; color: #111; }
+
+    .footer { margin-top: 40px; font-size: 9pt; color: #777; border-top: 1px solid #ddd; padding-top: 10px; text-align: center; }
+</style>
+</head>
+<body>
+    <div class="header">
+        {% if logo_data_uri %}<img class="logo" src="{{ logo_data_uri }}" alt="logo" /><br />{% endif %}
+        <div class="business-name">{{ business_name }}</div>
+        <div class="business-tagline">{{ business_tagline }}</div>
+    </div>
+
+    <div class="doc-title">Presupuesto N° {{ budget.pk }}</div>
+
+    <div class="meta">
+        <b>Fecha:</b> {{ date_str }}<br />
+        {% if budget.client_name %}<b>Cliente:</b> {{ budget.client_name }}<br />{% endif %}
+    </div>
+
+    <table class="items">
+        <thead>
+            <tr>
+                <th style="width: 50%;">Detalle</th>
+                <th class="num" style="width: 10%;">Cant.</th>
+                <th class="num" style="width: 19%;">Precio&nbsp;unit.</th>
+                <th class="num" style="width: 21%;">Importe</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>
+                    <span class="item-name">{{ budget.name }}</span>
+                    {% if budget.description %}<div class="desc">{{ budget.description }}</div>{% endif %}
+                    {% if includes %}<div class="includes">Incluye: {% for it in includes %}{{ it }}{% if not forloop.last %}, {% endif %}{% endfor %}</div>{% endif %}
+                </td>
+                <td class="num">{{ quantity }}</td>
+                <td class="num">$&nbsp;{{ unit_price_str }}</td>
+                <td class="num">$&nbsp;{{ total_str }}</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div class="total-box">
+        <span class="label">TOTAL:</span>
+        <span class="amount">$&nbsp;{{ total_str }}</span>
+    </div>
+
+    <div class="footer">
+        Presupuesto válido por {{ validity_days }} días desde la fecha de emisión.<br />
+        {{ business_name }} · {{ business_contact }}
+    </div>
+</body>
+</html>
