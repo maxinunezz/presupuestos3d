@@ -16,6 +16,11 @@ media/
 .env.local
 .env*.local
 
+# Backups de base de datos (contienen datos sensibles)
+backup_neon_*.sql
+*.sql
+dump_err.log
+
 # Vercel
 .vercel/
 
