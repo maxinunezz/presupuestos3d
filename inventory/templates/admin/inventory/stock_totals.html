@@ -1,0 +1,130 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+<style>
+    .totals-search { margin: 14px 0 22px; }
+    .totals-search input[type="text"] { padding: 7px 10px; font-size: 14px; width: 320px; max-width: 100%; }
+
+    /* Modo noche: input con fondo gris y texto blanco */
+    html[data-theme="dark"] .totals-search input[type="text"] {
+        background: #3a3a3a; color: #fff; border: 1px solid #555;
+    }
+    html[data-theme="dark"] .totals-search input[type="text"]::placeholder { color: #bbb; }
+    @media (prefers-color-scheme: dark) {
+        html[data-theme="auto"] .totals-search input[type="text"] {
+            background: #3a3a3a; color: #fff; border: 1px solid #555;
+        }
+        html[data-theme="auto"] .totals-search input[type="text"]::placeholder { color: #bbb; }
+    }
+    .totals-search button, .totals-search a.btn { padding: 7px 14px; font-size: 14px; }
+    .totals-filters { margin-top: 10px; font-size: 13px; }
+    .totals-filters a { margin-right: 12px; text-decoration: none; }
+    .totals-filters a.active { font-weight: bold; text-decoration: underline; }
+
+    table.totals { width: 100%; border-collapse: collapse; margin: 8px 0 6px; background: #fff; }
+    table.totals th { background: #111; color: #fff; text-align: left; padding: 8px 10px; font-size: 12px; text-transform: uppercase; }
+    table.totals td { padding: 8px 10px; border-bottom: 1px solid #e0e0e0; font-size: 13px; color: #1a1a1a; background: #fff; }
+    table.totals td.num, table.totals th.num { text-align: right; }
+    table.totals tr.total-row td { background: #ececec; color: #111; font-weight: bold; border-top: 2px solid #111; }
+    .section-title { margin-top: 26px; font-size: 16px; font-weight: bold; }
+    .grand-total { margin-top: 26px; padding: 14px 16px; background: #111; color: #fff; border-radius: 6px; font-size: 16px; display: inline-block; }
+    .grand-total b { font-size: 20px; }
+    .empty { color: #888; padding: 10px 0; }
+</style>
+
+<form class="totals-search" method="get">
+    <input type="text" name="q" value="{{ query }}" placeholder="Buscar marca, color, material o agregado…" autofocus />
+    <input type="hidden" name="only" value="{{ only }}" />
+    <button type="submit">Buscar</button>
+    {% if query %}<a class="btn" href="?{% if only %}only={{ only }}{% endif %}">Limpiar</a>{% endif %}
+
+    <div class="totals-filters">
+        Ver:
+        <a href="?q={{ query }}" class="{% if not only %}active{% endif %}">Todo</a>
+        <a href="?q={{ query }}&only=filament" class="{% if only == 'filament' %}active{% endif %}">Solo filamentos</a>
+        <a href="?q={{ query }}&only=aggregate" class="{% if only == 'aggregate' %}active{% endif %}">Solo agregados</a>
+    </div>
+</form>
+
+{% if show_fil %}
+<div class="section-title">🧵 Filamentos</div>
+<table class="totals">
+    <thead>
+        <tr>
+            <th>Filamento</th>
+            <th class="num">Stock (g)</th>
+            <th class="num">Stock (kg)</th>
+            <th class="num">Costo/kg</th>
+            <th class="num">Valor en stock</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for r in fil_rows %}
+        <tr>
+            <td>{{ r.name }}</td>
+            <td class="num">{{ r.stock_grams }}</td>
+            <td class="num">{{ r.stock_kg }}</td>
+            <td class="num">$ {{ r.cost_per_kg }}</td>
+            <td class="num">$ {{ r.value }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" class="empty">Sin filamentos para esta búsqueda.</td></tr>
+        {% endfor %}
+        {% if fil_rows %}
+        <tr class="total-row">
+            <td>TOTAL filamentos</td>
+            <td class="num">{{ fil_total_grams }} g</td>
+            <td class="num">{{ fil_total_kg }} kg</td>
+            <td class="num">—</td>
+            <td class="num">$ {{ fil_total_money }}</td>
+        </tr>
+        {% endif %}
+    </tbody>
+</table>
+{% endif %}
+
+{% if show_agg %}
+<div class="section-title">🔩 Agregados</div>
+<table class="totals">
+    <thead>
+        <tr>
+            <th>Agregado</th>
+            <th>Categoría</th>
+            <th>Unidad</th>
+            <th class="num">Cantidad</th>
+            <th class="num">Costo/u</th>
+            <th class="num">Valor en stock</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for r in agg_rows %}
+        <tr>
+            <td>{{ r.name }}</td>
+            <td>{{ r.category }}</td>
+            <td>{{ r.unit }}</td>
+            <td class="num">{{ r.stock_quantity }}</td>
+            <td class="num">$ {{ r.cost_per_unit }}</td>
+            <td class="num">$ {{ r.value }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" class="empty">Sin agregados para esta búsqueda.</td></tr>
+        {% endfor %}
+        {% if agg_rows %}
+        <tr class="total-row">
+            <td colspan="3">TOTAL agregados</td>
+            <td class="num">{{ agg_total_qty }}</td>
+            <td class="num">—</td>
+            <td class="num">$ {{ agg_total_money }}</td>
+        </tr>
+        {% endif %}
+    </tbody>
+</table>
+{% endif %}
+
+{% if show_fil and show_agg %}
+<div class="grand-total">
+    Valor total de inventario {% if query %}(filtrado){% endif %}: <b>$ {{ grand_total_money }}</b>
+</div>
+{% endif %}
+
+{% endblock %}

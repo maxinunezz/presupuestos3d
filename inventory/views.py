@@ -5,7 +5,7 @@ from .models import Aggregate, Filament, StockMovement
 from .serializers import AggregateSerializer, FilamentSerializer, StockMovementSerializer
 
 
-class FilamentViewSet(viewsets.ModelViewSet):
+class FilamentViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Filament.objects.all()
     serializer_class = FilamentSerializer
     filter_backends = [SearchFilter]
@@ -19,7 +19,7 @@ class FilamentViewSet(viewsets.ModelViewSet):
         return qs
 
 
-class AggregateViewSet(viewsets.ModelViewSet):
+class AggregateViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Aggregate.objects.all()
     serializer_class = AggregateSerializer
     filter_backends = [SearchFilter]
@@ -40,6 +40,6 @@ class StockMovementViewSet(viewsets.ReadOnlyModelViewSet):
     """
 
     queryset = StockMovement.objects.select_related(
-        "filament", "aggregate", "related_budget"
+        "filament", "aggregate", "related_presupuesto"
     ).all()
     serializer_class = StockMovementSerializer

@@ -23,7 +23,8 @@ class FilamentSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "created_at", "updated_at"]
+        # El stock nunca se edita por API: se mueve solo por compras/producción.
+        read_only_fields = ["id", "stock_grams", "created_at", "updated_at"]
 
 
 class AggregateSerializer(serializers.ModelSerializer):
@@ -40,7 +41,7 @@ class AggregateSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "created_at", "updated_at"]
+        read_only_fields = ["id", "stock_quantity", "created_at", "updated_at"]
 
 
 class StockMovementSerializer(serializers.ModelSerializer):
@@ -55,7 +56,7 @@ class StockMovementSerializer(serializers.ModelSerializer):
             "item_display",
             "quantity",
             "reason",
-            "related_budget",
+            "related_presupuesto",
             "note",
             "created_at",
         ]

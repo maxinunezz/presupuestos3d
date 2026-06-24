@@ -17,7 +17,7 @@ from django.utils import timezone
 BUSINESS_NAME = "3darg"
 BUSINESS_TAGLINE = "Impresión 3D"
 BUSINESS_CONTACT = "3darg1@gmail.com"
-QUOTE_VALIDITY_DAYS = 7
+QUOTE_VALIDITY_DAYS = 30
 
 # Logo del negocio (se embebe en el PDF como data URI para no depender de rutas).
 LOGO_PATH = Path(__file__).resolve().parent / "assets" / "logo3darg.jpeg"
@@ -50,30 +50,41 @@ def format_money(value) -> str:
     return f"{signo}{entero_fmt},{dec}"
 
 
-def build_budget_context(budget) -> dict:
-    includes = [str(line.aggregate) for line in budget.aggregate_lines.all()]
+def build_presupuesto_context(presupuesto) -> dict:
     today = timezone.localdate()
+    items = []
+    for item in presupuesto.items.select_related("producto").all():
+        items.append(
+            {
+                "name": item.producto.name,
+                "description": item.producto.description,
+                "quantity": item.quantity,
+                "unit_price_str": format_money(item.effective_unit_price),
+                "line_total_str": format_money(item.line_total),
+            }
+        )
     return {
         "business_name": BUSINESS_NAME,
         "business_tagline": BUSINESS_TAGLINE,
         "business_contact": BUSINESS_CONTACT,
         "logo_data_uri": _logo_data_uri(),
-        "budget": budget,
+        "presupuesto": presupuesto,
         "date_str": today.strftime("%d/%m/%Y"),
-        "quantity": budget.quantity,
-        "unit_price_str": format_money(budget.unit_price),
-        "total_str": format_money(budget.total),
-        "includes": includes,
+        "items": items,
+        "fixed_cost_str": format_money(presupuesto.fixed_cost),
+        "has_fixed_cost": presupuesto.fixed_cost and presupuesto.fixed_cost > 0,
+        "total_str": format_money(presupuesto.total),
         "validity_days": QUOTE_VALIDITY_DAYS,
     }
 
 
-def render_budget_pdf(budget) -> bytes:
+def render_presupuesto_pdf(presupuesto) -> bytes:
     """Devuelve los bytes del PDF del presupuesto para el cliente."""
-    # Import diferido: solo se necesita al generar un PDF.
     from xhtml2pdf import pisa
 
-    html = render_to_string("budgets/budget_pdf.html", build_budget_context(budget))
+    html = render_to_string(
+        "budgets/presupuesto_pdf.html", build_presupuesto_context(presupuesto)
+    )
     buffer = BytesIO()
     result = pisa.CreatePDF(src=html, dest=buffer, encoding="utf-8")
     if result.err:
@@ -81,5 +92,5 @@ def render_budget_pdf(budget) -> bytes:
     return buffer.getvalue()
 
 
-def budget_pdf_filename(budget) -> str:
-    return f"presupuesto_{budget.pk}.pdf"
+def presupuesto_pdf_filename(presupuesto) -> str:
+    return f"presupuesto_{presupuesto.pk}.pdf"

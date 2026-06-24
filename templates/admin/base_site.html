@@ -1,0 +1,109 @@
+{% extends "admin/base_site.html" %}
+{# Override de base_site.html para sumar la campanita de alertas de bajo stock. #}
+{# Nota: este template vive en el DIR de proyecto (templates/), que tiene #}
+{# prioridad sobre el de django.contrib.admin, así que no entra en bucle: #}
+{# Django resuelve "admin/base_site.html" al de contrib para el {% extends %}. #}
+
+{% block extrastyle %}{{ block.super }}
+<style>
+    #stock-bell {
+        position: relative;
+        display: inline-block;
+        margin-right: 18px;
+        vertical-align: middle;
+    }
+    #stock-bell .bell-icon {
+        font-size: 18px;
+        text-decoration: none;
+        cursor: pointer;
+        position: relative;
+        color: var(--header-link-color, #fff);
+    }
+    #stock-bell .bell-badge {
+        position: absolute;
+        top: -8px;
+        right: -10px;
+        background: #dc3545;
+        color: #fff;
+        border-radius: 10px;
+        font-size: 10px;
+        font-weight: bold;
+        line-height: 1;
+        padding: 2px 5px;
+        min-width: 8px;
+        text-align: center;
+    }
+    #stock-bell .bell-dropdown {
+        display: none;
+        position: absolute;
+        right: 0;
+        top: 26px;
+        z-index: 1000;
+        background: #fff;
+        color: #333;
+        border: 1px solid #ccc;
+        border-radius: 6px;
+        box-shadow: 0 4px 14px rgba(0,0,0,.18);
+        width: 320px;
+        max-height: 380px;
+        overflow-y: auto;
+        text-align: left;
+    }
+    #stock-bell:hover .bell-dropdown,
+    #stock-bell:focus-within .bell-dropdown {
+        display: block;
+    }
+    #stock-bell .bell-dropdown .bd-header {
+        padding: 9px 12px;
+        font-weight: bold;
+        border-bottom: 1px solid #eee;
+        background: #f7f3e8;
+        color: #8a6d0b;
+    }
+    #stock-bell .bell-dropdown a.bd-item {
+        display: block;
+        padding: 8px 12px;
+        border-bottom: 1px solid #f0f0f0;
+        text-decoration: none;
+        color: #333;
+    }
+    #stock-bell .bell-dropdown a.bd-item:hover {
+        background: #fcf7e6;
+    }
+    #stock-bell .bd-item .bd-name { font-weight: 600; }
+    #stock-bell .bd-item .bd-kind {
+        font-size: 10px;
+        color: #fff;
+        background: #6c757d;
+        border-radius: 3px;
+        padding: 1px 5px;
+        margin-left: 6px;
+    }
+    #stock-bell .bd-item .bd-stock { font-size: 11px; color: #b3261e; margin-top: 2px; }
+    #stock-bell .bd-empty { padding: 12px; color: #28a745; }
+</style>
+{% endblock %}
+
+{% block usertools %}
+{% if user.is_active and user.is_staff %}
+<div id="stock-bell" tabindex="0">
+    <a class="bell-icon" href="{% url 'admin:inventory_filament_changelist' %}?low_stock=yes" title="Alertas de bajo stock">
+        &#128276;{% if low_stock_count %}<span class="bell-badge">{{ low_stock_count }}</span>{% endif %}
+    </a>
+    <div class="bell-dropdown">
+        <div class="bd-header">
+            {% if low_stock_count %}Bajo stock ({{ low_stock_count }}){% else %}Stock OK{% endif %}
+        </div>
+        {% for it in low_stock_items %}
+        <a class="bd-item" href="{{ it.url }}">
+            <span class="bd-name">{{ it.label }}</span><span class="bd-kind">{{ it.kind }}</span>
+            <div class="bd-stock">Quedan {{ it.current }} · mínimo {{ it.minimum }}</div>
+        </a>
+        {% empty %}
+        <div class="bd-empty">Todo el stock está por encima del mínimo. ✓</div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+{{ block.super }}
+{% endblock %}

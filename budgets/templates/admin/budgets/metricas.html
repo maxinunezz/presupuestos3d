@@ -1,0 +1,202 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block content %}
+<style>
+    .mx-intro { color: #555; font-size: 13px; margin: 6px 0 16px; }
+    html[data-theme="dark"] .mx-intro { color: #bbb; }
+
+    .mx-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 22px; }
+    .mx-tabs { display: flex; gap: 6px; }
+    .mx-tab {
+        padding: 7px 16px; border: 1px solid #111; border-radius: 6px; text-decoration: none;
+        color: #111; font-size: 13px; font-weight: 600; background: #fff;
+    }
+    .mx-tab.active { background: #111; color: #fff; }
+    .mx-range { color: var(--body-quiet-color, #555); font-size: 13px; font-weight: 600; }
+    .mx-excel {
+        margin-left: auto; padding: 8px 18px; background: #16a34a; color: #fff; border-radius: 6px;
+        text-decoration: none; font-size: 13px; font-weight: 600;
+    }
+
+    .mx-section {
+        margin: 26px 0 8px; font-size: 16px; font-weight: bold;
+        border-bottom: 3px solid var(--border-color, #111); padding-bottom: 4px;
+    }
+    /* Cada bloque con su color para guiar la vista. */
+    .mx-section--ventas { border-bottom-color: #2563eb; }
+    .mx-section--prod   { border-bottom-color: #16a34a; }
+    .mx-section--inv    { border-bottom-color: #d97706; }
+
+    .mx-kpis { display: flex; gap: 14px; flex-wrap: wrap; }
+    .kpi { background: #111; color: #fff; border-radius: 8px; padding: 14px 18px; min-width: 150px; flex: 1 1 160px; }
+    .kpi .n { font-size: 24px; font-weight: bold; display: block; }
+    .kpi .l { font-size: 12px; color: rgba(255, 255, 255, 0.82); }
+    .kpi .s { font-size: 11px; color: rgba(255, 255, 255, 0.6); display: block; margin-top: 2px; }
+    /* KPIs coloreados por sección (ventas / producción / inventario). */
+    .mx-kpis--ventas .kpi { background: #1d4ed8; }
+    .mx-kpis--prod .kpi   { background: #15803d; }
+    .mx-kpis--inv .kpi    { background: #b45309; }
+
+    .mx-grid { display: flex; flex-wrap: wrap; gap: 20px; margin-top: 14px; }
+    .mx-card {
+        flex: 1 1 380px; min-width: 320px; background: #fff; border: 1px solid #ddd;
+        border-radius: 8px; padding: 14px 16px;
+    }
+    .mx-card h3 { margin: 0 0 10px; font-size: 14px; color: #111; }
+
+    table.mx { width: 100%; border-collapse: collapse; background: #fff; }
+    table.mx th { background: #111; color: #fff; text-align: left; padding: 7px 9px; font-size: 11px; text-transform: uppercase; }
+    table.mx td { padding: 7px 9px; border-bottom: 1px solid #e6e6e6; font-size: 13px; color: #1a1a1a; background: #fff; }
+    table.mx td.num, table.mx th.num { text-align: right; }
+    .empty { color: #888; padding: 8px 0; font-size: 13px; }
+</style>
+
+<p class="mx-intro">
+    KPIs del negocio por período. Ventas por <b>fecha de aprobación</b>, producción por
+    <b>fin de impresión</b>, compras por <b>fecha de confirmación</b>. El embudo y el stock bajo
+    son una foto del estado actual (no dependen del período).
+</p>
+
+<div class="mx-bar">
+    <div class="mx-tabs">
+        {% for p in periods %}
+        <a class="mx-tab {% if p.active %}active{% endif %}" href="?period={{ p.key }}">{{ p.label }}</a>
+        {% endfor %}
+    </div>
+    <span class="mx-range">{{ range_str }}</span>
+    <a class="mx-excel" href="?period={{ period }}&export=xlsx">⬇ Descargar Excel</a>
+</div>
+
+<!-- ===================== A) VENTAS ===================== -->
+<div class="mx-section mx-section--ventas">💰 Ventas</div>
+<div class="mx-kpis mx-kpis--ventas">
+    <div class="kpi"><span class="n">{{ facturacion }}</span><span class="l">Facturación aprobada</span></div>
+    <div class="kpi"><span class="n">{{ n_aprobados }}</span><span class="l">Presupuestos aprobados</span></div>
+    <div class="kpi"><span class="n">{{ ticket }}</span><span class="l">Ticket promedio</span></div>
+    <div class="kpi"><span class="n">{{ conversion }}</span><span class="l">Conversión</span><span class="s">{{ conversion_detail }}</span></div>
+    <div class="kpi"><span class="n">{{ margen_pct }}</span><span class="l">Margen bruto</span></div>
+    <div class="kpi"><span class="n">{{ tiempo_ciclo }}</span><span class="l">Tiempo de ciclo</span></div>
+</div>
+
+<div class="mx-grid">
+    <div class="mx-card">
+        <h3>Facturación por {{ period_label|lower }}</h3>
+        <canvas id="chartFact" height="150"></canvas>
+    </div>
+    <div class="mx-card">
+        <h3>Embudo de estados (ahora)</h3>
+        <canvas id="chartEmbudo" height="150"></canvas>
+    </div>
+</div>
+
+<div class="mx-grid">
+    <div class="mx-card">
+        <h3>Productos más vendidos (cantidad)</h3>
+        <table class="mx">
+            <thead><tr><th>Producto</th><th class="num">Cant.</th></tr></thead>
+            <tbody>
+                {% for r in top_productos_qty %}
+                <tr><td>{{ r.name }}</td><td class="num">{{ r.qty }}</td></tr>
+                {% empty %}<tr><td colspan="2" class="empty">Sin ventas en el período.</td></tr>{% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="mx-card">
+        <h3>Productos más vendidos ($)</h3>
+        <table class="mx">
+            <thead><tr><th>Producto</th><th class="num">Facturación</th></tr></thead>
+            <tbody>
+                {% for r in top_productos_money %}
+                <tr><td>{{ r.name }}</td><td class="num">{{ r.money }}</td></tr>
+                {% empty %}<tr><td colspan="2" class="empty">Sin ventas en el período.</td></tr>{% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="mx-card">
+        <h3>Top clientes ($)</h3>
+        <table class="mx">
+            <thead><tr><th>Cliente</th><th class="num">Facturación</th></tr></thead>
+            <tbody>
+                {% for r in top_clientes %}
+                <tr><td>{{ r.name }}</td><td class="num">{{ r.money }}</td></tr>
+                {% empty %}<tr><td colspan="2" class="empty">Sin ventas en el período.</td></tr>{% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- ===================== B) PRODUCCIÓN ===================== -->
+<div class="mx-section mx-section--prod">🖨️ Producción</div>
+<div class="mx-kpis mx-kpis--prod">
+    <div class="kpi"><span class="n">{{ piezas_impresas }}</span><span class="l">Piezas impresas</span></div>
+    <div class="kpi"><span class="n">{{ horas_impresas }}</span><span class="l">Horas impresas</span></div>
+    <div class="kpi"><span class="n">{{ reprint_rate }}</span><span class="l">Tasa de reimpresión</span><span class="s">{{ reprints }} por falla</span></div>
+    <div class="kpi"><span class="n">{{ cumplimiento }}</span><span class="l">Cumplimiento de entrega</span><span class="s">{{ total_ent }} con fecha</span></div>
+</div>
+
+<div class="mx-grid">
+    <div class="mx-card">
+        <h3>Horas impresas por máquina</h3>
+        <canvas id="chartMaq" height="150"></canvas>
+    </div>
+    <div class="mx-card">
+        <h3>Uso por máquina</h3>
+        <table class="mx">
+            <thead><tr><th>Máquina</th><th class="num">Trabajos</th><th class="num">Piezas</th><th class="num">Horas</th></tr></thead>
+            <tbody>
+                {% for r in uso_maquinas %}
+                <tr><td>{{ r.name }}</td><td class="num">{{ r.jobs }}</td><td class="num">{{ r.piezas }}</td><td class="num">{{ r.horas }}</td></tr>
+                {% empty %}<tr><td colspan="4" class="empty">No se imprimió nada en el período.</td></tr>{% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- ===================== C) INVENTARIO / COSTOS ===================== -->
+<div class="mx-section mx-section--inv">📦 Inventario y costos</div>
+<div class="mx-kpis mx-kpis--inv">
+    <div class="kpi"><span class="n">{{ gasto_compras }}</span><span class="l">Gasto en compras</span><span class="s">{{ n_compras }} compra/s</span></div>
+    <div class="kpi"><span class="n">{{ consumo_valor }}</span><span class="l">Consumo de material ($)</span></div>
+    <div class="kpi"><span class="n">{{ fil_grams }}</span><span class="l">Filamento consumido</span></div>
+    <div class="kpi"><span class="n">{{ low_stock }}</span><span class="l">Insumos bajo stock mínimo</span></div>
+</div>
+
+<script src="{% static 'budgets/chart.umd.min.js' %}"></script>
+<script>
+(function () {
+    if (typeof Chart === "undefined") return;  // si no cargó Chart.js: las tablas siguen funcionando
+
+    // Paleta multicolor (ventas azul, producción verde, inventario ámbar, etc.).
+    var PALETTE = ["#2563eb", "#16a34a", "#f59e0b", "#dc2626", "#7c3aed", "#0891b2", "#db2777", "#65a30d"];
+
+    // Las tarjetas siempre son blancas (también en modo oscuro), así que el texto
+    // de los gráficos va fijo en oscuro; si no, en modo oscuro quedaba blanco sobre blanco.
+    Chart.defaults.color = "#333";
+    Chart.defaults.borderColor = "rgba(0, 0, 0, 0.1)";
+
+    var fact = {{ fact_chart_json|safe }};
+    var embudo = {{ embudo_chart_json|safe }};
+    var maq = {{ maq_chart_json|safe }};
+
+    new Chart(document.getElementById("chartFact"), {
+        type: "bar",
+        data: { labels: fact.labels, datasets: [{ label: "Facturación", data: fact.data, backgroundColor: "#2563eb", borderRadius: 4 }] },
+        options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+    });
+
+    new Chart(document.getElementById("chartEmbudo"), {
+        type: "doughnut",
+        data: { labels: embudo.labels, datasets: [{ data: embudo.data, backgroundColor: PALETTE, borderWidth: 0 }] },
+        options: { plugins: { legend: { position: "right" } } }
+    });
+
+    new Chart(document.getElementById("chartMaq"), {
+        type: "bar",
+        data: { labels: maq.labels, datasets: [{ label: "Horas", data: maq.data, backgroundColor: PALETTE, borderRadius: 4 }] },
+        options: { indexAxis: "y", plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true } } }
+    });
+})();
+</script>
+
+{% endblock %}

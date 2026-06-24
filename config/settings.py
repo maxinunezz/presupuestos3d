@@ -60,6 +60,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'inventory',
     'budgets',
+    'production',
 ]
 
 MIDDLEWARE = [
@@ -83,6 +84,12 @@ CORS_ALLOWED_ORIGINS = _env_list('CORS_ALLOWED_ORIGINS') or [
 REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 50,
+    # La API solo expone inventario para el front. Por defecto exige estar
+    # autenticado como staff (admin); los ViewSets son de solo lectura, así
+    # que nadie puede crear/editar/borrar stock vía API.
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAdminUser',
+    ],
 }
 
 ROOT_URLCONF = 'config.urls'
@@ -90,13 +97,14 @@ ROOT_URLCONF = 'config.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [BASE_DIR / 'templates'],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'inventory.context_processors.low_stock_alerts',
             ],
         },
     },
@@ -163,6 +171,12 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+# Archivos subidos por el usuario (uploads). Por ahora solo para desarrollo
+# local: los .3mf / gcode de los productos se guardan en disco. En producción
+# (Vercel) el filesystem es efímero; cuando se necesite, migrar a S3/Cloudinary.
+MEDIA_URL = 'media/'
+MEDIA_ROOT = BASE_DIR / 'media'
 
 # WhiteNoise sirve los estáticos del admin en producción (Vercel corre
 # collectstatic automáticamente). Comprime y versiona con manifest.

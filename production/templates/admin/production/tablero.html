@@ -1,0 +1,164 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+<style>
+    .tb-intro { color: #555; font-size: 13px; margin: 6px 0 18px; }
+    html[data-theme="dark"] .tb-intro { color: #bbb; }
+
+    .tb-kpis { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 26px; }
+    .kpi { background: #111; color: #fff; border-radius: 8px; padding: 14px 18px; min-width: 150px; }
+    .kpi .n { font-size: 26px; font-weight: bold; display: block; }
+    .kpi .l { font-size: 12px; color: #ccc; }
+
+    .tb-section { margin-top: 28px; font-size: 17px; font-weight: bold; }
+
+    .now-grid { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 10px; }
+    .now-card {
+        flex: 1 1 300px; min-width: 280px; background: #fff; border: 1px solid #ddd;
+        border-radius: 8px; overflow: hidden;
+    }
+    .now-card .nc-head { background: #111; color: #fff; padding: 10px 14px; font-weight: bold; }
+    .now-card .nc-body { padding: 12px 14px; color: #1a1a1a; font-size: 13px; }
+    .now-card .prod { font-weight: 600; font-size: 14px; }
+    .now-card .meta { color: #666; font-size: 12px; margin-top: 3px; }
+    .now-card .idle { color: #999; }
+    .badge-print { background: #28a745; color: #fff; border-radius: 3px; padding: 1px 7px; font-size: 11px; }
+    .badge-next { background: #ffeeba; color: #7a5b00; border-radius: 3px; padding: 1px 7px; font-size: 11px; }
+
+    table.tb { width: 100%; border-collapse: collapse; background: #fff; margin-top: 10px; }
+    table.tb th { background: #111; color: #fff; text-align: left; padding: 8px 10px; font-size: 12px; text-transform: uppercase; }
+    table.tb td { padding: 8px 10px; border-bottom: 1px solid #e0e0e0; font-size: 13px; color: #1a1a1a; background: #fff; }
+    table.tb td.num, table.tb th.num { text-align: right; }
+    .empty { color: #888; padding: 10px 0; }
+
+    .buy-box { background: #fdecea; border: 1px solid #f3b9b2; border-radius: 8px; padding: 4px 14px 14px; margin-top: 10px; }
+    .buy-ok { background: #eaf7ec; border: 1px solid #b7e0bf; border-radius: 8px; padding: 12px 14px; margin-top: 10px; color: #1e7e34; }
+    table.tb.buy th { background: #b3261e; }
+</style>
+
+<p class="tb-intro">
+    Vista general de producción. Ventana de carga <b>{{ window }}</b>. Los tiempos son
+    estimados según la cola actual; el post-proceso se suma sobre la entrega de cada presupuesto.
+</p>
+
+<div class="tb-kpis">
+    <div class="kpi"><span class="n">{{ open_jobs_count }}</span><span class="l">trabajos en cola</span></div>
+    <div class="kpi"><span class="n">{{ total_pending_hours }}</span><span class="l">horas de impresión pendientes</span></div>
+    <div class="kpi"><span class="n">{{ proximas|length }}</span><span class="l">pedidos en producción</span></div>
+</div>
+
+<div class="tb-section">🖨️ Qué se está imprimiendo</div>
+<div class="now-grid">
+    {% for m in machines %}
+    <div class="now-card">
+        <div class="nc-head">{{ m.name }}</div>
+        <div class="nc-body">
+            {% if m.current %}
+                {% if m.current.printing %}<span class="badge-print">imprimiendo</span>{% else %}<span class="badge-next">próximo</span>{% endif %}
+                <div class="prod">{{ m.current.producto }} ×{{ m.current.quantity }}</div>
+                <div class="meta">{{ m.current.cliente }} · #{{ m.current.presupuesto_id }}</div>
+                <div class="meta">Termina: <b>{{ m.current.print_end }}</b></div>
+                <div class="meta">{{ m.queue_count }} en cola en esta máquina</div>
+            {% else %}
+                <div class="idle">Libre — sin trabajos en cola.</div>
+            {% endif %}
+        </div>
+    </div>
+    {% empty %}
+    <p class="empty">No hay máquinas activas.</p>
+    {% endfor %}
+</div>
+
+{% if unassigned %}
+<div class="tb-section">⚠️ Trabajos sin máquina asignada</div>
+<div class="buy-box">
+    <p style="color:#b3261e; margin:12px 0 4px;">
+        Estos trabajos no tienen impresora asignada (sin máquina o máquina inactiva).
+        Asignales una desde "Trabajos de producción" para que entren en la cola.
+    </p>
+    <table class="tb buy">
+        <thead>
+            <tr><th>Producto</th><th class="num">Cant.</th><th>Cliente</th><th>#</th><th class="num">Horas impr.</th></tr>
+        </thead>
+        <tbody>
+            {% for j in unassigned %}
+            <tr>
+                <td>{{ j.producto }}</td>
+                <td class="num">{{ j.quantity }}</td>
+                <td>{{ j.cliente }}</td>
+                <td>{{ j.presupuesto_id }}</td>
+                <td class="num">{{ j.print_hours }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+<div class="tb-section">📦 Próximas entregas</div>
+<table class="tb">
+    <thead>
+        <tr><th>#</th><th>Cliente</th><th>Estado</th><th>Entrega estimada</th></tr>
+    </thead>
+    <tbody>
+        {% for p in proximas %}
+        <tr>
+            <td>{{ p.id }}</td>
+            <td>{{ p.cliente }}</td>
+            <td>{{ p.status }}</td>
+            <td>{{ p.due_date }}{% if p.manual %} ✋ (fijada a mano){% endif %}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="4" class="empty">No hay pedidos en producción con fecha de entrega.</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<div class="tb-section">🛒 Comprar materia prima</div>
+{% if buy_filaments or buy_aggregates %}
+<div class="buy-box">
+    <p style="color:#b3261e; margin:12px 0 4px;">
+        Con los pedidos en cola, estos insumos no alcanzan. Comprá antes de la fecha indicada.
+    </p>
+    {% if buy_filaments %}
+    <table class="tb buy">
+        <thead>
+            <tr><th>Filamento</th><th class="num">Stock (g)</th><th class="num">Necesita (g)</th><th class="num">Falta (g)</th><th>Se agota aprox.</th></tr>
+        </thead>
+        <tbody>
+            {% for r in buy_filaments %}
+            <tr>
+                <td>{{ r.item }}</td>
+                <td class="num">{{ r.stock }}</td>
+                <td class="num">{{ r.needed }}</td>
+                <td class="num">{{ r.shortfall }}</td>
+                <td>{{ r.runs_out_at }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+    {% if buy_aggregates %}
+    <table class="tb buy">
+        <thead>
+            <tr><th>Agregado</th><th class="num">Stock</th><th class="num">Necesita</th><th class="num">Falta</th><th>Se agota aprox.</th></tr>
+        </thead>
+        <tbody>
+            {% for r in buy_aggregates %}
+            <tr>
+                <td>{{ r.item }}</td>
+                <td class="num">{{ r.stock }} {{ r.unit }}</td>
+                <td class="num">{{ r.needed }} {{ r.unit }}</td>
+                <td class="num">{{ r.shortfall }} {{ r.unit }}</td>
+                <td>{{ r.runs_out_at }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+</div>
+{% else %}
+<div class="buy-ok">✓ El stock alcanza para todos los pedidos que hay en cola.</div>
+{% endif %}
+
+{% endblock %}

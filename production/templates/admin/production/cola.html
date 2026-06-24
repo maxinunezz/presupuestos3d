@@ -1,0 +1,107 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+<style>
+    .cola-intro { color: #555; font-size: 13px; margin: 6px 0 18px; }
+    html[data-theme="dark"] .cola-intro { color: #bbb; }
+
+    .machines { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 30px; }
+    .machine-card {
+        flex: 1 1 320px; min-width: 300px; background: #fff; border: 1px solid #ddd;
+        border-radius: 8px; overflow: hidden;
+    }
+    .machine-card .mc-head {
+        background: #111; color: #fff; padding: 10px 14px; font-weight: bold;
+        display: flex; justify-content: space-between; align-items: center;
+    }
+    .machine-card .mc-free { font-size: 11px; font-weight: normal; color: #ffd66b; }
+    .machine-card table { width: 100%; border-collapse: collapse; }
+    .machine-card td, .machine-card th {
+        padding: 7px 12px; border-bottom: 1px solid #eee; font-size: 13px;
+        color: #1a1a1a; background: #fff; text-align: left;
+    }
+    .machine-card th { background: #111; color: #fff; font-size: 11px; text-transform: uppercase; }
+    .machine-card .pos { color: #888; font-weight: bold; width: 22px; }
+    .machine-card .empty { color: #999; padding: 14px; }
+    .badge-print { background: #ffeeba; color: #7a5b00; border-radius: 3px; padding: 1px 6px; font-size: 11px; }
+
+    table.total-queue { width: 100%; border-collapse: collapse; background: #fff; margin-top: 8px; }
+    table.total-queue th { background: #111; color: #fff; text-align: left; padding: 8px 10px; font-size: 12px; text-transform: uppercase; }
+    table.total-queue td { padding: 8px 10px; border-bottom: 1px solid #e0e0e0; font-size: 13px; color: #1a1a1a; background: #fff; }
+    .section-title { margin-top: 26px; font-size: 17px; font-weight: bold; }
+    .warn-box { background: #fdecea; border: 1px solid #f3b9b2; border-radius: 6px; padding: 10px 14px; margin: 14px 0; color: #b3261e; }
+</style>
+
+<p class="cola-intro">
+    Ventana de carga: <b>{{ window }}</b>. Las máquinas imprimen de corrido (un trabajo
+    puede cruzar la noche), pero un trabajo nuevo solo arranca dentro de esa franja.
+    El post-proceso se suma después, sobre la fecha de entrega de cada presupuesto.
+</p>
+
+<div class="section-title">🖨️ Cola por máquina</div>
+<div class="machines">
+    {% for m in machines %}
+    <div class="machine-card">
+        <div class="mc-head">
+            <span>{{ m.name }} ({{ m.count }})</span>
+            <span class="mc-free">Libre: {{ m.free_at }}</span>
+        </div>
+        <table>
+            <thead>
+                <tr><th class="pos">#</th><th>Producto</th><th>Inicio</th><th>Fin impr.</th></tr>
+            </thead>
+            <tbody>
+                {% for j in m.jobs %}
+                <tr>
+                    <td class="pos">{{ forloop.counter }}</td>
+                    <td>
+                        {{ j.producto }} ×{{ j.quantity }}<br>
+                        <small>{{ j.cliente }} · #{{ j.presupuesto_id }} · {{ j.print_hours }} h</small>
+                        {% if j.status == "Imprimiendo" %} <span class="badge-print">imprimiendo</span>{% endif %}
+                    </td>
+                    <td>{{ j.start }}</td>
+                    <td>{{ j.print_end }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="4" class="empty">Sin trabajos en cola.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% empty %}
+    <p class="empty">No hay máquinas activas. Cargá máquinas en "Máquinas (impresoras)".</p>
+    {% endfor %}
+</div>
+
+{% if unassigned %}
+<div class="warn-box">
+    <b>{{ unassigned|length }} trabajo(s) sin máquina asignada.</b> Asignales una máquina
+    en "Trabajos de producción" para que entren a la cola.
+</div>
+{% endif %}
+
+<div class="section-title">📋 Cola total</div>
+<table class="total-queue">
+    <thead>
+        <tr>
+            <th>Producto</th><th>Cliente</th><th>Máquina / estado</th>
+            <th>Horas</th><th>Inicio est.</th><th>Fin impr. est.</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for j in total %}
+        <tr>
+            <td>{{ j.producto }} ×{{ j.quantity }}</td>
+            <td>{{ j.cliente }} (#{{ j.presupuesto_id }})</td>
+            <td>{{ j.status }}</td>
+            <td>{{ j.print_hours }} h</td>
+            <td>{{ j.start }}</td>
+            <td>{{ j.print_end }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" class="empty">No hay trabajos en cola.</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+{% endblock %}
