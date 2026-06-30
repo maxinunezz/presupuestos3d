@@ -1,0 +1,1736 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: en\n"
+
+msgid "Idioma"
+msgstr "Language"
+
+msgid "Inventario"
+msgstr "Inventory"
+
+msgid "Presupuestos"
+msgstr "Budgets"
+
+msgid "Producción"
+msgstr "Production"
+
+msgid "Gastos"
+msgstr "Expenses"
+
+msgid "Otro"
+msgstr "Other"
+
+msgid "Marca"
+msgstr "Brand"
+
+msgid "Tipo de material"
+msgstr "Material type"
+
+msgid "Color"
+msgstr "Color"
+
+msgid "Color (hex)"
+msgstr "Color (hex)"
+
+msgid "Ej: #FF0000. Opcional, para mostrar una muestra de color en el front."
+msgstr "E.g. #FF0000. Optional, to show a color swatch on the front end."
+
+msgid "Costo por kg"
+msgstr "Cost per kg"
+
+msgid "Stock disponible (g)"
+msgstr "Available stock (g)"
+
+msgid "Stock mínimo (g)"
+msgstr "Minimum stock (g)"
+
+msgid "Si el stock baja de este valor, salta la alerta de bajo stock (la campanita). En gramos. Ej: 1000 = 1 kg. Poné 0 para no avisar de este filamento."
+msgstr "If stock drops below this value, the low-stock alert (the bell) is triggered. In grams. E.g. 1000 = 1 kg. Set 0 to disable alerts for this filament."
+
+msgid "Activo"
+msgstr "Active"
+
+msgid "Creado"
+msgstr "Created"
+
+msgid "Actualizado"
+msgstr "Updated"
+
+msgid "Filamento"
+msgstr "Filament"
+
+msgid "Filamentos"
+msgstr "Filaments"
+
+msgid "Herraje (argollas, llaveros, etc.)"
+msgstr "Hardware (rings, keychains, etc.)"
+
+msgid "Decoración (pegatinas, etc.)"
+msgstr "Decoration (stickers, etc.)"
+
+msgid "Unidad"
+msgstr "Unit"
+
+msgid "Par"
+msgstr "Pair"
+
+msgid "Metro"
+msgstr "Meter"
+
+msgid "Gramo"
+msgstr "Gram"
+
+msgid "Nombre"
+msgstr "Name"
+
+msgid "Categoría"
+msgstr "Category"
+
+msgid "Costo por unidad"
+msgstr "Cost per unit"
+
+msgid "Stock disponible"
+msgstr "Available stock"
+
+msgid "Stock mínimo"
+msgstr "Minimum stock"
+
+msgid "Si el stock baja de este valor, salta la alerta de bajo stock (la campanita). Va en la MISMA unidad del agregado: si se mide en unidades, poné unidades (ej: pelotas → 20); si se mide en gramos, poné gramos (ej: argollas → 200). Poné 0 para no avisar de este agregado."
+msgstr "If stock drops below this value, the low-stock alert (the bell) is triggered. Use the SAME unit as the aggregate: if it is measured in units, enter units (e.g. balls → 20); if it is measured in grams, enter grams (e.g. rings → 200). Set 0 to disable alerts for this aggregate."
+
+msgid "Agregado"
+msgstr "Aggregate"
+
+msgid "Agregados"
+msgstr "Aggregates"
+
+msgid "Totales de inventario"
+msgstr "Inventory totals"
+
+msgid "Compra"
+msgstr "Purchase"
+
+msgid "Presupuesto aprobado"
+msgstr "Budget approved"
+
+msgid "Producción (impresión)"
+msgstr "Production (printing)"
+
+msgid "Cancelación de presupuesto"
+msgstr "Budget cancellation"
+
+msgid "Ajuste manual"
+msgstr "Manual adjustment"
+
+msgid "Reimpresión por falla"
+msgstr "Reprint due to failure"
+
+msgid "Cantidad"
+msgstr "Quantity"
+
+msgid "Negativo = salida de stock. Positivo = entrada de stock."
+msgstr "Negative = stock out. Positive = stock in."
+
+msgid "Motivo"
+msgstr "Reason"
+
+msgid "Presupuesto relacionado"
+msgstr "Related budget"
+
+msgid "Nota"
+msgstr "Note"
+
+msgid "Fecha"
+msgstr "Date"
+
+msgid "Movimiento de stock"
+msgstr "Stock movement"
+
+msgid "Movimientos de stock"
+msgstr "Stock movements"
+
+msgid "Un movimiento de stock debe estar vinculado a exactamente un Filamento o un Agregado (no ambos, no ninguno)."
+msgstr "A stock movement must be linked to exactly one Filament or one Aggregate (not both, not neither)."
+
+msgid "Ajuste manual de stock"
+msgstr "Manual stock adjustment"
+
+msgid "Ajustes manuales de stock"
+msgstr "Manual stock adjustments"
+
+msgid "Borrador"
+msgstr "Draft"
+
+msgid "Confirmada"
+msgstr "Confirmed"
+
+msgid "Proveedor"
+msgstr "Supplier"
+
+msgid "N° de factura / remito"
+msgstr "Invoice / delivery note no."
+
+msgid "Notas"
+msgstr "Notes"
+
+msgid "Estado"
+msgstr "Status"
+
+msgid "Confirmada el"
+msgstr "Confirmed at"
+
+msgid "Creada"
+msgstr "Created"
+
+msgid "Actualizada"
+msgstr "Updated"
+
+msgid "Compras"
+msgstr "Purchases"
+
+msgid "sin proveedor"
+msgstr "no supplier"
+
+msgid "No se puede confirmar la compra #%(pk)s: su estado es '%(status)s'. Solo se pueden confirmar compras en estado Borrador."
+msgstr "Purchase #%(pk)s cannot be confirmed: its status is '%(status)s'. Only purchases in Draft status can be confirmed."
+
+msgid "Cantidad comprada"
+msgstr "Quantity purchased"
+
+msgid "Filamento: en gramos. Agregado: en unidades."
+msgstr "Filament: in grams. Aggregate: in units."
+
+msgid "Precio pagado"
+msgstr "Price paid"
+
+msgid "Filamento: costo por kg. Agregado: costo por unidad. Si se deja vacío, se mantiene el precio actual del artículo."
+msgstr "Filament: cost per kg. Aggregate: cost per unit. If left blank, the item's current price is kept."
+
+msgid "Línea de compra"
+msgstr "Purchase line"
+
+msgid "Líneas de compra"
+msgstr "Purchase lines"
+
+msgid "Una línea de compra debe estar vinculada a exactamente un Filamento o un Agregado (no ambos, no ninguno)."
+msgstr "A purchase line must be linked to exactly one Filament or one Aggregate (not both, not neither)."
+
+msgid "Bajo stock"
+msgstr "Low stock"
+
+msgid "Sí (por debajo del mínimo)"
+msgstr "Yes (below minimum)"
+
+msgid "No (stock OK)"
+msgstr "No (stock OK)"
+
+msgid "Bajo"
+msgstr "Low"
+
+msgid "OK"
+msgstr "OK"
+
+msgid "Costo/g"
+msgstr "Cost/g"
+
+msgid "Estado stock"
+msgstr "Stock status"
+
+msgid "Costo de línea"
+msgstr "Line cost"
+
+msgid "Resumen"
+msgstr "Summary"
+
+msgid "Compra #%(pk)s confirmada: stock y precios actualizados."
+msgstr "Purchase #%(pk)s confirmed: stock and prices updated."
+
+msgid "Total"
+msgstr "Total"
+
+msgid "Resumen de la compra"
+msgstr "Purchase summary"
+
+msgid "Guardá la compra y agregá líneas para ver el total."
+msgstr "Save the purchase and add lines to see the total."
+
+msgid "<br><i>Borrador: todavía no impactó el inventario. Usá la acción “Confirmar compra” en la lista para sumar el stock.</i>"
+msgstr "<br><i>Draft: it has not affected inventory yet. Use the “Confirm purchase” action in the list to add the stock.</i>"
+
+msgid "(sin líneas todavía)"
+msgstr "(no lines yet)"
+
+msgid "TOTAL"
+msgstr "TOTAL"
+
+msgid "Confirmar compra(s) seleccionadas (suma stock)"
+msgstr "Confirm selected purchase(s) (adds stock)"
+
+msgid "Ítem"
+msgstr "Item"
+
+msgid "Origen"
+msgstr "Source"
+
+msgid "Stock luego del ajuste"
+msgstr "Stock after adjustment"
+
+msgid "Elegí el filamento a ajustar (o un agregado, no ambos)."
+msgstr "Choose the filament to adjust (or an aggregate, not both)."
+
+msgid "Elegí el agregado a ajustar (o un filamento, no ambos)."
+msgstr "Choose the aggregate to adjust (or a filament, not both)."
+
+msgid "Cantidad a ajustar. POSITIVO suma al stock, NEGATIVO resta. Filamento en gramos, agregado en unidades. Ej: 500 agrega 500 g; -200 quita 200 g. Si querés dejar el stock en un valor exacto, fijate cuánto hay hoy y poné la diferencia."
+msgstr "Quantity to adjust. POSITIVE adds to stock, NEGATIVE subtracts. Filament in grams, aggregate in units. E.g. 500 adds 500 g; -200 removes 200 g. If you want to set stock to an exact value, check how much there is today and enter the difference."
+
+msgid "Motivo del ajuste (ej: conteo físico, rotura, sobrante de impresión, carga inicial de stock)."
+msgstr "Reason for the adjustment (e.g. physical count, breakage, print surplus, initial stock load)."
+
+msgid "Elegí exactamente un artículo: un Filamento o un Agregado (no ambos, no ninguno)."
+msgstr "Choose exactly one item: a Filament or an Aggregate (not both, not neither)."
+
+msgid "Ingresá una cantidad distinta de cero."
+msgstr "Enter a non-zero quantity."
+
+msgid "Stock ajustado en %(delta)s%(unidad)s. Nuevo stock: %(resultante)s %(unidad)s."
+msgstr "Stock adjusted by %(delta)s%(unidad)s. New stock: %(resultante)s %(unidad)s."
+
+msgid "Buscar marca, color, material o agregado…"
+msgstr "Search brand, color, material or aggregate…"
+
+msgid "Buscar"
+msgstr "Search"
+
+msgid "Limpiar"
+msgstr "Clear"
+
+msgid "Ver:"
+msgstr "View:"
+
+msgid "Todo"
+msgstr "All"
+
+msgid "Solo filamentos"
+msgstr "Filaments only"
+
+msgid "Solo agregados"
+msgstr "Aggregates only"
+
+msgid "Stock (g)"
+msgstr "Stock (g)"
+
+msgid "Stock (kg)"
+msgstr "Stock (kg)"
+
+msgid "Costo/kg"
+msgstr "Cost/kg"
+
+msgid "Valor en stock"
+msgstr "Stock value"
+
+msgid "Sin filamentos para esta búsqueda."
+msgstr "No filaments for this search."
+
+msgid "TOTAL filamentos"
+msgstr "TOTAL filaments"
+
+msgid "Costo/u"
+msgstr "Cost/unit"
+
+msgid "Sin agregados para esta búsqueda."
+msgstr "No aggregates for this search."
+
+msgid "TOTAL agregados"
+msgstr "TOTAL aggregates"
+
+msgid "Valor total de inventario"
+msgstr "Total inventory value"
+
+msgid "(filtrado)"
+msgstr "(filtered)"
+
+msgid "Administración"
+msgstr "Administration"
+
+msgid "Comercialización"
+msgstr "Marketing"
+
+msgid "Suscripciones"
+msgstr "Subscriptions"
+
+msgid "IT"
+msgstr "IT"
+
+msgid "Único (no se repite)"
+msgstr "One-time (does not repeat)"
+
+msgid "Mensual"
+msgstr "Monthly"
+
+msgid "Anual"
+msgstr "Annual"
+
+msgid "Efectivo"
+msgstr "Cash"
+
+msgid "Transferencia"
+msgstr "Bank transfer"
+
+msgid "Tarjeta de crédito"
+msgstr "Credit card"
+
+msgid "Débito automático"
+msgstr "Automatic debit"
+
+msgid "Concepto"
+msgstr "Concept"
+
+msgid "Qué gasto es (ej: Contador, Google Workspace, Publicidad Instagram)."
+msgstr "What the expense is (e.g.: Accountant, Google Workspace, Instagram Ads)."
+
+msgid "Monto ($)"
+msgstr "Amount ($)"
+
+msgid "Fecha del gasto. Define en qué mes/año cae en el panel."
+msgstr "Expense date. Determines which month/year it falls under in the dashboard."
+
+msgid "Medio de pago"
+msgstr "Payment method"
+
+msgid "Es recurrente"
+msgstr "Is recurring"
+
+msgid "Marcalo si es un gasto fijo que se repite (suscripción, abono). Se usa para calcular el compromiso mensual (run-rate)."
+msgstr "Check it if it is a fixed expense that repeats (subscription, plan). Used to compute the monthly commitment (run-rate)."
+
+msgid "Periodicidad"
+msgstr "Frequency"
+
+msgid "Si es recurrente, cada cuánto se paga (para el compromiso mensual)."
+msgstr "If recurring, how often it is paid (for the monthly commitment)."
+
+msgid "Gasto"
+msgstr "Expense"
+
+msgid "Tope mensual ($)"
+msgstr "Monthly cap ($)"
+
+msgid "Gasto máximo esperado por mes para esta categoría. 0 = sin tope."
+msgstr "Maximum expected spend per month for this category. 0 = no cap."
+
+msgid "Tope de gasto (presupuesto)"
+msgstr "Expense cap (budget)"
+
+msgid "Topes de gasto (presupuestos)"
+msgstr "Expense caps (budgets)"
+
+msgid "Tope %(categoria)s: $%(monto)s/mes"
+msgstr "Cap %(categoria)s: $%(monto)s/month"
+
+msgid "Panel de gastos"
+msgstr "Expenses dashboard"
+
+msgid "Pago"
+msgstr "Payment"
+
+msgid "Recurrencia"
+msgstr "Recurrence"
+
+msgid "Marcá los gastos fijos (suscripciones, abonos) para que entren en el compromiso mensual del panel."
+msgstr "Mark fixed expenses (subscriptions, plans) so they count toward the monthly commitment in the dashboard."
+
+msgid "Monto"
+msgstr "Amount"
+
+msgid "Todo el año"
+msgstr "Whole year"
+
+msgid "Enero"
+msgstr "January"
+
+msgid "Febrero"
+msgstr "February"
+
+msgid "Marzo"
+msgstr "March"
+
+msgid "Abril"
+msgstr "April"
+
+msgid "Mayo"
+msgstr "May"
+
+msgid "Junio"
+msgstr "June"
+
+msgid "Julio"
+msgstr "July"
+
+msgid "Agosto"
+msgstr "August"
+
+msgid "Septiembre"
+msgstr "September"
+
+msgid "Octubre"
+msgstr "October"
+
+msgid "Noviembre"
+msgstr "November"
+
+msgid "Diciembre"
+msgstr "December"
+
+msgid "Año %(year)s"
+msgstr "Year %(year)s"
+
+msgid "Gastos 3darg — %(period)s (%(range)s)"
+msgstr "3darg Expenses — %(period)s (%(range)s)"
+
+msgid "Total de gastos"
+msgstr "Total expenses"
+
+msgid "Cantidad de gastos"
+msgstr "Number of expenses"
+
+msgid "Total %(prev)s"
+msgstr "Total %(prev)s"
+
+msgid "Variación vs período anterior"
+msgstr "Change vs previous period"
+
+msgid "Compromiso mensual recurrente"
+msgstr "Recurring monthly commitment"
+
+msgid "Proyección anual recurrente"
+msgstr "Recurring annual projection"
+
+msgid "Ventas del período"
+msgstr "Sales for the period"
+
+msgid "Resultado operativo (ventas − gastos)"
+msgstr "Operating result (sales − expenses)"
+
+msgid "Gastos sobre ventas"
+msgstr "Expenses over sales"
+
+msgid "Acumulado año %(year)s"
+msgstr "Year %(year)s cumulative"
+
+msgid "Promedio mensual"
+msgstr "Monthly average"
+
+msgid "Por categoría"
+msgstr "By category"
+
+msgid "% del total"
+msgstr "% of total"
+
+msgid "Evolución"
+msgstr "Trend"
+
+msgid "Mes"
+msgstr "Month"
+
+msgid "Gastos por mes — %(year)s"
+msgstr "Expenses by month — %(year)s"
+
+msgid "Recurrentes"
+msgstr "Recurring"
+
+msgid "Equivalente mensual"
+msgstr "Monthly equivalent"
+
+msgid "Topes"
+msgstr "Caps"
+
+msgid "Tope"
+msgstr "Cap"
+
+msgid "% usado"
+msgstr "% used"
+
+msgid "¿Excedido?"
+msgstr "Exceeded?"
+
+msgid "Sí"
+msgstr "Yes"
+
+msgid "No"
+msgstr "No"
+
+msgid "Gastos operativos del negocio (administración, comercialización, suscripciones, IT)
+    por <b>fecha del gasto</b>. No incluye los <b>costos</b> de producción ni las compras de
+    insumos (eso va por Inventario y Métricas). El resultado operativo cruza estos gastos
+    con las ventas aprobadas del mismo período."
+msgstr "Operating expenses of the business (administration, marketing, subscriptions, IT)
+    by <b>expense date</b>. It does not include production <b>costs</b> or supply
+    purchases (those go through Inventory and Metrics). The operating result crosses these
+    expenses with the approved sales of the same period."
+
+msgid "Ver"
+msgstr "View"
+
+msgid "Descargar Excel"
+msgstr "Download Excel"
+
+msgid "Acumulado del año"
+msgstr "Year to date"
+
+msgid "Gastos por categoría"
+msgstr "Expenses by category"
+
+msgid "Desglose por categoría"
+msgstr "Breakdown by category"
+
+msgid "Cant."
+msgstr "Qty."
+
+msgid "vs ant."
+msgstr "vs prev."
+
+msgid "Resultado operativo (vs ventas)"
+msgstr "Operating result (vs sales)"
+
+msgid "Ventas aprobadas"
+msgstr "Approved sales"
+
+msgid "Gastos del período"
+msgstr "Expenses for the period"
+
+msgid "Ventas − Gastos"
+msgstr "Sales − Expenses"
+
+msgid "Compromiso por mes"
+msgstr "Commitment per month"
+
+msgid "Proyección anual"
+msgstr "Annual projection"
+
+msgid "Gastos recurrentes del período"
+msgstr "Recurring expenses for the period"
+
+msgid "Equiv. mensual"
+msgstr "Monthly equiv."
+
+msgid "No hay gastos recurrentes en este período."
+msgstr "There are no recurring expenses in this period."
+
+msgid "Control de topes por categoría"
+msgstr "Cap control by category"
+
+msgid "Restante"
+msgstr "Remaining"
+
+msgid "No hay topes cargados. Cargá topes mensuales en «Topes de gasto»."
+msgstr "No caps configured. Set monthly caps in «Expense caps»."
+
+msgid "Alta"
+msgstr "High"
+
+msgid "Media"
+msgstr "Medium"
+
+msgid "Baja"
+msgstr "Low"
+
+msgid "Sin prioridad"
+msgstr "No priority"
+
+msgid "Nombre / pieza"
+msgstr "Name / part"
+
+msgid "Descripción"
+msgstr "Description"
+
+msgid "Prioridad en la cola"
+msgstr "Queue priority"
+
+msgid "Define en qué orden entra a la cola de producción: prioridad más alta se imprime antes. 'Sin prioridad' va al final de la cola."
+msgstr "Defines the order in which it enters the production queue: higher priority is printed first. 'No priority' goes to the end of the queue."
+
+msgid "Multicolor (AMS)"
+msgstr "Multicolor (AMS)"
+
+msgid "Marcá si la pieza usa varios colores/filamentos en simultáneo. Solo se puede imprimir en máquinas con AMS (ej. Bambu Lab), no en la Ender."
+msgstr "Check this if the part uses several colors/filaments at once. It can only be printed on AMS-equipped machines (e.g. Bambu Lab), not on the Ender."
+
+msgid "Costo de máquina por hora"
+msgstr "Machine cost per hour"
+
+msgid "Merma de material (%)"
+msgstr "Material waste (%)"
+
+msgid "Desperdicio de filamento por purga (multicolor), soportes y fallas. Se aplica sobre el costo y el consumo de material."
+msgstr "Filament wasted on purge (multicolor), supports and failures. Applied to material cost and consumption."
+
+msgid "Post-proceso por pieza (hs)"
+msgstr "Post-processing per part (hrs)"
+
+msgid "Tiempo de armado, lijado, pintado, pegado de agregados, etc."
+msgstr "Time for assembly, sanding, painting, gluing add-ons, etc."
+
+msgid "Costo de mano de obra por hora"
+msgstr "Labor cost per hour"
+
+msgid "Margen (%)"
+msgstr "Margin (%)"
+
+msgid "Redondear precio a múltiplo de"
+msgstr "Round price to a multiple of"
+
+msgid "Ej: 100 redondea el precio a la centena más cercana. 0 = sin redondeo."
+msgstr "E.g. 100 rounds the price to the nearest hundred. 0 = no rounding."
+
+msgid "G-code"
+msgstr "G-code"
+
+msgid "Pegá acá el g-code del laminador (opcional)."
+msgstr "Paste the slicer g-code here (optional)."
+
+msgid "Archivo .3mf / modelo"
+msgstr "File .3mf / model"
+
+msgid "Subí el .3mf o archivo del modelo (opcional, solo desarrollo local)."
+msgstr "Upload the .3mf or model file (optional, local development only)."
+
+msgid "Stock de productos terminados"
+msgstr "Finished products stock"
+
+msgid "Unidades de este producto ya terminadas (armadas) y disponibles para entregar sin imprimir. Sube al completar un pedido de stock."
+msgstr "Units of this product already finished (assembled) and available to deliver without printing. Increases when a stock order is completed."
+
+msgid "Stock mínimo de terminados"
+msgstr "Minimum finished stock"
+
+msgid "Cuántas unidades terminadas querés tener siempre en stock. Si el stock baja de este número, el producto aparece como 'a reponer'. 0 = no se controla el mínimo."
+msgstr "How many finished units you always want in stock. If the stock falls below this number, the product appears as 'to restock'. 0 = minimum not tracked."
+
+msgid "Costeo de producto"
+msgstr "Product costing"
+
+msgid "Costeo de productos"
+msgstr "Product costing"
+
+msgid "Costo por unidad (congelado)"
+msgstr "Cost per unit (frozen)"
+
+msgid "Costo por unidad guardado al costear. Si se deja vacío, se toma el precio actual del agregado."
+msgstr "Cost per unit saved at costing time. If left empty, the add-on's current price is used."
+
+msgid "Línea de agregado"
+msgstr "Add-on line"
+
+msgid "Líneas de agregado"
+msgstr "Add-on lines"
+
+msgid "Nombre de la pieza"
+msgstr "Part name"
+
+msgid "Unidades necesarias por producto"
+msgstr "Units needed per product"
+
+msgid "Cuántas unidades de esta pieza lleva UN producto."
+msgstr "How many units of this part ONE product requires."
+
+msgid "Piezas por corrida de gcode"
+msgstr "Parts per gcode run"
+
+msgid "Cuántas unidades de esta pieza salen en UNA impresión (un gcode)."
+msgstr "How many units of this part come out of ONE print (a single gcode)."
+
+msgid "Horas de máquina por corrida de gcode"
+msgstr "Machine hours per gcode run"
+
+msgid "Tiempo de impresión de UNA corrida del gcode (saca `piezas por gcode`)."
+msgstr "Print time of ONE gcode run (yields `parts per gcode`)."
+
+msgid "Necesita AMS (multicolor)"
+msgstr "Requires AMS (multicolor)"
+
+msgid "Se marca solo cuando la pieza usa más de una línea de filamento (multicolor): debe ir a una máquina con AMS. Podés forzarlo a mano."
+msgstr "Set automatically when the part uses more than one filament line (multicolor): it must go to an AMS machine. You can force it manually."
+
+msgid "Stock de piezas impresas"
+msgstr "Printed parts stock"
+
+msgid "Unidades de esta pieza ya impresas y disponibles en stock."
+msgstr "Units of this part already printed and available in stock."
+
+msgid "Orden"
+msgstr "Order"
+
+msgid "Pieza"
+msgstr "Part"
+
+msgid "Piezas"
+msgstr "Parts"
+
+msgid "Gramos usados (por corrida)"
+msgstr "Grams used (per run)"
+
+msgid "Costo por gramo (congelado)"
+msgstr "Cost per gram (frozen)"
+
+msgid "Costo por gramo guardado al momento de costear. Si se deja vacío, se toma el precio actual del filamento."
+msgstr "Cost per gram saved at costing time. If left empty, the filament's current price is used."
+
+msgid "Línea de filamento (pieza)"
+msgstr "Filament line (part)"
+
+msgid "Líneas de filamento (pieza)"
+msgstr "Filament lines (part)"
+
+msgid "Stock de piezas"
+msgstr "Parts stock"
+
+msgid "Métrica"
+msgstr "Metric"
+
+msgid "Métricas"
+msgstr "Metrics"
+
+msgid "Enviado"
+msgstr "Sent"
+
+msgid "Aprobado"
+msgstr "Approved"
+
+msgid "En producción"
+msgstr "In production"
+
+msgid "Completado"
+msgstr "Completed"
+
+msgid "Cancelado"
+msgstr "Cancelled"
+
+msgid "Cliente"
+msgstr "Client"
+
+msgid "Notas / descripción"
+msgstr "Notes / description"
+
+msgid "Pedido para reponer stock (sin cliente)"
+msgstr "Order to restock (no client)"
+
+msgid "Marcá si es producción para tu stock interno, no para un cliente. Funciona igual que un pedido normal (se aprueba, se imprime, se completa); al completarse, las unidades terminadas suman al stock de productos terminados en vez de entregarse."
+msgstr "Check this if it is production for your internal stock, not for a client. It works like a normal order (it is approved, printed, completed); when completed, the finished units are added to the finished products stock instead of being delivered."
+
+msgid "Costo fijo por pedido"
+msgstr "Fixed cost per order"
+
+msgid "Costo que se cobra una sola vez por pedido (setup, envío, etc.)."
+msgstr "Cost charged once per order (setup, shipping, etc.)."
+
+msgid "Redondear total a múltiplo de"
+msgstr "Round total to a multiple of"
+
+msgid "Ej: 100 redondea el total a la centena más cercana. 0 = sin redondeo."
+msgstr "E.g. 100 rounds the total to the nearest hundred. 0 = no rounding."
+
+msgid "Enviado el"
+msgstr "Sent on"
+
+msgid "Aprobado el"
+msgstr "Approved on"
+
+msgid "Producción iniciada el"
+msgstr "Production started on"
+
+msgid "Producción terminada el"
+msgstr "Production finished on"
+
+msgid "Completado el"
+msgstr "Completed on"
+
+msgid "Fecha de entrega"
+msgstr "Due date"
+
+msgid "Se calcula sola con la cola de producción. Podés pisarla a mano: si la editás, queda fija y deja de recalcularse."
+msgstr "Calculated automatically from the production queue. You can override it manually: if you edit it, it stays fixed and stops recalculating."
+
+msgid "Entrega fijada a mano"
+msgstr "Due date set manually"
+
+msgid "Inventario descontado"
+msgstr "Inventory deducted"
+
+msgid "Se marca al aprobar: ya se descontaron las piezas de stock, el filamento y los agregados. Evita descontar dos veces."
+msgstr "Set on approval: parts from stock, filament and add-ons have already been deducted. Prevents double deduction."
+
+msgid "Inventario devuelto"
+msgstr "Inventory returned"
+
+msgid "Se marca al cancelar un pedido aprobado: ya se devolvió al stock el material de lo que no se imprimió, las piezas y los agregados. Evita devolver dos veces."
+msgstr "Set when an approved order is cancelled: the material of what was not printed, the parts and the add-ons have already been returned to stock. Prevents returning twice."
+
+msgid "Sumado al stock de terminados"
+msgstr "Added to finished stock"
+
+msgid "Se marca al completar un pedido 'para stock': ya se sumaron sus unidades terminadas al stock de productos. Evita sumar dos veces."
+msgstr "Set when a 'for stock' order is completed: its finished units have already been added to the products stock. Prevents adding twice."
+
+msgid "No se puede aprobar el presupuesto #%(pk)s: su estado es '%(status)s'. Solo se pueden aprobar presupuestos en estado Borrador o Enviado."
+msgstr "Budget #%(pk)s cannot be approved: its status is '%(status)s'. Only budgets in Draft or Sent status can be approved."
+
+msgid "Pedido #%(pk)s: %(producto)s ×%(qty)s"
+msgstr "Order #%(pk)s: %(producto)s ×%(qty)s"
+
+msgid " (faltaron %(shortage)s: quedó en negativo)"
+msgstr " (%(shortage)s missing: went negative)"
+
+msgid "ya impresa"
+msgstr "already printed"
+
+msgid "estaba en stock"
+msgstr "was in stock"
+
+msgid "Cancelación pedido #%(pk)s: %(producto)s ×%(qty)s"
+msgstr "Order cancellation #%(pk)s: %(producto)s ×%(qty)s"
+
+msgid "Cancelación pedido #%(pk)s: %(name)s ×%(qty)s"
+msgstr "Order cancellation #%(pk)s: %(name)s ×%(qty)s"
+
+msgid "Cantidad de piezas"
+msgstr "Number of parts"
+
+msgid "Precio unitario (congelado)"
+msgstr "Unit price (frozen)"
+
+msgid "Precio por pieza guardado al armar el presupuesto. Si se deja vacío, se toma el precio actual del producto. Queda fijo aunque después cambie el costeo del producto."
+msgstr "Price per part saved when building the budget. If left empty, the product's current price is used. It stays fixed even if the product costing changes later."
+
+msgid "Servido del stock de terminados"
+msgstr "Served from finished stock"
+
+msgid "Unidades de esta línea que se sirvieron del stock de productos terminados al aprobar (no se produjeron). Se usa para devolver el stock si el pedido se cancela."
+msgstr "Units of this line served from the finished products stock on approval (not produced). Used to return stock if the order is cancelled."
+
+msgid "Producto del presupuesto"
+msgstr "Budget product"
+
+msgid "Productos del presupuesto"
+msgstr "Budget products"
+
+msgid "Por producto (corridas · gramos · horas)"
+msgstr "Per product (runs · grams · hours)"
+
+msgid "Guardá para ver el cálculo."
+msgstr "Save to see the calculation."
+
+msgid "%(runs)s corrida/s · %(grams)s g · %(hours)s h"
+msgstr "%(runs)s run/s · %(grams)s g · %(hours)s h"
+
+msgid "Costo de línea (por corrida)"
+msgstr "Line cost (per run)"
+
+msgid "Cálculo de la pieza"
+msgstr "Part calculation"
+
+msgid "Guardá la pieza y agregá su filamento para ver el cálculo."
+msgstr "Save the part and add its filament to see the calculation."
+
+msgid "Por UN producto:"
+msgstr "Per ONE product:"
+
+msgid "Corridas de gcode:"
+msgstr "Gcode runs:"
+
+msgid "Filamento:"
+msgstr "Filament:"
+
+msgid "Horas de máquina:"
+msgstr "Machine hours:"
+
+msgid "Costo de filamento:"
+msgstr "Filament cost:"
+
+msgid "Necesita AMS:"
+msgstr "Requires AMS:"
+
+msgid "Sin mínimo"
+msgstr "No minimum"
+
+msgid "Bajo mínimo"
+msgstr "Below minimum"
+
+msgid "Faltan para el mínimo"
+msgstr "Needed to reach minimum"
+
+msgid "Impresión y máquina"
+msgstr "Printing and machine"
+
+msgid "Mano de obra / post-proceso"
+msgstr "Labor / post-processing"
+
+msgid "Precio"
+msgstr "Price"
+
+msgid "Archivo del modelo"
+msgstr "Model file"
+
+msgid "Costo/pieza"
+msgstr "Cost/part"
+
+msgid "Precio/pieza"
+msgstr "Price/part"
+
+msgid "Resumen de costos"
+msgstr "Cost summary"
+
+msgid "Guardá el producto para ver el resumen de costos."
+msgstr "Save the product to see the cost summary."
+
+msgid "corrida/s"
+msgstr "run/s"
+
+msgid "(sin piezas todavía)"
+msgstr "(no parts yet)"
+
+msgid "Piezas del producto:"
+msgstr "Product parts:"
+
+msgid "Total filamento:"
+msgstr "Total filament:"
+
+msgid "Total horas de máquina:"
+msgstr "Total machine hours:"
+
+msgid "Necesita AMS (multicolor):"
+msgstr "Requires AMS (multicolor):"
+
+msgid "Costos por producto:"
+msgstr "Costs per product:"
+
+msgid "Material:"
+msgstr "Material:"
+
+msgid "merma"
+msgstr "waste"
+
+msgid "Agregados:"
+msgstr "Add-ons:"
+
+msgid "Máquina:"
+msgstr "Machine:"
+
+msgid "Mano de obra:"
+msgstr "Labor:"
+
+msgid "Costo por producto:"
+msgstr "Cost per product:"
+
+msgid "Margen:"
+msgstr "Margin:"
+
+msgid "PRECIO DE VENTA:"
+msgstr "SALE PRICE:"
+
+msgid "Importe"
+msgstr "Amount"
+
+msgid "Horas impr."
+msgstr "Print hrs."
+
+msgid "Precio del pedido"
+msgstr "Order price"
+
+msgid "Producción y entrega"
+msgstr "Production and delivery"
+
+msgid "Fechas"
+msgstr "Dates"
+
+msgid "Documento"
+msgstr "Document"
+
+msgid "Presupuesto no encontrado."
+msgstr "Budget not found."
+
+msgid "PDF"
+msgstr "PDF"
+
+msgid "PDF cliente"
+msgstr "Client PDF"
+
+msgid "PDF para el cliente"
+msgstr "PDF for the client"
+
+msgid "Guardá el presupuesto para poder generar el PDF."
+msgstr "Save the budget to be able to generate the PDF."
+
+msgid "Descargar PDF para el cliente"
+msgstr "Download PDF for the client"
+
+msgid "Sin producción"
+msgstr "No production"
+
+msgid "Listo para entregar"
+msgstr "Ready to deliver"
+
+msgid "Total pedido"
+msgstr "Order total"
+
+msgid "Entrega"
+msgstr "Delivery"
+
+msgid "Guardá el presupuesto y aprobalo para generar la cola."
+msgstr "Save the budget and approve it to generate the queue."
+
+msgid "Todavía no hay trabajos de producción. Se generan al <b>aprobar</b> el presupuesto."
+msgstr "There are no production jobs yet. They are generated when you <b>approve</b> the budget."
+
+msgid "(sin máquina)"
+msgstr "(no machine)"
+
+msgid "&nbsp;&nbsp;%(producto)s ×%(qty)s → <b>%(maquina)s</b> (%(hours)s h, fin impr. %(fin)s)<br>"
+msgstr "&nbsp;&nbsp;%(producto)s ×%(qty)s → <b>%(maquina)s</b> (%(hours)s h, print end %(fin)s)<br>"
+
+msgid "Impresión total:"
+msgstr "Total printing:"
+
+msgid "Post-proceso total:"
+msgstr "Total post-processing:"
+
+msgid "ENTREGA ESTIMADA:"
+msgstr "ESTIMATED DELIVERY:"
+
+msgid "Reposición de stock"
+msgstr "Stock replenishment"
+
+msgid "Trabajo '%(job)s' impreso: %(surplus)s unidad(es) sobrante(s) se sumaron al stock de la pieza."
+msgstr "Job '%(job)s' printed: %(surplus)s surplus unit(s) were added to the part stock."
+
+msgid "El pedido pasó a '%(status)s' según el estado de sus trabajos de producción."
+msgstr "The order moved to '%(status)s' based on the status of its production jobs."
+
+msgid "Pedido de stock #%(pk)s completado: se sumó al stock de productos terminados — %(detalle)s."
+msgstr "Stock order #%(pk)s completed: added to the finished products stock — %(detalle)s."
+
+msgid "Resumen del presupuesto"
+msgstr "Budget summary"
+
+msgid "Guardá el presupuesto y agregá productos para ver el total."
+msgstr "Save the budget and add products to see the total."
+
+msgid "c/u"
+msgstr "each"
+
+msgid "(sin productos todavía)"
+msgstr "(no products yet)"
+
+msgid "%(n)s pieza/s"
+msgstr "%(n)s part/s"
+
+msgid "Productos:"
+msgstr "Products:"
+
+msgid "Costo fijo:"
+msgstr "Fixed cost:"
+
+msgid "Subtotal:"
+msgstr "Subtotal:"
+
+msgid "TOTAL:"
+msgstr "TOTAL:"
+
+msgid "Presupuesto #%(pk)s: se sirvieron del stock de productos terminados (no se vuelven a producir): %(detalle)s."
+msgstr "Budget #%(pk)s: served from the finished products stock (will not be produced again): %(detalle)s."
+
+msgid "Presupuesto #%(pk)s: se tomaron piezas del stock (no se vuelven a imprimir): %(detalle)s."
+msgstr "Budget #%(pk)s: parts were taken from stock (will not be printed again): %(detalle)s."
+
+msgid "%(item)s (faltaron %(missing)s)"
+msgstr "%(item)s (%(missing)s missing)"
+
+msgid "Presupuesto #%(pk)s aprobado y en cola. Ojo: el stock no alcanzó al descontar: %(items)s. Quedó en cero y conviene reponer."
+msgstr "Budget #%(pk)s approved and queued. Note: stock was not enough when deducting: %(items)s. It reached zero and should be restocked."
+
+msgid "Presupuesto #%(pk)s aprobado y servido 100%% del stock: NO genera producción. Está LISTO PARA ENTREGAR — usá la acción «Marcar como entregado» para completarlo."
+msgstr "Budget #%(pk)s approved and served 100%% from stock: it does NOT generate production. It is READY TO DELIVER — use the «Mark as delivered» action to complete it."
+
+msgid "Presupuesto #%(pk)s aprobado: se descontó el inventario y se generó la cola de producción."
+msgstr "Budget #%(pk)s approved: inventory was deducted and the production queue was generated."
+
+msgid "Aprobar presupuesto(s) y generar cola de producción"
+msgstr "Approve budget(s) and generate production queue"
+
+msgid "Marcar como entregado (completar pedido listo de stock)"
+msgstr "Mark as delivered (complete a stock-ready order)"
+
+msgid "Presupuesto #%(pk)s: no está listo para entregar (o tiene producción pendiente, o no está aprobado/servido de stock). No se completó."
+msgstr "Budget #%(pk)s: not ready to deliver (either it has pending production, or it is not approved/served from stock). It was not completed."
+
+msgid "Presupuesto #%(pk)s marcado como entregado y completado."
+msgstr "Budget #%(pk)s marked as delivered and completed."
+
+msgid "Presupuesto #%(pk)s cancelado. No había inventario que devolver."
+msgstr "Budget #%(pk)s cancelled. There was no inventory to return."
+
+msgid "%(n)s trabajo(s) cancelado(s)"
+msgstr "%(n)s job(s) cancelled"
+
+msgid "filamento devuelto: %(det)s"
+msgstr "filament returned: %(det)s"
+
+msgid "agregados devueltos: %(det)s"
+msgstr "add-ons returned: %(det)s"
+
+msgid "productos terminados devueltos: %(det)s"
+msgstr "finished products returned: %(det)s"
+
+msgid "piezas al stock: %(det)s"
+msgstr "parts to stock: %(det)s"
+
+msgid "Presupuesto #%(pk)s cancelado. Se revirtió el inventario — "
+msgstr "Budget #%(pk)s cancelled. Inventory was reverted — "
+
+msgid "Cancelar presupuesto(s) y devolver el inventario"
+msgstr "Cancel budget(s) and return the inventory"
+
+msgid "Presupuesto #%(pk)s ya estaba cancelado."
+msgstr "Budget #%(pk)s was already cancelled."
+
+msgid "Semana"
+msgstr "Week"
+
+msgid "Año"
+msgstr "Year"
+
+msgid "Sem "
+msgstr "Wk "
+
+msgid "%(n).1f días"
+msgstr "%(n).1f days"
+
+msgid "Sin máquina"
+msgstr "No machine"
+
+msgid "%(conv)s/%(sent)s enviados"
+msgstr "%(conv)s/%(sent)s sent"
+
+msgid "Métricas 3darg — %(period)s (%(range)s)"
+msgstr "3darg Metrics — %(period)s (%(range)s)"
+
+msgid "VENTAS"
+msgstr "SALES"
+
+msgid "Facturación aprobada"
+msgstr "Approved billing"
+
+msgid "Presupuestos aprobados"
+msgstr "Approved budgets"
+
+msgid "Ticket promedio"
+msgstr "Average ticket"
+
+msgid "Enviados / Aprobados"
+msgstr "Sent / Approved"
+
+msgid "Tasa de conversión"
+msgstr "Conversion rate"
+
+msgid "Margen bruto"
+msgstr "Gross margin"
+
+msgid "Tiempo de ciclo (aprob.→entrega)"
+msgstr "Cycle time (approval→delivery)"
+
+msgid "PRODUCCIÓN"
+msgstr "PRODUCTION"
+
+msgid "Piezas impresas"
+msgstr "Printed parts"
+
+msgid "Horas impresas"
+msgstr "Printed hours"
+
+msgid "Reimpresiones por falla"
+msgstr "Reprints due to failure"
+
+msgid "Tasa de reimpresión"
+msgstr "Reprint rate"
+
+msgid "Cumplimiento de entrega"
+msgstr "On-time delivery"
+
+msgid "INVENTARIO / COSTOS"
+msgstr "INVENTORY / COSTS"
+
+msgid "Gasto en compras"
+msgstr "Purchase spending"
+
+msgid "N° de compras"
+msgstr "No. of purchases"
+
+msgid "Consumo de material ($)"
+msgstr "Material consumption ($)"
+
+msgid "Filamento consumido (g)"
+msgstr "Filament consumed (g)"
+
+msgid "Insumos bajo stock mínimo"
+msgstr "Supplies below minimum stock"
+
+msgid "Facturación"
+msgstr "Billing"
+
+msgid "Facturación por %(period)s"
+msgstr "Billing per %(period)s"
+
+msgid "Productos"
+msgstr "Products"
+
+msgid "Producto"
+msgstr "Product"
+
+msgid "Cantidad vendida"
+msgstr "Quantity sold"
+
+msgid "Clientes"
+msgstr "Clients"
+
+msgid "Máquina"
+msgstr "Machine"
+
+msgid "Trabajos"
+msgstr "Jobs"
+
+msgid "KPIs del negocio por período. Ventas por <b>fecha de aprobación</b>, producción por
+    <b>fin de impresión</b>, compras por <b>fecha de confirmación</b>. El embudo y el stock bajo
+    son una foto del estado actual (no dependen del período)."
+msgstr "Business KPIs by period. Sales by <b>approval date</b>, production by
+    <b>print end</b>, purchases by <b>confirmation date</b>. The funnel and low stock
+    are a snapshot of the current state (independent of the period)."
+
+msgid "Ventas"
+msgstr "Sales"
+
+msgid "Conversión"
+msgstr "Conversion"
+
+msgid "Tiempo de ciclo"
+msgstr "Cycle time"
+
+msgid "Embudo de estados (ahora)"
+msgstr "Status funnel (now)"
+
+msgid "Productos más vendidos (cantidad)"
+msgstr "Best-selling products (quantity)"
+
+msgid "Sin ventas en el período."
+msgstr "No sales in the period."
+
+msgid "Productos más vendidos ($)"
+msgstr "Best-selling products ($)"
+
+msgid "Top clientes ($)"
+msgstr "Top clients ($)"
+
+msgid "Horas impresas por máquina"
+msgstr "Printed hours per machine"
+
+msgid "Uso por máquina"
+msgstr "Usage per machine"
+
+msgid "Horas"
+msgstr "Hours"
+
+msgid "No se imprimió nada en el período."
+msgstr "Nothing was printed in the period."
+
+msgid "Inventario y costos"
+msgstr "Inventory and costs"
+
+msgid "Filamento consumido"
+msgstr "Filament consumed"
+
+msgid "Activa"
+msgstr "Active"
+
+msgid "Si está inactiva, no se le asignan trabajos nuevos ni cuenta para la cola."
+msgstr "If inactive, no new jobs are assigned to it and it does not count toward the queue."
+
+msgid "Imprime multicolor (AMS)"
+msgstr "Prints multicolor (AMS)"
+
+msgid "Marcá si la máquina puede imprimir piezas de varios colores en simultáneo (ej. Bambu Lab con AMS). La Ender no lo soporta."
+msgstr "Check this if the machine can print parts in several colors at once (e.g. Bambu Lab with AMS). The Ender does not support it."
+
+msgid "Costo por hora ($/h)"
+msgstr "Cost per hour ($/h)"
+
+msgid "Costo horario de la máquina (amortización, energía, mantenimiento). Se usa para calcular la depreciación acumulada: horas impresas × este costo."
+msgstr "Hourly cost of the machine (amortization, power, maintenance). Used to compute accumulated depreciation: hours printed × this cost."
+
+msgid "Horas impresas (acumuladas)"
+msgstr "Hours printed (accumulated)"
+
+msgid "Horas de impresión de los trabajos ya terminados en esta máquina. Se recalcula automáticamente al marcar un trabajo como Impreso."
+msgstr "Print hours of the jobs already finished on this machine. Recalculated automatically when a job is marked as Printed."
+
+msgid "Máquina (impresora)"
+msgstr "Machine (printer)"
+
+msgid "Máquinas (impresoras)"
+msgstr "Machines (printers)"
+
+msgid "En cola"
+msgstr "Queued"
+
+msgid "Imprimiendo"
+msgstr "Printing"
+
+msgid "Impreso"
+msgstr "Printed"
+
+msgid "Pieza concreta que imprime este trabajo. Si está vacío es un trabajo a nivel producto (modo anterior)."
+msgstr "Specific part this job prints. If empty, it is a product-level job (legacy mode)."
+
+msgid "Cantidad de piezas a imprimir"
+msgstr "Quantity of parts to print"
+
+msgid "Unidades de la pieza que hay que imprimir para este pedido."
+msgstr "Units of the part that must be printed for this order."
+
+msgid "Máquina asignada. El sistema recomienda una, podés cambiarla."
+msgstr "Assigned machine. The system recommends one, you can change it."
+
+msgid "Orden en la cola"
+msgstr "Order in the queue"
+
+msgid "Posición dentro de la cola de la máquina (menor = primero)."
+msgstr "Position within the machine's queue (lower = first)."
+
+msgid "Inicio estimado"
+msgstr "Estimated start"
+
+msgid "Fin de impresión estimado"
+msgstr "Estimated print end"
+
+msgid "Inicio real"
+msgstr "Actual start"
+
+msgid "Fin real"
+msgstr "Actual end"
+
+msgid "Material descontado"
+msgstr "Material deducted"
+
+msgid "Se marca cuando se descontó el filamento de este trabajo (al aprobar el pedido)."
+msgstr "Set when this job's filament has been deducted (when the order is approved)."
+
+msgid "Sobrante sumado a stock"
+msgstr "Surplus added to stock"
+
+msgid "Se marca cuando, al imprimirse, la sobrante del último gcode se sumó al stock de la pieza."
+msgstr "Set when, upon printing, the surplus of the last gcode was added to the part's stock."
+
+msgid "Guardado en el historial"
+msgstr "Saved to history"
+
+msgid "Se marca cuando, al imprimirse, el trabajo se guardó en el historial de la máquina. Evita duplicar el registro."
+msgstr "Set when, upon printing, the job was saved to the machine's history. Prevents duplicate records."
+
+msgid "%(nombre)s ×%(qty)s — Pedido #%(pid)s (%(cliente)s)"
+msgstr "%(nombre)s ×%(qty)s — Order #%(pid)s (%(cliente)s)"
+
+msgid "Título"
+msgstr "Title"
+
+msgid "Horas de impresión"
+msgstr "Print hours"
+
+msgid "Finalizado el"
+msgstr "Finished on"
+
+msgid "Impresión del historial"
+msgstr "History print"
+
+msgid "Historial de impresiones"
+msgstr "Print history"
+
+msgid "Trabajo de producción"
+msgstr "Production job"
+
+msgid "Trabajos de producción"
+msgstr "Production jobs"
+
+msgid "Tablero de producción"
+msgstr "Production dashboard"
+
+msgid "'%(nombre)s' es multicolor y '%(machine)s' no imprime multicolor. Asigná una máquina con AMS."
+msgstr "'%(nombre)s' is multicolor and '%(machine)s' does not print multicolor. Assign a machine with AMS."
+
+msgid "Solo se puede marcar obsoleta una impresión por pieza."
+msgstr "Only a per-part print can be marked obsolete."
+
+msgid "Solo se puede marcar obsoleta una impresión En cola o Imprimiendo (todavía no terminada)."
+msgstr "Only a Queued or Printing print (not yet finished) can be marked obsolete."
+
+msgid "Esta impresión no tiene material descontado, no hay nada que reponer."
+msgstr "This print has no material deducted, there is nothing to restock."
+
+msgid "Impresión %(pieza)s (%(producto)s) ×%(quantity)s"
+msgstr "Print %(pieza)s (%(producto)s) ×%(quantity)s"
+
+msgid " (faltaron %(shortage)s g: quedó en negativo)"
+msgstr " (%(shortage)s g short: went negative)"
+
+msgid "Impresión %(producto)s ×%(quantity)s"
+msgstr "Print %(producto)s ×%(quantity)s"
+
+msgid "Impresión obsoleta %(pieza)s (%(producto)s): se perdieron %(scrap)s g, vuelven %(devuelto)s g al stock. Se reimprime."
+msgstr "Obsolete print %(pieza)s (%(producto)s): %(scrap)s g were lost, %(devuelto)s g return to stock. It will be reprinted."
+
+msgid "Trabajos en cola"
+msgstr "Jobs in queue"
+
+msgid "Depreciación acumulada"
+msgstr "Accumulated depreciation"
+
+msgid "'%(name)s' quedó inactiva: %(count)s trabajo(s) en cola se liberaron (sin máquina). Reasignalos a otra impresora."
+msgstr "'%(name)s' became inactive: %(count)s job(s) in queue were released (no machine). Reassign them to another printer."
+
+msgid "'%(name)s' dejó de imprimir multicolor: %(count)s trabajo(s) multicolor en cola se liberaron (sin máquina). Reasignalos a una impresora con AMS."
+msgstr "'%(name)s' stopped printing multicolor: %(count)s multicolor job(s) in queue were released (no machine). Reassign them to a printer with AMS."
+
+msgid "Marcar impresión obsoleta (reimprimir)"
+msgstr "Mark print obsolete (reprint)"
+
+msgid "%(count)s trabajo(s) no se pueden marcar obsoletos (deben ser por pieza, En cola/Imprimiendo y con material descontado). Se ignoraron."
+msgstr "%(count)s job(s) cannot be marked obsolete (they must be per-part, Queued/Printing and with material deducted). They were ignored."
+
+msgid "%(grams)s g de %(item)s"
+msgstr "%(grams)s g of %(item)s"
+
+msgid "Impresión '%(job)s' marcada obsoleta y devuelta a la cola: se perdieron %(scrap)s g; volvieron al stock %(devuelto)s. Se reimprime y vuelve a descontar el material al terminar."
+msgstr "Print '%(job)s' marked obsolete and returned to the queue: %(scrap)s g were lost; %(devuelto)s returned to stock. It will be reprinted and will deduct the material again when finished."
+
+msgid "0 g"
+msgstr "0 g"
+
+msgid "Marcar impresiones obsoletas"
+msgstr "Mark prints obsolete"
+
+msgid "Inicio est."
+msgstr "Est. start"
+
+msgid "Fin impr. est."
+msgstr "Est. print end"
+
+msgid "Trabajo '%(obj)s' impreso: %(surplus)s unidad(es) sobrante(s) se sumaron al stock de la pieza."
+msgstr "Job '%(obj)s' printed: %(surplus)s surplus unit(s) were added to the part's stock."
+
+msgid "El presupuesto #%(id)s pasó a '%(status)s' según su cola de producción."
+msgstr "Budget #%(id)s moved to '%(status)s' according to its production queue."
+
+msgid "Cola de producción"
+msgstr "Production queue"
+
+msgid "Libre ahora"
+msgstr "Free now"
+
+msgid "Ventana de carga: <b>%(window)s</b>. Las máquinas imprimen de corrido (un trabajo
+    puede cruzar la noche), pero un trabajo nuevo solo arranca dentro de esa franja.
+    El post-proceso se suma después, sobre la fecha de entrega de cada presupuesto."
+msgstr "Loading window: <b>%(window)s</b>. Machines print continuously (a job
+    may cross the night), but a new job only starts within that window.
+    Post-processing is added afterward, on each quote's delivery date."
+
+msgid "Cola por máquina"
+msgstr "Queue per machine"
+
+msgid "Libre:"
+msgstr "Free:"
+
+msgid "Inicio"
+msgstr "Start"
+
+msgid "Fin impr."
+msgstr "Print end"
+
+msgid "imprimiendo"
+msgstr "printing"
+
+msgid "Sin trabajos en cola."
+msgstr "No jobs in queue."
+
+msgid "No hay máquinas activas. Cargá máquinas en \"Máquinas (impresoras)\"."
+msgstr "There are no active machines. Add machines under \"Machines (printers)\"."
+
+msgid "%(n)s trabajo(s) sin máquina asignada."
+msgstr "%(n)s job(s) with no machine assigned."
+
+msgid "Asignales una máquina en \"Trabajos de producción\" para que entren a la cola."
+msgstr "Assign them a machine under \"Production jobs\" so they enter the queue."
+
+msgid "Cola total"
+msgstr "Full queue"
+
+msgid "Máquina / estado"
+msgstr "Machine / status"
+
+msgid "No hay trabajos en cola."
+msgstr "There are no jobs in the queue."
+
+msgid "Vista general de producción. Ventana de carga <b>%(window)s</b>. Los tiempos son
+    estimados según la cola actual; el post-proceso se suma sobre la entrega de cada presupuesto."
+msgstr "Production overview. Loading window <b>%(window)s</b>. Times are
+    estimated from the current queue; post-processing is added on each quote's delivery."
+
+msgid "imprimiendo ahora"
+msgstr "printing now"
+
+msgid "en cola (sin arrancar)"
+msgstr "queued (not started)"
+
+msgid "horas de impresión pendientes"
+msgstr "pending print hours"
+
+msgid "pedidos en producción"
+msgstr "orders in production"
+
+msgid "Qué se está imprimiendo"
+msgstr "What is printing"
+
+msgid "próximo"
+msgstr "next"
+
+msgid "Termina:"
+msgstr "Finishes:"
+
+msgid "%(n)s en cola en esta máquina"
+msgstr "%(n)s queued on this machine"
+
+msgid "Libre — sin trabajos en cola."
+msgstr "Free — no jobs in queue."
+
+msgid "No hay máquinas activas."
+msgstr "There are no active machines."
+
+msgid "Máquinas fuera de servicio"
+msgstr "Machines out of service"
+
+msgid "inactiva"
+msgstr "inactive"
+
+msgid "Sin nota. Anotá qué está roto en la máquina (campo \"Notas\")."
+msgstr "No note. Write down what is broken on the machine (\"Notes\" field)."
+
+msgid "Trabajos sin máquina asignada"
+msgstr "Jobs with no machine assigned"
+
+msgid "Estos trabajos no tienen impresora asignada (sin máquina o máquina inactiva). Asignales una desde \"Trabajos de producción\" para que entren en la cola."
+msgstr "These jobs have no printer assigned (no machine or inactive machine). Assign one from \"Production jobs\" so they enter the queue."
+
+msgid "Próximas entregas"
+msgstr "Upcoming deliveries"
+
+msgid "Entrega estimada"
+msgstr "Estimated delivery"
+
+msgid "(fijada a mano)"
+msgstr "(set manually)"
+
+msgid "No hay pedidos en producción con fecha de entrega."
+msgstr "There are no orders in production with a delivery date."
+
+msgid "Comprar materia prima"
+msgstr "Buy raw material"
+
+msgid "Después de aprobar los pedidos, estos insumos quedaron por debajo del mínimo (un stock negativo significa que ya te comprometiste con más de lo que tenías). Comprá al menos lo indicado antes de la fecha en que la máquina lo necesita."
+msgstr "After approving the orders, these supplies fell below the minimum (a negative stock means you already committed to more than you had). Buy at least the indicated amount before the date the machine needs it."
+
+msgid "Stock actual (g)"
+msgstr "Current stock (g)"
+
+msgid "Mínimo (g)"
+msgstr "Minimum (g)"
+
+msgid "Comprar (g)"
+msgstr "Buy (g)"
+
+msgid "Se necesita aprox."
+msgstr "Needed approx."
+
+msgid "Stock actual"
+msgstr "Current stock"
+
+msgid "Mínimo"
+msgstr "Minimum"
+
+msgid "Comprar"
+msgstr "Buy"
+
+msgid "Todos los insumos están por encima de su stock mínimo. No hace falta comprar."
+msgstr "All supplies are above their minimum stock. No need to buy."
+
+msgid "Estas impresiones salieron mal y se van a <b>reimprimir</b>. Cargá cuántos
+    <b>gramos de filamento se perdieron</b> en cada impresión fallida. La diferencia
+    entre el total de la pieza y lo perdido <b>vuelve al stock de filamento</b>; la
+    pieza vuelve a la cola y al reimprimirse vuelve a descontar el material completo.
+    Los agregados no se tocan (se usan recién al armar la pieza ya impresa)."
+msgstr "These prints came out wrong and will be <b>reprinted</b>. Enter how many
+    <b>grams of filament were lost</b> on each failed print. The difference
+    between the part's total and what was lost <b>returns to filament stock</b>; the
+    part goes back to the queue and, when reprinted, deducts the full material again.
+    Aggregates are not touched (they are used only when assembling the already-printed part)."
+
+msgid "Impresión"
+msgstr "Print"
+
+msgid "Pieza / Producto"
+msgstr "Part / Product"
+
+msgid "Total filamento (g)"
+msgstr "Total filament (g)"
+
+msgid "Gramos perdidos (obsoleto)"
+msgstr "Grams lost (obsolete)"
+
+msgid "Marcar obsoletas y reimprimir"
+msgstr "Mark obsolete and reprint"
+
+msgid "Cancelar"
+msgstr "Cancel"
+
+msgid "No se puede perder más que el total de filamento de la pieza."
+msgstr "You cannot lose more than the part's total filament."
+
+msgid "%(n_gastos)s gasto(s)"
+msgstr "%(n_gastos)s expense(s)"
+
+msgid "vs %(prev_label)s"
+msgstr "vs %(prev_label)s"
+
+msgid "antes: %(prev_total)s"
+msgstr "before: %(prev_total)s"
+
+msgid "%(meses_transcurridos)s mes(es)"
+msgstr "%(meses_transcurridos)s month(s)"
+
+msgid "Evolución mensual (%(sel_year)s)"
+msgstr "Monthly trend (%(sel_year)s)"
+
+msgid "%% usado"
+msgstr "%% used"
+
+msgid "Facturación por %(pl)s"
+msgstr "Billing per %(pl)s"
+
+msgid "%(reprints)s por falla"
+msgstr "%(reprints)s due to failure"
+
+msgid "%(total_ent)s con fecha"
+msgstr "%(total_ent)s with a date"
+
+msgid "%(n_compras)s compra/s"
+msgstr "%(n_compras)s purchase/s"
+
+msgid "Presupuesto"
+msgstr "Budget"

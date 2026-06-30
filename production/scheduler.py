@@ -68,7 +68,7 @@ def compute_schedule(now: datetime = None) -> dict:
                 ],
             )
             .select_related("producto")
-            .order_by("order", "id")
+            .order_by("producto__priority", "order", "id")
         )
         for job in jobs:
             if job.status == ProductionJob.Status.PRINTING and job.started_at:
@@ -148,20 +148,21 @@ def recommend_machine(
 
 def material_forecast(now: datetime = None) -> dict:
     """
-    Cruza la cola de producción con el stock actual para anticipar faltantes.
+    Qué materia prima hace falta comprar, calculado SOBRE EL STOCK ACTUAL.
 
-    Recorre los trabajos abiertos en orden de inicio estimado y va descontando
-    el consumo de cada filamento/agregado. Para cada insumo calcula:
-      - stock actual
-      - consumo total que pide la cola
-      - faltante (cuánto hay que comprar)
-      - cuándo se agota (inicio estimado del trabajo que lo deja en negativo)
+    El material se descuenta al APROBAR el pedido (no al imprimir), y la
+    producción puede dejar el stock en negativo. Por eso el pronóstico ya no
+    proyecta consumo futuro: mira el stock real que quedó después de aprobar y
+    marca todo lo que cayó por debajo de su mínimo (o quedó en negativo). Para
+    cada insumo calcula:
+      - stock actual (puede ser negativo si se sobre-comprometió)
+      - nivel objetivo (su stock mínimo)
+      - faltante = cuánto comprar para volver al mínimo
+      - cuándo se necesita (inicio estimado del primer trabajo en cola que lo
+        usa; ahí hay que tenerlo físicamente en la máquina)
 
-    Devuelve {"filaments": [...], "aggregates": [...]} solo con los insumos
-    que se quedan cortos (faltante > 0).
+    Devuelve {"filaments": [...], "aggregates": [...]} solo con lo que falta.
     """
-    from collections import defaultdict
-
     from inventory.models import Aggregate, Filament
 
     from .models import ProductionJob
@@ -169,83 +170,70 @@ def material_forecast(now: datetime = None) -> dict:
     now = now or timezone.now()
     schedule = compute_schedule(now)
 
-    jobs = list(
+    # Primer trabajo en cola que usa cada insumo -> "comprá antes de esta fecha".
+    open_jobs = list(
         ProductionJob.objects.filter(
-            status__in=[ProductionJob.Status.PENDING, ProductionJob.Status.PRINTING]
+            status__in=[ProductionJob.Status.PENDING, ProductionJob.Status.PRINTING],
         )
-        .select_related("producto")
+        .select_related("producto", "pieza")
         .prefetch_related(
-            "producto__filament_lines__filament",
+            "producto__piezas__filament_lines__filament",
             "producto__aggregate_lines__aggregate",
+            "pieza__filament_lines__filament",
         )
     )
-    jobs.sort(key=lambda j: schedule.get(j.id, {}).get("start") or now)
+    open_jobs.sort(key=lambda j: schedule.get(j.id, {}).get("start") or now)
 
-    fil_obj = {f.id: f for f in Filament.objects.all()}
-    agg_obj = {a.id: a for a in Aggregate.objects.all()}
-    fil_remaining = {fid: f.stock_grams for fid, f in fil_obj.items()}
-    agg_remaining = {aid: a.stock_quantity for aid, a in agg_obj.items()}
-
-    fil_needed = defaultdict(lambda: Decimal("0"))
-    agg_needed = defaultdict(lambda: Decimal("0"))
-    fil_runout = {}
-    agg_runout = {}
-
-    for job in jobs:
+    fil_when: dict[int, datetime] = {}
+    agg_when: dict[int, datetime] = {}
+    for job in open_jobs:
         start = schedule.get(job.id, {}).get("start")
-        producto = job.producto
-        for line in producto.filament_lines.all():
-            need = producto.filament_grams_needed(line, job.quantity)
-            fid = line.filament_id
-            fil_needed[fid] += need
-            if fid in fil_remaining:
-                fil_remaining[fid] -= need
-                if fil_remaining[fid] < 0 and fid not in fil_runout:
-                    fil_runout[fid] = start
-        for line in producto.aggregate_lines.all():
-            need = producto.aggregate_qty_needed(line, job.quantity)
-            aid = line.aggregate_id
-            agg_needed[aid] += need
-            if aid in agg_remaining:
-                agg_remaining[aid] -= need
-                if agg_remaining[aid] < 0 and aid not in agg_runout:
-                    agg_runout[aid] = start
+        if start is None:
+            continue
+        if job.pieza:
+            fids = {line.filament_id for line in job.pieza.filament_lines.all()}
+        else:
+            fids = {fil.id for fil, _ in job.producto.aggregated_filament()}
+        for fid in fids:
+            fil_when.setdefault(fid, start)
+        for line in job.producto.aggregate_lines.all():
+            agg_when.setdefault(line.aggregate_id, start)
 
     filaments = []
-    for fid, needed in fil_needed.items():
-        f = fil_obj.get(fid)
-        if f is None:
+    for f in Filament.objects.filter(is_active=True):
+        target = max(f.min_stock, Decimal("0"))
+        shortfall = target - f.stock_grams
+        if shortfall <= 0:
             continue
-        shortfall = max(Decimal("0"), needed - f.stock_grams)
-        if shortfall > 0:
-            filaments.append(
-                {
-                    "item": str(f),
-                    "stock": f.stock_grams,
-                    "needed": needed,
-                    "shortfall": shortfall,
-                    "runs_out_at": fil_runout.get(fid),
-                }
-            )
+        filaments.append(
+            {
+                "item": str(f),
+                "stock": f.stock_grams,
+                "needed": target,
+                "shortfall": shortfall,
+                "runs_out_at": fil_when.get(f.id),
+            }
+        )
 
     aggregates = []
-    for aid, needed in agg_needed.items():
-        a = agg_obj.get(aid)
-        if a is None:
+    for a in Aggregate.objects.filter(is_active=True):
+        target = max(a.min_stock, Decimal("0"))
+        shortfall = target - a.stock_quantity
+        if shortfall <= 0:
             continue
-        shortfall = max(Decimal("0"), needed - a.stock_quantity)
-        if shortfall > 0:
-            aggregates.append(
-                {
-                    "item": str(a),
-                    "unit": a.get_unit_display(),
-                    "stock": a.stock_quantity,
-                    "needed": needed,
-                    "shortfall": shortfall,
-                    "runs_out_at": agg_runout.get(aid),
-                }
-            )
+        aggregates.append(
+            {
+                "item": str(a),
+                "unit": a.get_unit_display(),
+                "stock": a.stock_quantity,
+                "needed": target,
+                "shortfall": shortfall,
+                "runs_out_at": agg_when.get(a.id),
+            }
+        )
 
+    # Más urgente primero: lo que ya está en negativo, después lo que tiene un
+    # trabajo en cola más próximo, y al final lo que no tiene cola asociada.
     filaments.sort(key=lambda r: (r["runs_out_at"] is None, r["runs_out_at"] or now))
     aggregates.sort(key=lambda r: (r["runs_out_at"] is None, r["runs_out_at"] or now))
     return {"filaments": filaments, "aggregates": aggregates}

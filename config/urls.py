@@ -22,6 +22,8 @@ from django.urls import include, path
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include('config.api_urls')),
+    # Vista set_language para el selector de idioma del admin (POST con 'language').
+    path('i18n/', include('django.conf.urls.i18n')),
 ]
 
 # En desarrollo, servir los archivos subidos (ej: los .3mf de los productos).

@@ -1,4 +1,5 @@
 {% extends "admin/base_site.html" %}
+{% load i18n %}
 
 {% block content %}
 <style>
@@ -32,30 +33,31 @@
     .empty { color: #888; padding: 10px 0; }
 </style>
 
+{% translate "Buscar marca, color, material o agregado…" as search_placeholder %}
 <form class="totals-search" method="get">
-    <input type="text" name="q" value="{{ query }}" placeholder="Buscar marca, color, material o agregado…" autofocus />
+    <input type="text" name="q" value="{{ query }}" placeholder="{{ search_placeholder }}" autofocus />
     <input type="hidden" name="only" value="{{ only }}" />
-    <button type="submit">Buscar</button>
-    {% if query %}<a class="btn" href="?{% if only %}only={{ only }}{% endif %}">Limpiar</a>{% endif %}
+    <button type="submit">{% translate "Buscar" %}</button>
+    {% if query %}<a class="btn" href="?{% if only %}only={{ only }}{% endif %}">{% translate "Limpiar" %}</a>{% endif %}
 
     <div class="totals-filters">
-        Ver:
-        <a href="?q={{ query }}" class="{% if not only %}active{% endif %}">Todo</a>
-        <a href="?q={{ query }}&only=filament" class="{% if only == 'filament' %}active{% endif %}">Solo filamentos</a>
-        <a href="?q={{ query }}&only=aggregate" class="{% if only == 'aggregate' %}active{% endif %}">Solo agregados</a>
+        {% translate "Ver:" %}
+        <a href="?q={{ query }}" class="{% if not only %}active{% endif %}">{% translate "Todo" %}</a>
+        <a href="?q={{ query }}&only=filament" class="{% if only == 'filament' %}active{% endif %}">{% translate "Solo filamentos" %}</a>
+        <a href="?q={{ query }}&only=aggregate" class="{% if only == 'aggregate' %}active{% endif %}">{% translate "Solo agregados" %}</a>
     </div>
 </form>
 
 {% if show_fil %}
-<div class="section-title">🧵 Filamentos</div>
+<div class="section-title">🧵 {% translate "Filamentos" %}</div>
 <table class="totals">
     <thead>
         <tr>
-            <th>Filamento</th>
-            <th class="num">Stock (g)</th>
-            <th class="num">Stock (kg)</th>
-            <th class="num">Costo/kg</th>
-            <th class="num">Valor en stock</th>
+            <th>{% translate "Filamento" %}</th>
+            <th class="num">{% translate "Stock (g)" %}</th>
+            <th class="num">{% translate "Stock (kg)" %}</th>
+            <th class="num">{% translate "Costo/kg" %}</th>
+            <th class="num">{% translate "Valor en stock" %}</th>
         </tr>
     </thead>
     <tbody>
@@ -68,11 +70,11 @@
             <td class="num">$ {{ r.value }}</td>
         </tr>
         {% empty %}
-        <tr><td colspan="5" class="empty">Sin filamentos para esta búsqueda.</td></tr>
+        <tr><td colspan="5" class="empty">{% translate "Sin filamentos para esta búsqueda." %}</td></tr>
         {% endfor %}
         {% if fil_rows %}
         <tr class="total-row">
-            <td>TOTAL filamentos</td>
+            <td>{% translate "TOTAL filamentos" %}</td>
             <td class="num">{{ fil_total_grams }} g</td>
             <td class="num">{{ fil_total_kg }} kg</td>
             <td class="num">—</td>
@@ -84,16 +86,16 @@
 {% endif %}
 
 {% if show_agg %}
-<div class="section-title">🔩 Agregados</div>
+<div class="section-title">🔩 {% translate "Agregados" %}</div>
 <table class="totals">
     <thead>
         <tr>
-            <th>Agregado</th>
-            <th>Categoría</th>
-            <th>Unidad</th>
-            <th class="num">Cantidad</th>
-            <th class="num">Costo/u</th>
-            <th class="num">Valor en stock</th>
+            <th>{% translate "Agregado" %}</th>
+            <th>{% translate "Categoría" %}</th>
+            <th>{% translate "Unidad" %}</th>
+            <th class="num">{% translate "Cantidad" %}</th>
+            <th class="num">{% translate "Costo/u" %}</th>
+            <th class="num">{% translate "Valor en stock" %}</th>
         </tr>
     </thead>
     <tbody>
@@ -107,11 +109,11 @@
             <td class="num">$ {{ r.value }}</td>
         </tr>
         {% empty %}
-        <tr><td colspan="6" class="empty">Sin agregados para esta búsqueda.</td></tr>
+        <tr><td colspan="6" class="empty">{% translate "Sin agregados para esta búsqueda." %}</td></tr>
         {% endfor %}
         {% if agg_rows %}
         <tr class="total-row">
-            <td colspan="3">TOTAL agregados</td>
+            <td colspan="3">{% translate "TOTAL agregados" %}</td>
             <td class="num">{{ agg_total_qty }}</td>
             <td class="num">—</td>
             <td class="num">$ {{ agg_total_money }}</td>
@@ -123,7 +125,7 @@
 
 {% if show_fil and show_agg %}
 <div class="grand-total">
-    Valor total de inventario {% if query %}(filtrado){% endif %}: <b>$ {{ grand_total_money }}</b>
+    {% translate "Valor total de inventario" %} {% if query %}{% translate "(filtrado)" %}{% endif %}: <b>$ {{ grand_total_money }}</b>
 </div>
 {% endif %}
 

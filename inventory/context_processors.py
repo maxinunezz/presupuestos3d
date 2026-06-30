@@ -8,6 +8,7 @@ en la barra superior.
 
 from django.db.models import F
 from django.urls import reverse
+from django.utils.translation import gettext
 
 
 def low_stock_alerts(request):
@@ -34,7 +35,7 @@ def low_stock_alerts(request):
                 "current": f"{f.stock_grams:.0f} g",
                 "minimum": f"{f.min_stock:.0f} g",
                 "url": reverse("admin:inventory_filament_change", args=[f.pk]),
-                "kind": "Filamento",
+                "kind": gettext("Filamento"),
             }
         )
 
@@ -49,7 +50,7 @@ def low_stock_alerts(request):
                 "current": f"{a.stock_quantity:.0f} {unit}",
                 "minimum": f"{a.min_stock:.0f} {unit}",
                 "url": reverse("admin:inventory_aggregate_change", args=[a.pk]),
-                "kind": "Agregado",
+                "kind": gettext("Agregado"),
             }
         )
 

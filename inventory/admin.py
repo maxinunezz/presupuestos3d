@@ -6,6 +6,8 @@ from django.core.exceptions import ValidationError
 from django.db.models import F, Q
 from django.template.response import TemplateResponse
 from django.utils.safestring import mark_safe
+from django.utils.translation import gettext
+from django.utils.translation import gettext_lazy as _
 
 from .models import (
     Aggregate,
@@ -49,7 +51,7 @@ def _num(value, decimals=2) -> str:
 class LowStockFilter(admin.SimpleListFilter):
     """Filtra los artículos cuyo stock está por debajo de su mínimo (>0)."""
 
-    title = "Bajo stock"
+    title = _("Bajo stock")
     parameter_name = "low_stock"
 
     # Nombre del campo de stock según el modelo (se setea en subclases).
@@ -57,8 +59,8 @@ class LowStockFilter(admin.SimpleListFilter):
 
     def lookups(self, request, model_admin):
         return (
-            ("yes", "Sí (por debajo del mínimo)"),
-            ("no", "No (stock OK)"),
+            ("yes", _("Sí (por debajo del mínimo)")),
+            ("no", _("No (stock OK)")),
         )
 
     def queryset(self, request, queryset):
@@ -83,11 +85,11 @@ def _stock_badge(is_low):
     if is_low:
         return mark_safe(
             '<span style="color:#fff;background:#dc3545;border-radius:3px;'
-            'padding:2px 7px;font-weight:bold;">&#9888; Bajo</span>'
+            'padding:2px 7px;font-weight:bold;">&#9888; ' + gettext("Bajo") + "</span>"
         )
     return mark_safe(
         '<span style="color:#fff;background:#28a745;border-radius:3px;'
-        'padding:2px 7px;">OK</span>'
+        'padding:2px 7px;">' + gettext("OK") + "</span>"
     )
 
 
@@ -112,11 +114,11 @@ class FilamentAdmin(admin.ModelAdmin):
     # suma cuando la compra pasa a "Confirmada".
     readonly_fields = ("stock_grams",)
 
-    @admin.display(description="Costo/g")
+    @admin.display(description=_("Costo/g"))
     def cost_per_gram(self, obj):
         return f"${obj.cost_per_gram}"
 
-    @admin.display(description="Estado stock")
+    @admin.display(description=_("Estado stock"))
     def stock_status(self, obj):
         return _stock_badge(obj.is_low_stock)
 
@@ -139,7 +141,7 @@ class AggregateAdmin(admin.ModelAdmin):
     # El stock NO se edita a mano: solo cambia al confirmar una Compra.
     readonly_fields = ("stock_quantity",)
 
-    @admin.display(description="Estado stock")
+    @admin.display(description=_("Estado stock"))
     def stock_status(self, obj):
         return _stock_badge(obj.is_low_stock)
 
@@ -223,7 +225,7 @@ class StockTotalsAdmin(admin.ModelAdmin):
 
         context = {
             **self.admin_site.each_context(request),
-            "title": "Totales de inventario",
+            "title": gettext("Totales de inventario"),
             "query": q,
             "only": only,
             "fil_rows": fil_rows,
@@ -248,7 +250,7 @@ class CompraLineInline(admin.TabularInline):
     readonly_fields = ("line_cost_display",)
     fields = ("filament", "aggregate", "quantity", "unit_price", "line_cost_display")
 
-    @admin.display(description="Costo de línea")
+    @admin.display(description=_("Costo de línea"))
     def line_cost_display(self, obj):
         return f"${obj.line_cost}" if obj.pk else "-"
 
@@ -277,7 +279,7 @@ class CompraAdmin(admin.ModelAdmin):
 
     fieldsets = (
         (None, {"fields": ("supplier", "invoice_number", "notes", "status")}),
-        ("Resumen", {"fields": ("totals_summary", "confirmed_at")}),
+        (_("Resumen"), {"fields": ("totals_summary", "confirmed_at")}),
     )
 
     def save_model(self, request, obj, form, change):
@@ -312,19 +314,20 @@ class CompraAdmin(admin.ModelAdmin):
             else:
                 self.message_user(
                     request,
-                    f"Compra #{obj.pk} confirmada: stock y precios actualizados.",
+                    gettext("Compra #%(pk)s confirmada: stock y precios actualizados.")
+                    % {"pk": obj.pk},
                 )
 
-    @admin.display(description="Total")
+    @admin.display(description=_("Total"))
     def total_display(self, obj):
         return f"$ {_money(obj.total)}"
 
-    @admin.display(description="Resumen de la compra")
+    @admin.display(description=_("Resumen de la compra"))
     def totals_summary(self, obj):
         from django.utils.safestring import mark_safe
 
         if not obj.pk:
-            return "Guardá la compra y agregá líneas para ver el total."
+            return gettext("Guardá la compra y agregá líneas para ver el total.")
         rows = "".join(
             f"&nbsp;&nbsp;{line.item} × {line.quantity}"
             f"{'g' if line.filament_id else ''} "
@@ -334,16 +337,18 @@ class CompraAdmin(admin.ModelAdmin):
         )
         estado = ""
         if obj.status == Compra.Status.DRAFT:
-            estado = (
+            estado = gettext(
                 "<br><i>Borrador: todavía no impactó el inventario. Usá la acción "
                 "“Confirmar compra” en la lista para sumar el stock.</i>"
             )
+        no_lines = gettext("(sin líneas todavía)")
+        total_label = gettext("TOTAL")
         return mark_safe(
-            f"{rows or '&nbsp;&nbsp;(sin líneas todavía)<br>'}"
-            f"&nbsp;&nbsp;<b>TOTAL: $ {_money(obj.total)}</b>{estado}"
+            f"{rows or '&nbsp;&nbsp;' + no_lines + '<br>'}"
+            f"&nbsp;&nbsp;<b>{total_label}: $ {_money(obj.total)}</b>{estado}"
         )
 
-    @admin.action(description="Confirmar compra(s) seleccionadas (suma stock)")
+    @admin.action(description=_("Confirmar compra(s) seleccionadas (suma stock)"))
     def confirm_compras(self, request, queryset):
         for compra in queryset:
             try:
@@ -353,7 +358,8 @@ class CompraAdmin(admin.ModelAdmin):
                 continue
             self.message_user(
                 request,
-                f"Compra #{compra.pk} confirmada: stock y precios actualizados.",
+                gettext("Compra #%(pk)s confirmada: stock y precios actualizados.")
+                % {"pk": compra.pk},
             )
 
 
@@ -370,11 +376,11 @@ class StockMovementAdmin(admin.ModelAdmin):
     list_filter = ("reason",)
     readonly_fields = ("created_at",)
 
-    @admin.display(description="Ítem")
+    @admin.display(description=_("Ítem"))
     def item(self, obj):
         return obj.filament or obj.aggregate
 
-    @admin.display(description="Origen")
+    @admin.display(description=_("Origen"))
     def origen(self, obj):
         return obj.related_presupuesto or "—"
 
@@ -384,16 +390,16 @@ class AjusteStockForm(forms.ModelForm):
         model = AjusteStock
         fields = ("filament", "aggregate", "quantity", "note")
         help_texts = {
-            "filament": "Elegí el filamento a ajustar (o un agregado, no ambos).",
-            "aggregate": "Elegí el agregado a ajustar (o un filamento, no ambos).",
-            "quantity": (
+            "filament": _("Elegí el filamento a ajustar (o un agregado, no ambos)."),
+            "aggregate": _("Elegí el agregado a ajustar (o un filamento, no ambos)."),
+            "quantity": _(
                 "Cantidad a ajustar. POSITIVO suma al stock, NEGATIVO resta. "
                 "Filamento en gramos, agregado en unidades. "
                 "Ej: 500 agrega 500 g; -200 quita 200 g. "
                 "Si querés dejar el stock en un valor exacto, fijate cuánto hay "
                 "hoy y poné la diferencia."
             ),
-            "note": (
+            "note": _(
                 "Motivo del ajuste (ej: conteo físico, rotura, sobrante de "
                 "impresión, carga inicial de stock)."
             ),
@@ -405,11 +411,13 @@ class AjusteStockForm(forms.ModelForm):
         aggregate = cleaned.get("aggregate")
         if bool(filament) == bool(aggregate):
             raise ValidationError(
-                "Elegí exactamente un artículo: un Filamento o un Agregado "
-                "(no ambos, no ninguno)."
+                gettext(
+                    "Elegí exactamente un artículo: un Filamento o un Agregado "
+                    "(no ambos, no ninguno)."
+                )
             )
         if not cleaned.get("quantity"):
-            raise ValidationError("Ingresá una cantidad distinta de cero.")
+            raise ValidationError(gettext("Ingresá una cantidad distinta de cero."))
         return cleaned
 
 
@@ -427,11 +435,11 @@ class AjusteStockAdmin(admin.ModelAdmin):
     list_display = ("created_at", "item", "quantity", "stock_resultante", "note")
     readonly_fields = ("created_at",)
 
-    @admin.display(description="Ítem")
+    @admin.display(description=_("Ítem"))
     def item(self, obj):
         return obj.filament or obj.aggregate
 
-    @admin.display(description="Stock luego del ajuste")
+    @admin.display(description=_("Stock luego del ajuste"))
     def stock_resultante(self, obj):
         if obj.filament_id:
             return f"{_num(obj.filament.stock_grams)} g"
@@ -473,6 +481,6 @@ class AjusteStockAdmin(admin.ModelAdmin):
         super().save_model(request, obj, form, change)
         self.message_user(
             request,
-            f"Stock ajustado en {delta}{unidad}. Nuevo stock: "
-            f"{_num(resultante)} {unidad}.",
+            gettext("Stock ajustado en %(delta)s%(unidad)s. Nuevo stock: %(resultante)s %(unidad)s.")
+            % {"delta": delta, "unidad": unidad, "resultante": _num(resultante)},
         )

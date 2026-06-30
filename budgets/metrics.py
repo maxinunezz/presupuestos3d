@@ -20,15 +20,16 @@ from decimal import Decimal
 
 from django.db.models import Count
 from django.utils import timezone
+from django.utils.translation import gettext, gettext_lazy as _
 
 from .models import Presupuesto
 from .pdf import format_money
 
 # Cuántos períodos hacia atrás se grafican en la serie de facturación.
 PERIODS = {
-    "week": {"label": "Semana", "buckets": 8},
-    "month": {"label": "Mes", "buckets": 12},
-    "year": {"label": "Año", "buckets": 5},
+    "week": {"label": _("Semana"), "buckets": 8},
+    "month": {"label": _("Mes"), "buckets": 12},
+    "year": {"label": _("Año"), "buckets": 5},
 }
 
 ZERO = Decimal("0")
@@ -67,7 +68,7 @@ def period_bounds(period: str, anchor: datetime):
 def _bucket_label(period: str, start: datetime) -> str:
     local = timezone.localtime(start)
     if period == "week":
-        return "Sem " + local.strftime("%d/%m")
+        return gettext("Sem ") + local.strftime("%d/%m")
     if period == "year":
         return local.strftime("%Y")
     return local.strftime("%m/%Y")
@@ -95,7 +96,7 @@ def _approved_in_range(start, end):
         Presupuesto.objects.filter(
             approved_at__gte=start, approved_at__lt=end
         ).prefetch_related(
-            "items__producto__filament_lines__filament",
+            "items__producto__piezas__filament_lines__filament",
             "items__producto__aggregate_lines__aggregate",
         )
     )
@@ -198,7 +199,7 @@ def build_metrics(period: str, now: datetime = None) -> dict:
 
     maq = defaultdict(lambda: {"jobs": 0, "horas": ZERO, "piezas": 0})
     for j in done:
-        key = j.machine.name if j.machine else "Sin máquina"
+        key = j.machine.name if j.machine else gettext("Sin máquina")
         maq[key]["jobs"] += 1
         maq[key]["horas"] += j.print_hours
         maq[key]["piezas"] += j.quantity
@@ -312,7 +313,7 @@ def _hours(value) -> str:
 
 
 def _days(value) -> str:
-    return "—" if value is None else f"{value:.1f} días"
+    return "—" if value is None else gettext("%(n).1f días") % {"n": value}
 
 
 def _period_range_str(m) -> str:
@@ -349,34 +350,39 @@ def export_xlsx(m: dict):
             width = max((len(str(c.value)) for c in col if c.value is not None), default=10)
             ws.column_dimensions[get_column_letter(col[0].column)].width = min(width + 3, 50)
 
+    period_label = str(m["period_label"])
+
     # --- Hoja 1: Resumen ---
     ws = wb.active
-    ws.title = "Resumen"
-    ws["A1"] = f"Métricas 3darg — {m['period_label']} ({_period_range_str(m)})"
+    ws.title = gettext("Resumen")
+    ws["A1"] = gettext("Métricas 3darg — %(period)s (%(range)s)") % {
+        "period": period_label,
+        "range": _period_range_str(m),
+    }
     ws["A1"].font = title_font
     rows = [
-        ("VENTAS", ""),
-        ("Facturación aprobada", _money(m["facturacion"])),
-        ("Presupuestos aprobados", m["n_aprobados"]),
-        ("Ticket promedio", _money(m["ticket"])),
-        ("Enviados / Aprobados", f'{m["n_enviados"]} / {m["n_conv"]}'),
-        ("Tasa de conversión", _pct(m["conversion"])),
-        ("Margen bruto", _pct(m["margen_pct"])),
-        ("Tiempo de ciclo (aprob.→entrega)", _days(m["tiempo_ciclo"])),
+        (gettext("VENTAS"), ""),
+        (gettext("Facturación aprobada"), _money(m["facturacion"])),
+        (gettext("Presupuestos aprobados"), m["n_aprobados"]),
+        (gettext("Ticket promedio"), _money(m["ticket"])),
+        (gettext("Enviados / Aprobados"), f'{m["n_enviados"]} / {m["n_conv"]}'),
+        (gettext("Tasa de conversión"), _pct(m["conversion"])),
+        (gettext("Margen bruto"), _pct(m["margen_pct"])),
+        (gettext("Tiempo de ciclo (aprob.→entrega)"), _days(m["tiempo_ciclo"])),
         ("", ""),
-        ("PRODUCCIÓN", ""),
-        ("Piezas impresas", m["piezas_impresas"]),
-        ("Horas impresas", _hours(m["horas_impresas"])),
-        ("Reimpresiones por falla", m["reprints"]),
-        ("Tasa de reimpresión", _pct(m["reprint_rate"])),
-        ("Cumplimiento de entrega", _pct(m["cumplimiento"])),
+        (gettext("PRODUCCIÓN"), ""),
+        (gettext("Piezas impresas"), m["piezas_impresas"]),
+        (gettext("Horas impresas"), _hours(m["horas_impresas"])),
+        (gettext("Reimpresiones por falla"), m["reprints"]),
+        (gettext("Tasa de reimpresión"), _pct(m["reprint_rate"])),
+        (gettext("Cumplimiento de entrega"), _pct(m["cumplimiento"])),
         ("", ""),
-        ("INVENTARIO / COSTOS", ""),
-        ("Gasto en compras", _money(m["gasto_compras"])),
-        ("N° de compras", m["n_compras"]),
-        ("Consumo de material ($)", _money(m["consumo_valor"])),
-        ("Filamento consumido (g)", f'{m["fil_grams"]:.0f}'),
-        ("Insumos bajo stock mínimo", m["low_stock"]),
+        (gettext("INVENTARIO / COSTOS"), ""),
+        (gettext("Gasto en compras"), _money(m["gasto_compras"])),
+        (gettext("N° de compras"), m["n_compras"]),
+        (gettext("Consumo de material ($)"), _money(m["consumo_valor"])),
+        (gettext("Filamento consumido (g)"), f'{m["fil_grams"]:.0f}'),
+        (gettext("Insumos bajo stock mínimo"), m["low_stock"]),
     ]
     r = 3
     for label, value in rows:
@@ -388,14 +394,16 @@ def export_xlsx(m: dict):
     autosize(ws)
 
     # --- Hoja 2: Facturación por período (con gráfico nativo) ---
-    ws2 = wb.create_sheet("Facturación")
-    ws2.append([m["period_label"], "Facturación"])
+    ws2 = wb.create_sheet(gettext("Facturación"))
+    ws2.append([period_label, gettext("Facturación")])
     style_header(ws2, 1, 2)
     for s in m["serie"]:
         ws2.append([s["label"], float(s["total"])])
     if len(m["serie"]) > 1:
         chart = BarChart()
-        chart.title = "Facturación por " + m["period_label"].lower()
+        chart.title = gettext("Facturación por %(period)s") % {
+            "period": period_label.lower()
+        }
         chart.y_axis.title = "$"
         data = Reference(ws2, min_col=2, min_row=1, max_row=1 + len(m["serie"]))
         cats = Reference(ws2, min_col=1, min_row=2, max_row=1 + len(m["serie"]))
@@ -406,30 +414,32 @@ def export_xlsx(m: dict):
     autosize(ws2)
 
     # --- Hoja 3: Ranking de productos ---
-    ws3 = wb.create_sheet("Productos")
-    ws3.append(["Producto", "Cantidad vendida"])
+    ws3 = wb.create_sheet(gettext("Productos"))
+    ws3.append([gettext("Producto"), gettext("Cantidad vendida")])
     style_header(ws3, 1, 2)
     for name, qty in m["top_productos_qty"]:
         ws3.append([name, qty])
     ws3.append([])
     base = ws3.max_row + 1
-    ws3.append(["Producto", "Facturación"])
+    ws3.append([gettext("Producto"), gettext("Facturación")])
     style_header(ws3, base, 2)
     for name, money in m["top_productos_money"]:
         ws3.append([name, float(money)])
     autosize(ws3)
 
     # --- Hoja 4: Top clientes ---
-    ws4 = wb.create_sheet("Clientes")
-    ws4.append(["Cliente", "Facturación"])
+    ws4 = wb.create_sheet(gettext("Clientes"))
+    ws4.append([gettext("Cliente"), gettext("Facturación")])
     style_header(ws4, 1, 2)
     for name, money in m["top_clientes"]:
         ws4.append([name, float(money)])
     autosize(ws4)
 
     # --- Hoja 5: Producción por máquina ---
-    ws5 = wb.create_sheet("Producción")
-    ws5.append(["Máquina", "Trabajos", "Piezas", "Horas impresas"])
+    ws5 = wb.create_sheet(gettext("Producción"))
+    ws5.append(
+        [gettext("Máquina"), gettext("Trabajos"), gettext("Piezas"), gettext("Horas impresas")]
+    )
     style_header(ws5, 1, 4)
     for row in m["uso_maquinas"]:
         ws5.append([row["name"], row["jobs"], row["piezas"], float(row["horas"])])
@@ -452,7 +462,9 @@ def template_context(m: dict) -> dict:
         "data": [float(s["total"]) for s in m["serie"]],
     }
     embudo_chart = {
-        "labels": [e["label"] for e in m["embudo"]],
+        # Las etiquetas del embudo son proxies lazy (Status.choices); se
+        # serializan a str para que json.dumps no falle.
+        "labels": [str(e["label"]) for e in m["embudo"]],
         "data": [e["count"] for e in m["embudo"]],
     }
     maq_chart = {
@@ -469,7 +481,8 @@ def template_context(m: dict) -> dict:
         "n_aprobados": m["n_aprobados"],
         "ticket": _money(m["ticket"]),
         "conversion": _pct(m["conversion"]),
-        "conversion_detail": f'{m["n_conv"]}/{m["n_enviados"]} enviados',
+        "conversion_detail": gettext("%(conv)s/%(sent)s enviados")
+        % {"conv": m["n_conv"], "sent": m["n_enviados"]},
         "margen_pct": _pct(m["margen_pct"]),
         "tiempo_ciclo": _days(m["tiempo_ciclo"]),
         # KPIs producción

@@ -3,6 +3,8 @@ from decimal import Decimal
 from django.core.exceptions import ValidationError
 from django.db import models, transaction
 from django.utils import timezone
+from django.utils.translation import gettext
+from django.utils.translation import gettext_lazy as _
 
 
 class Filament(models.Model):
@@ -22,43 +24,43 @@ class Filament(models.Model):
         TPU = "TPU", "TPU"
         ASA = "ASA", "ASA"
         NYLON = "NYLON", "Nylon"
-        OTHER = "OTHER", "Otro"
+        OTHER = "OTHER", _("Otro")
 
-    brand = models.CharField("Marca", max_length=100)
+    brand = models.CharField(_("Marca"), max_length=100)
     material_type = models.CharField(
-        "Tipo de material", max_length=10, choices=MaterialType.choices
+        _("Tipo de material"), max_length=10, choices=MaterialType.choices
     )
-    color = models.CharField("Color", max_length=100)
+    color = models.CharField(_("Color"), max_length=100)
     color_hex = models.CharField(
-        "Color (hex)",
+        _("Color (hex)"),
         max_length=7,
         blank=True,
-        help_text="Ej: #FF0000. Opcional, para mostrar una muestra de color en el front.",
+        help_text=_("Ej: #FF0000. Opcional, para mostrar una muestra de color en el front."),
     )
     cost_per_kg = models.DecimalField(
-        "Costo por kg", max_digits=10, decimal_places=2
+        _("Costo por kg"), max_digits=10, decimal_places=2
     )
     stock_grams = models.DecimalField(
-        "Stock disponible (g)", max_digits=10, decimal_places=2, default=0
+        _("Stock disponible (g)"), max_digits=10, decimal_places=2, default=0
     )
     min_stock = models.DecimalField(
-        "Stock mínimo (g)",
+        _("Stock mínimo (g)"),
         max_digits=10,
         decimal_places=2,
         default=Decimal("1000"),
-        help_text=(
+        help_text=_(
             "Si el stock baja de este valor, salta la alerta de bajo stock "
             "(la campanita). En gramos. Ej: 1000 = 1 kg. Poné 0 para no avisar "
             "de este filamento."
         ),
     )
-    is_active = models.BooleanField("Activo", default=True)
-    created_at = models.DateTimeField("Creado", auto_now_add=True)
-    updated_at = models.DateTimeField("Actualizado", auto_now=True)
+    is_active = models.BooleanField(_("Activo"), default=True)
+    created_at = models.DateTimeField(_("Creado"), auto_now_add=True)
+    updated_at = models.DateTimeField(_("Actualizado"), auto_now=True)
 
     class Meta:
-        verbose_name = "Filamento"
-        verbose_name_plural = "Filamentos"
+        verbose_name = _("Filamento")
+        verbose_name_plural = _("Filamentos")
         ordering = ["brand", "material_type", "color"]
         constraints = [
             models.UniqueConstraint(
@@ -82,17 +84,26 @@ class Filament(models.Model):
     def has_enough_stock(self, grams_needed: Decimal) -> bool:
         return self.stock_grams >= grams_needed
 
-    def deduct_stock(self, grams: Decimal) -> Decimal:
+    def deduct_stock(self, grams: Decimal, allow_negative: bool = False) -> Decimal:
         """
-        Descuenta `grams` del stock, sin permitir que quede negativo.
-        Devuelve la cantidad que efectivamente faltó (0 si había suficiente).
+        Descuenta `grams` del stock. Devuelve cuánto faltó (0 si alcanzaba).
+
+        - `allow_negative=False` (default): no deja el stock negativo (lo deja
+          en cero). Pensado para ajustes/compras.
+        - `allow_negative=True`: descuenta los `grams` completos aunque el stock
+          quede en negativo. Lo usa la PRODUCCIÓN al aprobar un pedido, así el
+          stock negativo muestra de forma persistente cuánto hay que comprar y
+          la reversa por cancelación puede devolver lo justo.
         """
         grams = Decimal(grams)
         if grams <= 0:
             return Decimal("0")
 
         shortage = max(Decimal("0"), grams - self.stock_grams)
-        self.stock_grams = max(Decimal("0"), self.stock_grams - grams)
+        if allow_negative:
+            self.stock_grams = self.stock_grams - grams
+        else:
+            self.stock_grams = max(Decimal("0"), self.stock_grams - grams)
         self.save(update_fields=["stock_grams", "updated_at"])
         return shortage
 
@@ -103,47 +114,47 @@ class Aggregate(models.Model):
     """
 
     class Category(models.TextChoices):
-        HARDWARE = "HARDWARE", "Herraje (argollas, llaveros, etc.)"
+        HARDWARE = "HARDWARE", _("Herraje (argollas, llaveros, etc.)")
         PACKAGING = "PACKAGING", "Packaging"
-        DECORATION = "DECORATION", "Decoración (pegatinas, etc.)"
-        OTHER = "OTHER", "Otro"
+        DECORATION = "DECORATION", _("Decoración (pegatinas, etc.)")
+        OTHER = "OTHER", _("Otro")
 
     class Unit(models.TextChoices):
-        UNIT = "UNIT", "Unidad"
-        PAIR = "PAIR", "Par"
-        METER = "METER", "Metro"
-        GRAM = "GRAM", "Gramo"
+        UNIT = "UNIT", _("Unidad")
+        PAIR = "PAIR", _("Par")
+        METER = "METER", _("Metro")
+        GRAM = "GRAM", _("Gramo")
 
-    name = models.CharField("Nombre", max_length=150)
+    name = models.CharField(_("Nombre"), max_length=150)
     category = models.CharField(
-        "Categoría", max_length=20, choices=Category.choices, default=Category.OTHER
+        _("Categoría"), max_length=20, choices=Category.choices, default=Category.OTHER
     )
-    unit = models.CharField("Unidad", max_length=10, choices=Unit.choices, default=Unit.UNIT)
+    unit = models.CharField(_("Unidad"), max_length=10, choices=Unit.choices, default=Unit.UNIT)
     cost_per_unit = models.DecimalField(
-        "Costo por unidad", max_digits=10, decimal_places=2
+        _("Costo por unidad"), max_digits=10, decimal_places=2
     )
     stock_quantity = models.DecimalField(
-        "Stock disponible", max_digits=10, decimal_places=2, default=0
+        _("Stock disponible"), max_digits=10, decimal_places=2, default=0
     )
     min_stock = models.DecimalField(
-        "Stock mínimo",
+        _("Stock mínimo"),
         max_digits=10,
         decimal_places=2,
         default=Decimal("0"),
-        help_text=(
+        help_text=_(
             "Si el stock baja de este valor, salta la alerta de bajo stock "
             "(la campanita). Va en la MISMA unidad del agregado: si se mide en "
             "unidades, poné unidades (ej: pelotas → 20); si se mide en gramos, "
             "poné gramos (ej: argollas → 200). Poné 0 para no avisar de este agregado."
         ),
     )
-    is_active = models.BooleanField("Activo", default=True)
-    created_at = models.DateTimeField("Creado", auto_now_add=True)
-    updated_at = models.DateTimeField("Actualizado", auto_now=True)
+    is_active = models.BooleanField(_("Activo"), default=True)
+    created_at = models.DateTimeField(_("Creado"), auto_now_add=True)
+    updated_at = models.DateTimeField(_("Actualizado"), auto_now=True)
 
     class Meta:
-        verbose_name = "Agregado"
-        verbose_name_plural = "Agregados"
+        verbose_name = _("Agregado")
+        verbose_name_plural = _("Agregados")
         ordering = ["category", "name"]
 
     def __str__(self):
@@ -157,13 +168,21 @@ class Aggregate(models.Model):
     def has_enough_stock(self, qty_needed: Decimal) -> bool:
         return self.stock_quantity >= qty_needed
 
-    def deduct_stock(self, qty: Decimal) -> Decimal:
+    def deduct_stock(self, qty: Decimal, allow_negative: bool = False) -> Decimal:
+        """
+        Descuenta `qty` del stock. Devuelve cuánto faltó (0 si alcanzaba).
+        Con `allow_negative=True` descuenta todo aunque quede en negativo (lo
+        usa la producción al aprobar; ver Filament.deduct_stock).
+        """
         qty = Decimal(qty)
         if qty <= 0:
             return Decimal("0")
 
         shortage = max(Decimal("0"), qty - self.stock_quantity)
-        self.stock_quantity = max(Decimal("0"), self.stock_quantity - qty)
+        if allow_negative:
+            self.stock_quantity = self.stock_quantity - qty
+        else:
+            self.stock_quantity = max(Decimal("0"), self.stock_quantity - qty)
         self.save(update_fields=["stock_quantity", "updated_at"])
         return shortage
 
@@ -177,8 +196,8 @@ class StockTotals(Filament):
 
     class Meta:
         proxy = True
-        verbose_name = "Totales de inventario"
-        verbose_name_plural = "Totales de inventario"
+        verbose_name = _("Totales de inventario")
+        verbose_name_plural = _("Totales de inventario")
 
 
 class StockMovement(models.Model):
@@ -188,15 +207,16 @@ class StockMovement(models.Model):
     """
 
     class Reason(models.TextChoices):
-        PURCHASE = "PURCHASE", "Compra"
-        BUDGET_APPROVED = "BUDGET_APPROVED", "Presupuesto aprobado"
-        PRODUCTION = "PRODUCTION", "Producción (impresión)"
-        MANUAL_ADJUSTMENT = "MANUAL_ADJUSTMENT", "Ajuste manual"
-        REPRINT_FAILURE = "REPRINT_FAILURE", "Reimpresión por falla"
+        PURCHASE = "PURCHASE", _("Compra")
+        BUDGET_APPROVED = "BUDGET_APPROVED", _("Presupuesto aprobado")
+        PRODUCTION = "PRODUCTION", _("Producción (impresión)")
+        BUDGET_CANCELLED = "BUDGET_CANCELLED", _("Cancelación de presupuesto")
+        MANUAL_ADJUSTMENT = "MANUAL_ADJUSTMENT", _("Ajuste manual")
+        REPRINT_FAILURE = "REPRINT_FAILURE", _("Reimpresión por falla")
 
     filament = models.ForeignKey(
         Filament,
-        verbose_name="Filamento",
+        verbose_name=_("Filamento"),
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -204,33 +224,33 @@ class StockMovement(models.Model):
     )
     aggregate = models.ForeignKey(
         Aggregate,
-        verbose_name="Agregado",
+        verbose_name=_("Agregado"),
         null=True,
         blank=True,
         on_delete=models.PROTECT,
         related_name="movements",
     )
     quantity = models.DecimalField(
-        "Cantidad",
+        _("Cantidad"),
         max_digits=10,
         decimal_places=2,
-        help_text="Negativo = salida de stock. Positivo = entrada de stock.",
+        help_text=_("Negativo = salida de stock. Positivo = entrada de stock."),
     )
-    reason = models.CharField("Motivo", max_length=20, choices=Reason.choices)
+    reason = models.CharField(_("Motivo"), max_length=20, choices=Reason.choices)
     related_presupuesto = models.ForeignKey(
         "budgets.Presupuesto",
-        verbose_name="Presupuesto relacionado",
+        verbose_name=_("Presupuesto relacionado"),
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
         related_name="stock_movements",
     )
-    note = models.CharField("Nota", max_length=255, blank=True)
-    created_at = models.DateTimeField("Fecha", auto_now_add=True)
+    note = models.CharField(_("Nota"), max_length=255, blank=True)
+    created_at = models.DateTimeField(_("Fecha"), auto_now_add=True)
 
     class Meta:
-        verbose_name = "Movimiento de stock"
-        verbose_name_plural = "Movimientos de stock"
+        verbose_name = _("Movimiento de stock")
+        verbose_name_plural = _("Movimientos de stock")
         ordering = ["-created_at"]
         constraints = [
             models.CheckConstraint(
@@ -249,8 +269,10 @@ class StockMovement(models.Model):
     def clean(self):
         if bool(self.filament) == bool(self.aggregate):
             raise ValidationError(
-                "Un movimiento de stock debe estar vinculado a exactamente "
-                "un Filamento o un Agregado (no ambos, no ninguno)."
+                gettext(
+                    "Un movimiento de stock debe estar vinculado a exactamente "
+                    "un Filamento o un Agregado (no ambos, no ninguno)."
+                )
             )
 
 
@@ -264,8 +286,8 @@ class AjusteStock(StockMovement):
 
     class Meta:
         proxy = True
-        verbose_name = "Ajuste manual de stock"
-        verbose_name_plural = "Ajustes manuales de stock"
+        verbose_name = _("Ajuste manual de stock")
+        verbose_name_plural = _("Ajustes manuales de stock")
 
 
 class CompraNotConfirmableError(Exception):
@@ -283,28 +305,28 @@ class Compra(models.Model):
     """
 
     class Status(models.TextChoices):
-        DRAFT = "DRAFT", "Borrador"
-        CONFIRMED = "CONFIRMED", "Confirmada"
+        DRAFT = "DRAFT", _("Borrador")
+        CONFIRMED = "CONFIRMED", _("Confirmada")
 
-    supplier = models.CharField("Proveedor", max_length=150, blank=True)
-    invoice_number = models.CharField("N° de factura / remito", max_length=100, blank=True)
-    notes = models.TextField("Notas", blank=True)
+    supplier = models.CharField(_("Proveedor"), max_length=150, blank=True)
+    invoice_number = models.CharField(_("N° de factura / remito"), max_length=100, blank=True)
+    notes = models.TextField(_("Notas"), blank=True)
 
     status = models.CharField(
-        "Estado", max_length=20, choices=Status.choices, default=Status.DRAFT
+        _("Estado"), max_length=20, choices=Status.choices, default=Status.DRAFT
     )
-    confirmed_at = models.DateTimeField("Confirmada el", null=True, blank=True)
+    confirmed_at = models.DateTimeField(_("Confirmada el"), null=True, blank=True)
 
-    created_at = models.DateTimeField("Creada", auto_now_add=True)
-    updated_at = models.DateTimeField("Actualizada", auto_now=True)
+    created_at = models.DateTimeField(_("Creada"), auto_now_add=True)
+    updated_at = models.DateTimeField(_("Actualizada"), auto_now=True)
 
     class Meta:
-        verbose_name = "Compra"
-        verbose_name_plural = "Compras"
+        verbose_name = _("Compra")
+        verbose_name_plural = _("Compras")
         ordering = ["-created_at"]
 
     def __str__(self):
-        proveedor = self.supplier or "sin proveedor"
+        proveedor = self.supplier or gettext("sin proveedor")
         return f"#{self.pk} {proveedor} ({self.get_status_display()})"
 
     @property
@@ -323,9 +345,12 @@ class Compra(models.Model):
         """
         if self.status != Compra.Status.DRAFT:
             raise CompraNotConfirmableError(
-                f"No se puede confirmar la compra #{self.pk}: su estado es "
-                f"'{self.get_status_display()}'. Solo se pueden confirmar "
-                f"compras en estado Borrador."
+                gettext(
+                    "No se puede confirmar la compra #%(pk)s: su estado es "
+                    "'%(status)s'. Solo se pueden confirmar "
+                    "compras en estado Borrador."
+                )
+                % {"pk": self.pk, "status": self.get_status_display()}
             )
 
         with transaction.atomic():
@@ -353,7 +378,7 @@ class CompraLine(models.Model):
     )
     filament = models.ForeignKey(
         Filament,
-        verbose_name="Filamento",
+        verbose_name=_("Filamento"),
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -361,33 +386,33 @@ class CompraLine(models.Model):
     )
     aggregate = models.ForeignKey(
         Aggregate,
-        verbose_name="Agregado",
+        verbose_name=_("Agregado"),
         null=True,
         blank=True,
         on_delete=models.PROTECT,
         related_name="compra_lines",
     )
     quantity = models.DecimalField(
-        "Cantidad comprada",
+        _("Cantidad comprada"),
         max_digits=10,
         decimal_places=2,
-        help_text="Filamento: en gramos. Agregado: en unidades.",
+        help_text=_("Filamento: en gramos. Agregado: en unidades."),
     )
     unit_price = models.DecimalField(
-        "Precio pagado",
+        _("Precio pagado"),
         max_digits=10,
         decimal_places=2,
         null=True,
         blank=True,
-        help_text=(
+        help_text=_(
             "Filamento: costo por kg. Agregado: costo por unidad. Si se deja "
             "vacío, se mantiene el precio actual del artículo."
         ),
     )
 
     class Meta:
-        verbose_name = "Línea de compra"
-        verbose_name_plural = "Líneas de compra"
+        verbose_name = _("Línea de compra")
+        verbose_name_plural = _("Líneas de compra")
         constraints = [
             models.CheckConstraint(
                 condition=(
@@ -405,8 +430,10 @@ class CompraLine(models.Model):
     def clean(self):
         if bool(self.filament) == bool(self.aggregate):
             raise ValidationError(
-                "Una línea de compra debe estar vinculada a exactamente un "
-                "Filamento o un Agregado (no ambos, no ninguno)."
+                gettext(
+                    "Una línea de compra debe estar vinculada a exactamente un "
+                    "Filamento o un Agregado (no ambos, no ninguno)."
+                )
             )
 
     @property

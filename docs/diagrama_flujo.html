@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="es-AR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>3darg — Diagrama de flujo de la app</title>
+<style>
+    :root { --ink: #111; --muted: #666; --line: #ddd; }
+    * { box-sizing: border-box; }
+    body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+        margin: 0; background: #f5f5f5; color: var(--ink);
+    }
+    header {
+        background: #111; color: #fff; padding: 22px 28px;
+    }
+    header h1 { margin: 0; font-size: 22px; }
+    header p { margin: 6px 0 0; color: #bbb; font-size: 13px; }
+    .toolbar {
+        padding: 12px 28px; background: #fff; border-bottom: 1px solid var(--line);
+        display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
+    }
+    .toolbar button {
+        background: #111; color: #fff; border: 0; border-radius: 6px;
+        padding: 8px 14px; font-size: 13px; cursor: pointer;
+    }
+    .toolbar button:hover { background: #333; }
+    .toolbar .hint { color: var(--muted); font-size: 12px; }
+    .wrap { padding: 24px 28px 60px; }
+    .panel {
+        background: #fff; border: 1px solid var(--line); border-radius: 10px;
+        padding: 18px; margin-bottom: 26px; overflow: auto;
+    }
+    .panel h2 { margin: 0 0 4px; font-size: 16px; }
+    .panel .sub { color: var(--muted); font-size: 12px; margin: 0 0 14px; }
+    .legend { display: flex; gap: 18px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-top: 8px; }
+    .legend span { display: inline-flex; align-items: center; gap: 6px; }
+    .sw { width: 14px; height: 14px; border-radius: 3px; display: inline-block; border: 1px solid rgba(0,0,0,.15); }
+    .mermaid { font-size: 14px; }
+    .gap { color: #b3261e; font-weight: 600; }
+</style>
+</head>
+<body>
+<header>
+    <h1>3darg — Diagrama de flujo de la aplicación</h1>
+    <p>Gestión de impresión 3D · Django admin · catálogo → presupuesto → producción → métricas. Generado para entender el estado actual.</p>
+</header>
+
+<div class="toolbar">
+    <button onclick="downloadSVG('flujo-general')">⬇️ Exportar flujo general (SVG)</button>
+    <button onclick="window.print()">🖨️ Imprimir / Guardar PDF</button>
+    <span class="hint">Tip: para PNG, abrí el SVG en el navegador y exportá, o usá "Imprimir → Guardar como PDF".</span>
+</div>
+
+<div class="wrap">
+
+    <div class="panel">
+        <h2>1 · Flujo general del negocio</h2>
+        <p class="sub">De la carga de catálogo hasta las métricas. En rojo, los puntos a mejorar.</p>
+        <pre class="mermaid" id="flujo-general">
+flowchart TD
+    classDef cat fill:#eef2ff,stroke:#3b4a9e,color:#1a2456;
+    classDef buy fill:#eafaf0,stroke:#1e7e34,color:#0f4d20;
+    classDef pres fill:#fff7e6,stroke:#b8860b,color:#5b4300;
+    classDef prod fill:#f0f0f0,stroke:#111,color:#111;
+    classDef sched fill:#f3e9ff,stroke:#6b21a8,color:#3b0764;
+    classDef metr fill:#e8f6ff,stroke:#0b6ba8,color:#063b5c;
+    classDef gap fill:#fdecea,stroke:#b3261e,color:#7a1610,stroke-dasharray: 5 4;
+    classDef done fill:#eafaf0,stroke:#1e7e34,color:#0f4d20;
+
+    subgraph CAT["CATALOGO — se carga una vez"]
+        direction TB
+        FIL[(Filamento<br/>stock_grams)]:::cat
+        AGG[(Agregado<br/>stock_quantity)]:::cat
+        PR[Producto<br/>margen · maquina · prioridad]:::cat
+        PZ[Pieza<br/>units_needed · ppg<br/>print_time · stock_quantity]:::cat
+        PR -->|se compone de| PZ
+        PZ -->|consume filamento| FIL
+        PR -->|consume agregados| AGG
+    end
+
+    subgraph BUY["COMPRAS — reponer stock"]
+        direction TB
+        C1[Compra DRAFT] -->|confirm idempotente| C2[Compra CONFIRMED<br/>+ stock · + precios<br/>StockMovement PURCHASE]:::buy
+    end
+    C2 -. suma .-> FIL
+    C2 -. suma .-> AGG
+
+    subgraph SALE["PRESUPUESTO — ciclo de venta"]
+        direction LR
+        D[DRAFT]:::pres --> S[SENT]:::pres --> AP[APPROVED]:::pres --> IP[IN_PRODUCTION]:::pres --> CO[COMPLETED]:::pres
+        D -.-> X[CANCELLED]:::pres
+        S -.-> X
+        AP -.-> X
+    end
+
+    AP ==>|approve / dropdown| PROV{{_provision_production · idempotente<br/>por cada pieza:<br/>1) descuenta de stock_quantity<br/>2) encola SOLO lo que falta<br/>3) descuenta material AL APROBAR}}:::pres
+    PROV ==> FIL
+    PROV ==> AGG
+    PROV ==>|1 job por pieza · respeta AMS y prioridad| J
+
+    subgraph PROD["PRODUCCION — la cola es la fuente de verdad"]
+        direction LR
+        J[Job PENDING<br/>orden por prioridad]:::prod -->|marcar| PT[PRINTING<br/>started_at]:::prod -->|marcar| DN[DONE<br/>finished_at]:::prod
+    end
+    DN ==>|register_surplus: sobrante de corrida| PZ
+    DN -. sync_status_from_jobs .-> IP
+    DN -. todos DONE .-> CO
+
+    subgraph SCH["SCHEDULER · ventana 07-23h"]
+        direction TB
+        CS[compute_schedule<br/>recommend_machine greedy]:::sched
+        MF[material_forecast]:::sched
+    end
+    J -.-> CS
+    CS --> TAB[Tablero / Cola de produccion]:::prod
+    MF --> TAB
+
+    subgraph MET["METRICAS"]
+        direction TB
+        MK[Ventas por approved_at<br/>Produccion por finished_at<br/>Compras por confirmed_at<br/>Export Excel 5 hojas]:::metr
+    end
+    AP -.-> MK
+    DN -.-> MK
+    C2 -.-> MK
+
+    G1>"RESUELTO: cancelar APROBADO devuelve stock<br/>(Presupuesto.cancel)"]:::done
+    X -.-> G1
+    G2>"RESUELTO: forecast = stock bajo el mínimo<br/>tras aprobar (puede ser negativo)"]:::done
+    MF -.-> G2
+        </pre>
+        <div class="legend">
+            <span><i class="sw" style="background:#eef2ff"></i>Catálogo</span>
+            <span><i class="sw" style="background:#eafaf0"></i>Compras</span>
+            <span><i class="sw" style="background:#fff7e6"></i>Presupuesto</span>
+            <span><i class="sw" style="background:#f0f0f0"></i>Producción</span>
+            <span><i class="sw" style="background:#f3e9ff"></i>Scheduler</span>
+            <span><i class="sw" style="background:#e8f6ff"></i>Métricas</span>
+            <span><i class="sw" style="background:#fdecea;border-style:dashed"></i>Hueco a resolver</span>
+        </div>
+    </div>
+
+    <div class="panel">
+        <h2>2 · Estados del presupuesto (máquina de estados)</h2>
+        <p class="sub">Una vez aprobado, la cola de producción empuja el estado hacia adelante automáticamente; nunca retrocede.</p>
+        <pre class="mermaid" id="estados">
+stateDiagram-v2
+    [*] --> DRAFT: se crea
+    DRAFT --> SENT: enviar al cliente (sent_at)
+    DRAFT --> APPROVED: aprobar
+    SENT --> APPROVED: aprobar (approved_at)\n_provision_production
+    APPROVED --> IN_PRODUCTION: algun job PRINTING/DONE\n(sync_status_from_jobs)
+    IN_PRODUCTION --> COMPLETED: todos los jobs DONE\n(production_finished_at, completed_at)
+    DRAFT --> CANCELLED
+    SENT --> CANCELLED
+    APPROVED --> CANCELLED: ⚠ no devuelve stock
+    note right of APPROVED
+        Al aprobar se descuenta
+        filamento + agregados + piezas
+        (stock_provisioned)
+    end note
+        </pre>
+    </div>
+
+    <div class="panel">
+        <h2>3 · Ciclo de un trabajo de producción (ProductionJob)</h2>
+        <p class="sub">El material se descuenta al aprobar el presupuesto; la sobrante de cada corrida vuelve al stock de piezas al imprimir.</p>
+        <pre class="mermaid" id="job">
+flowchart LR
+    classDef prod fill:#f0f0f0,stroke:#111,color:#111;
+    A[Creado al aprobar<br/>PENDING · maquina asignada<br/>stock_consumed=TRUE]:::prod
+    A -->|marcar PRINTING| B[PRINTING<br/>started_at = ahora]:::prod
+    B -->|marcar DONE| C[DONE<br/>finished_at = ahora]:::prod
+    C -->|register_surplus idempotente| D[(Pieza.stock_quantity<br/>+ sobrante)]:::prod
+    A -.->|cancelar| E[CANCELLED<br/>sale de la cola]:::prod
+    C -. avanza estado del presupuesto .-> F[sync_status_from_jobs]:::prod
+        </pre>
+    </div>
+
+    <div class="panel">
+        <h2>4 · Modelo de datos (relaciones principales)</h2>
+        <p class="sub">FKs y composición. El dinero (total, precios) es @property calculado en Python, no columna.</p>
+        <pre class="mermaid" id="datos">
+erDiagram
+    PRODUCTO ||--o{ PIEZA : "se compone de"
+    PRODUCTO ||--o{ PRODUCTO_AGGREGATE_LINE : "usa"
+    PIEZA ||--o{ PIEZA_FILAMENT_LINE : "usa"
+    FILAMENT ||--o{ PIEZA_FILAMENT_LINE : "abastece"
+    AGGREGATE ||--o{ PRODUCTO_AGGREGATE_LINE : "abastece"
+    PRESUPUESTO ||--o{ PRESUPUESTO_ITEM : "tiene"
+    PRODUCTO ||--o{ PRESUPUESTO_ITEM : "cotiza"
+    PRESUPUESTO ||--o{ PRODUCTION_JOB : "genera al aprobar"
+    PIEZA ||--o{ PRODUCTION_JOB : "se imprime como"
+    MAQUINA ||--o{ PRODUCTION_JOB : "ejecuta"
+    COMPRA ||--o{ COMPRA_LINE : "tiene"
+    FILAMENT ||--o{ STOCK_MOVEMENT : "historial"
+    AGGREGATE ||--o{ STOCK_MOVEMENT : "historial"
+    PRESUPUESTO ||--o{ STOCK_MOVEMENT : "relacionado"
+        </pre>
+    </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script>
+    mermaid.initialize({ startOnLoad: true, theme: 'base', securityLevel: 'loose',
+        themeVariables: { fontFamily: 'inherit', fontSize: '14px' } });
+
+    function downloadSVG(id) {
+        const el = document.getElementById(id);
+        const svg = el.querySelector('svg');
+        if (!svg) { alert('Esperá a que se renderice el diagrama.'); return; }
+        const data = new XMLSerializer().serializeToString(svg);
+        const blob = new Blob([data], { type: 'image/svg+xml;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = '3darg-flujo-general.svg';
+        document.body.appendChild(a); a.click(); a.remove();
+        URL.revokeObjectURL(url);
+    }
+</script>
+</body>
+</html>

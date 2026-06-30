@@ -1,5 +1,5 @@
 {% extends "admin/base_site.html" %}
-{% load static %}
+{% load static i18n %}
 
 {% block content %}
 <style>
@@ -53,9 +53,9 @@
 </style>
 
 <p class="mx-intro">
-    KPIs del negocio por período. Ventas por <b>fecha de aprobación</b>, producción por
+    {% blocktranslate %}KPIs del negocio por período. Ventas por <b>fecha de aprobación</b>, producción por
     <b>fin de impresión</b>, compras por <b>fecha de confirmación</b>. El embudo y el stock bajo
-    son una foto del estado actual (no dependen del período).
+    son una foto del estado actual (no dependen del período).{% endblocktranslate %}
 </p>
 
 <div class="mx-bar">
@@ -65,101 +65,101 @@
         {% endfor %}
     </div>
     <span class="mx-range">{{ range_str }}</span>
-    <a class="mx-excel" href="?period={{ period }}&export=xlsx">⬇ Descargar Excel</a>
+    <a class="mx-excel" href="?period={{ period }}&export=xlsx">⬇ {% translate "Descargar Excel" %}</a>
 </div>
 
 <!-- ===================== A) VENTAS ===================== -->
-<div class="mx-section mx-section--ventas">💰 Ventas</div>
+<div class="mx-section mx-section--ventas">💰 {% translate "Ventas" %}</div>
 <div class="mx-kpis mx-kpis--ventas">
-    <div class="kpi"><span class="n">{{ facturacion }}</span><span class="l">Facturación aprobada</span></div>
-    <div class="kpi"><span class="n">{{ n_aprobados }}</span><span class="l">Presupuestos aprobados</span></div>
-    <div class="kpi"><span class="n">{{ ticket }}</span><span class="l">Ticket promedio</span></div>
-    <div class="kpi"><span class="n">{{ conversion }}</span><span class="l">Conversión</span><span class="s">{{ conversion_detail }}</span></div>
-    <div class="kpi"><span class="n">{{ margen_pct }}</span><span class="l">Margen bruto</span></div>
-    <div class="kpi"><span class="n">{{ tiempo_ciclo }}</span><span class="l">Tiempo de ciclo</span></div>
+    <div class="kpi"><span class="n">{{ facturacion }}</span><span class="l">{% translate "Facturación aprobada" %}</span></div>
+    <div class="kpi"><span class="n">{{ n_aprobados }}</span><span class="l">{% translate "Presupuestos aprobados" %}</span></div>
+    <div class="kpi"><span class="n">{{ ticket }}</span><span class="l">{% translate "Ticket promedio" %}</span></div>
+    <div class="kpi"><span class="n">{{ conversion }}</span><span class="l">{% translate "Conversión" %}</span><span class="s">{{ conversion_detail }}</span></div>
+    <div class="kpi"><span class="n">{{ margen_pct }}</span><span class="l">{% translate "Margen bruto" %}</span></div>
+    <div class="kpi"><span class="n">{{ tiempo_ciclo }}</span><span class="l">{% translate "Tiempo de ciclo" %}</span></div>
 </div>
 
 <div class="mx-grid">
     <div class="mx-card">
-        <h3>Facturación por {{ period_label|lower }}</h3>
+        <h3>{% blocktranslate with pl=period_label|lower %}Facturación por {{ pl }}{% endblocktranslate %}</h3>
         <canvas id="chartFact" height="150"></canvas>
     </div>
     <div class="mx-card">
-        <h3>Embudo de estados (ahora)</h3>
+        <h3>{% translate "Embudo de estados (ahora)" %}</h3>
         <canvas id="chartEmbudo" height="150"></canvas>
     </div>
 </div>
 
 <div class="mx-grid">
     <div class="mx-card">
-        <h3>Productos más vendidos (cantidad)</h3>
+        <h3>{% translate "Productos más vendidos (cantidad)" %}</h3>
         <table class="mx">
-            <thead><tr><th>Producto</th><th class="num">Cant.</th></tr></thead>
+            <thead><tr><th>{% translate "Producto" %}</th><th class="num">{% translate "Cant." %}</th></tr></thead>
             <tbody>
                 {% for r in top_productos_qty %}
                 <tr><td>{{ r.name }}</td><td class="num">{{ r.qty }}</td></tr>
-                {% empty %}<tr><td colspan="2" class="empty">Sin ventas en el período.</td></tr>{% endfor %}
+                {% empty %}<tr><td colspan="2" class="empty">{% translate "Sin ventas en el período." %}</td></tr>{% endfor %}
             </tbody>
         </table>
     </div>
     <div class="mx-card">
-        <h3>Productos más vendidos ($)</h3>
+        <h3>{% translate "Productos más vendidos ($)" %}</h3>
         <table class="mx">
-            <thead><tr><th>Producto</th><th class="num">Facturación</th></tr></thead>
+            <thead><tr><th>{% translate "Producto" %}</th><th class="num">{% translate "Facturación" %}</th></tr></thead>
             <tbody>
                 {% for r in top_productos_money %}
                 <tr><td>{{ r.name }}</td><td class="num">{{ r.money }}</td></tr>
-                {% empty %}<tr><td colspan="2" class="empty">Sin ventas en el período.</td></tr>{% endfor %}
+                {% empty %}<tr><td colspan="2" class="empty">{% translate "Sin ventas en el período." %}</td></tr>{% endfor %}
             </tbody>
         </table>
     </div>
     <div class="mx-card">
-        <h3>Top clientes ($)</h3>
+        <h3>{% translate "Top clientes ($)" %}</h3>
         <table class="mx">
-            <thead><tr><th>Cliente</th><th class="num">Facturación</th></tr></thead>
+            <thead><tr><th>{% translate "Cliente" %}</th><th class="num">{% translate "Facturación" %}</th></tr></thead>
             <tbody>
                 {% for r in top_clientes %}
                 <tr><td>{{ r.name }}</td><td class="num">{{ r.money }}</td></tr>
-                {% empty %}<tr><td colspan="2" class="empty">Sin ventas en el período.</td></tr>{% endfor %}
+                {% empty %}<tr><td colspan="2" class="empty">{% translate "Sin ventas en el período." %}</td></tr>{% endfor %}
             </tbody>
         </table>
     </div>
 </div>
 
 <!-- ===================== B) PRODUCCIÓN ===================== -->
-<div class="mx-section mx-section--prod">🖨️ Producción</div>
+<div class="mx-section mx-section--prod">🖨️ {% translate "Producción" %}</div>
 <div class="mx-kpis mx-kpis--prod">
-    <div class="kpi"><span class="n">{{ piezas_impresas }}</span><span class="l">Piezas impresas</span></div>
-    <div class="kpi"><span class="n">{{ horas_impresas }}</span><span class="l">Horas impresas</span></div>
-    <div class="kpi"><span class="n">{{ reprint_rate }}</span><span class="l">Tasa de reimpresión</span><span class="s">{{ reprints }} por falla</span></div>
-    <div class="kpi"><span class="n">{{ cumplimiento }}</span><span class="l">Cumplimiento de entrega</span><span class="s">{{ total_ent }} con fecha</span></div>
+    <div class="kpi"><span class="n">{{ piezas_impresas }}</span><span class="l">{% translate "Piezas impresas" %}</span></div>
+    <div class="kpi"><span class="n">{{ horas_impresas }}</span><span class="l">{% translate "Horas impresas" %}</span></div>
+    <div class="kpi"><span class="n">{{ reprint_rate }}</span><span class="l">{% translate "Tasa de reimpresión" %}</span><span class="s">{% blocktranslate %}{{ reprints }} por falla{% endblocktranslate %}</span></div>
+    <div class="kpi"><span class="n">{{ cumplimiento }}</span><span class="l">{% translate "Cumplimiento de entrega" %}</span><span class="s">{% blocktranslate %}{{ total_ent }} con fecha{% endblocktranslate %}</span></div>
 </div>
 
 <div class="mx-grid">
     <div class="mx-card">
-        <h3>Horas impresas por máquina</h3>
+        <h3>{% translate "Horas impresas por máquina" %}</h3>
         <canvas id="chartMaq" height="150"></canvas>
     </div>
     <div class="mx-card">
-        <h3>Uso por máquina</h3>
+        <h3>{% translate "Uso por máquina" %}</h3>
         <table class="mx">
-            <thead><tr><th>Máquina</th><th class="num">Trabajos</th><th class="num">Piezas</th><th class="num">Horas</th></tr></thead>
+            <thead><tr><th>{% translate "Máquina" %}</th><th class="num">{% translate "Trabajos" %}</th><th class="num">{% translate "Piezas" %}</th><th class="num">{% translate "Horas" %}</th></tr></thead>
             <tbody>
                 {% for r in uso_maquinas %}
                 <tr><td>{{ r.name }}</td><td class="num">{{ r.jobs }}</td><td class="num">{{ r.piezas }}</td><td class="num">{{ r.horas }}</td></tr>
-                {% empty %}<tr><td colspan="4" class="empty">No se imprimió nada en el período.</td></tr>{% endfor %}
+                {% empty %}<tr><td colspan="4" class="empty">{% translate "No se imprimió nada en el período." %}</td></tr>{% endfor %}
             </tbody>
         </table>
     </div>
 </div>
 
 <!-- ===================== C) INVENTARIO / COSTOS ===================== -->
-<div class="mx-section mx-section--inv">📦 Inventario y costos</div>
+<div class="mx-section mx-section--inv">📦 {% translate "Inventario y costos" %}</div>
 <div class="mx-kpis mx-kpis--inv">
-    <div class="kpi"><span class="n">{{ gasto_compras }}</span><span class="l">Gasto en compras</span><span class="s">{{ n_compras }} compra/s</span></div>
-    <div class="kpi"><span class="n">{{ consumo_valor }}</span><span class="l">Consumo de material ($)</span></div>
-    <div class="kpi"><span class="n">{{ fil_grams }}</span><span class="l">Filamento consumido</span></div>
-    <div class="kpi"><span class="n">{{ low_stock }}</span><span class="l">Insumos bajo stock mínimo</span></div>
+    <div class="kpi"><span class="n">{{ gasto_compras }}</span><span class="l">{% translate "Gasto en compras" %}</span><span class="s">{% blocktranslate %}{{ n_compras }} compra/s{% endblocktranslate %}</span></div>
+    <div class="kpi"><span class="n">{{ consumo_valor }}</span><span class="l">{% translate "Consumo de material ($)" %}</span></div>
+    <div class="kpi"><span class="n">{{ fil_grams }}</span><span class="l">{% translate "Filamento consumido" %}</span></div>
+    <div class="kpi"><span class="n">{{ low_stock }}</span><span class="l">{% translate "Insumos bajo stock mínimo" %}</span></div>
 </div>
 
 <script src="{% static 'budgets/chart.umd.min.js' %}"></script>
@@ -181,7 +181,7 @@
 
     new Chart(document.getElementById("chartFact"), {
         type: "bar",
-        data: { labels: fact.labels, datasets: [{ label: "Facturación", data: fact.data, backgroundColor: "#2563eb", borderRadius: 4 }] },
+        data: { labels: fact.labels, datasets: [{ label: "{% translate 'Facturación' %}", data: fact.data, backgroundColor: "#2563eb", borderRadius: 4 }] },
         options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
     });
 
@@ -193,7 +193,7 @@
 
     new Chart(document.getElementById("chartMaq"), {
         type: "bar",
-        data: { labels: maq.labels, datasets: [{ label: "Horas", data: maq.data, backgroundColor: PALETTE, borderRadius: 4 }] },
+        data: { labels: maq.labels, datasets: [{ label: "{% translate 'Horas' %}", data: maq.data, backgroundColor: PALETTE, borderRadius: 4 }] },
         options: { indexAxis: "y", plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true } } }
     });
 })();

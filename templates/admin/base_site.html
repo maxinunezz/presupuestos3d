@@ -4,8 +4,25 @@
 {# prioridad sobre el de django.contrib.admin, así que no entra en bucle: #}
 {# Django resuelve "admin/base_site.html" al de contrib para el {% extends %}. #}
 
+{% load i18n %}
+
 {% block extrastyle %}{{ block.super }}
 <style>
+    #lang-switch {
+        display: inline-block;
+        margin-right: 18px;
+        vertical-align: middle;
+    }
+    #lang-switch select {
+        background: transparent;
+        color: var(--header-link-color, #fff);
+        border: 1px solid rgba(255,255,255,.35);
+        border-radius: 4px;
+        padding: 2px 6px;
+        font-size: 12px;
+        cursor: pointer;
+    }
+    #lang-switch select option { color: #111; }
     #stock-bell {
         position: relative;
         display: inline-block;
@@ -86,6 +103,17 @@
 
 {% block usertools %}
 {% if user.is_active and user.is_staff %}
+{% get_current_language as CURRENT_LANGUAGE %}
+{% get_available_languages as LANGUAGES %}
+<form id="lang-switch" action="{% url 'set_language' %}" method="post">
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+    <select name="language" onchange="this.form.submit()" title="{% translate 'Idioma' %}">
+        {% for code, name in LANGUAGES %}
+        <option value="{{ code }}"{% if code == CURRENT_LANGUAGE %} selected{% endif %}>{{ name }}</option>
+        {% endfor %}
+    </select>
+</form>
 <div id="stock-bell" tabindex="0">
     <a class="bell-icon" href="{% url 'admin:inventory_filament_changelist' %}?low_stock=yes" title="Alertas de bajo stock">
         &#128276;{% if low_stock_count %}<span class="bell-badge">{{ low_stock_count }}</span>{% endif %}

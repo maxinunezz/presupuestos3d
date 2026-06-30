@@ -1,0 +1,70 @@
+flowchart TD
+    classDef cat fill:#eef2ff,stroke:#3b4a9e,color:#1a2456;
+    classDef buy fill:#eafaf0,stroke:#1e7e34,color:#0f4d20;
+    classDef pres fill:#fff7e6,stroke:#b8860b,color:#5b4300;
+    classDef prod fill:#f0f0f0,stroke:#111,color:#111;
+    classDef sched fill:#f3e9ff,stroke:#6b21a8,color:#3b0764;
+    classDef metr fill:#e8f6ff,stroke:#0b6ba8,color:#063b5c;
+    classDef gap fill:#fdecea,stroke:#b3261e,color:#7a1610,stroke-dasharray: 5 4;
+    classDef done fill:#eafaf0,stroke:#1e7e34,color:#0f4d20;
+
+    subgraph CAT["CATALOGO - se carga una vez"]
+        direction TB
+        FIL[(Filamento stock_grams)]:::cat
+        AGG[(Agregado stock_quantity)]:::cat
+        PR[Producto: margen maquina prioridad]:::cat
+        PZ[Pieza: units_needed ppg print_time stock]:::cat
+        PR -->|se compone de| PZ
+        PZ -->|consume filamento| FIL
+        PR -->|consume agregados| AGG
+    end
+
+    subgraph BUY["COMPRAS - reponer stock"]
+        direction TB
+        C1[Compra DRAFT] -->|confirm| C2[Compra CONFIRMED +stock +precios]:::buy
+    end
+    C2 -. suma .-> FIL
+    C2 -. suma .-> AGG
+
+    subgraph SALE["PRESUPUESTO - ciclo de venta"]
+        direction LR
+        D[DRAFT]:::pres --> S[SENT]:::pres --> AP[APPROVED]:::pres --> IP[IN_PRODUCTION]:::pres --> CO[COMPLETED]:::pres
+        D -.-> X[CANCELLED]:::pres
+        S -.-> X
+        AP -.-> X
+    end
+
+    AP ==>|approve| PROV{{provision_production: descuenta piezas, encola lo que falta, descuenta material AL APROBAR}}:::pres
+    PROV ==> FIL
+    PROV ==> AGG
+    PROV ==>|1 job por pieza respeta AMS y prioridad| J
+
+    subgraph PROD["PRODUCCION - la cola es la fuente de verdad"]
+        direction LR
+        J[Job PENDING orden por prioridad]:::prod -->|marcar| PT[PRINTING started_at]:::prod -->|marcar| DN[DONE finished_at]:::prod
+    end
+    DN ==>|register_surplus sobrante| PZ
+    DN -. sync_status .-> IP
+    DN -. todos DONE .-> CO
+
+    subgraph SCH["SCHEDULER ventana 07-23h"]
+        direction TB
+        CS[compute_schedule recommend_machine greedy]:::sched
+        MF[material_forecast]:::sched
+    end
+    J -.-> CS
+    CS --> TAB[Tablero / Cola]:::prod
+    MF --> TAB
+
+    subgraph MET["METRICAS"]
+        direction TB
+        MK[Ventas approved_at, Produccion finished_at, Compras confirmed_at, Export Excel]:::metr
+    end
+    AP -.-> MK
+    DN -.-> MK
+    C2 -.-> MK
+
+    G1>RESUELTO: cancelar APROBADO devuelve stock - Presupuesto.cancel]:::done
+    X -.-> G1
+    G2>RESUELTO: forecast = stock bajo el minimo tras aprobar - puede ser negativo]:::done
+    MF -.-> G2

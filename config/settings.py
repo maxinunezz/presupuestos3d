@@ -61,6 +61,7 @@ INSTALLED_APPS = [
     'inventory',
     'budgets',
     'production',
+    'gastos',
 ]
 
 MIDDLEWARE = [
@@ -68,6 +69,10 @@ MIDDLEWARE = [
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    # LocaleMiddleware: detecta el idioma (cookie/sesión/Accept-Language) para el
+    # selector de idioma del admin. Va DESPUÉS de SessionMiddleware y ANTES de
+    # CommonMiddleware.
+    'django.middleware.locale.LocaleMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -104,6 +109,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'django.template.context_processors.i18n',
                 'inventory.context_processors.low_stock_alerts',
             ],
         },
@@ -158,6 +164,18 @@ AUTH_PASSWORD_VALIDATORS = [
 # https://docs.djangoproject.com/en/6.0/topics/i18n/
 
 LANGUAGE_CODE = 'es-ar'
+
+# Idiomas disponibles en el selector de la navbar del admin. El admin de Django
+# trae sus traducciones precompiladas (es/en), y nuestras cadenas propias se
+# traducen vía locale/<lang>/LC_MESSAGES/django.mo (ver scripts/compile_messages.py).
+from django.utils.translation import gettext_lazy as _  # noqa: E402
+
+LANGUAGES = [
+    ('es', _('Español')),
+    ('en', _('English')),
+]
+
+LOCALE_PATHS = [BASE_DIR / 'locale']
 
 TIME_ZONE = 'America/Argentina/Cordoba'
 
