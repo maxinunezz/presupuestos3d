@@ -168,11 +168,13 @@ LANGUAGE_CODE = 'es-ar'
 # Idiomas disponibles en el selector de la navbar del admin. El admin de Django
 # trae sus traducciones precompiladas (es/en), y nuestras cadenas propias se
 # traducen vía locale/<lang>/LC_MESSAGES/django.mo (ver scripts/compile_messages.py).
-from django.utils.translation import gettext_lazy as _  # noqa: E402
-
+# Los nombres van como strings planos (endónimos: cada idioma se muestra en sí
+# mismo, no se traducen). NO usar gettext_lazy acá: al leer los settings durante
+# el build (Vercel), forzar el proxy dispara la carga de traducciones antes de
+# que las apps estén listas → AppRegistryNotReady.
 LANGUAGES = [
-    ('es', _('Español')),
-    ('en', _('English')),
+    ('es', 'Español'),
+    ('en', 'English'),
 ]
 
 LOCALE_PATHS = [BASE_DIR / 'locale']
