@@ -57,6 +57,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
+    'rest_framework.authtoken',
     'corsheaders',
     'inventory',
     'budgets',
@@ -95,6 +96,29 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAdminUser',
     ],
+    # TokenAuthentication: para que Zapier (u otro consumidor externo) pueda
+    # leer la API con un token fijo, sin login por sesión. Se mantiene
+    # SessionAuthentication para el navegador (browsable API / admin).
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.TokenAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
+    ],
+}
+
+# URLs de "Catch Hook" de Zapier por evento de negocio. Se configuran por env
+# var; si a un evento le falta la URL, config.zapier.notificar() no hace nada
+# (no-op), así que agregar un evento nuevo acá no rompe nada hasta que se
+# complete la env var correspondiente.
+ZAPIER_WEBHOOKS = {
+    'stock_bajo': os.environ.get('ZAPIER_WEBHOOK_STOCK_BAJO', ''),
+    'presupuesto_aprobado': os.environ.get('ZAPIER_WEBHOOK_PRESUPUESTO_APROBADO', ''),
+}
+
+# URLs de Incoming Webhook de Slack por aviso. Alternativa gratuita a Zapier
+# (que cobra "Webhooks by Zapier" como feature Premium) para avisos simples
+# de un solo destino. Vacío = no notifica, no rompe nada.
+SLACK_WEBHOOKS = {
+    'diseno_listo': os.environ.get('SLACK_WEBHOOK_DISENO_LISTO', ''),
 }
 
 ROOT_URLCONF = 'config.urls'

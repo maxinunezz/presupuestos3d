@@ -205,6 +205,7 @@ class ProductoAdmin(admin.ModelAdmin):
     list_display = (
         "name",
         "priority",
+        "diseno_listo",
         "unit_cost_display",
         "unit_price_display",
         "stock_quantity",
@@ -213,11 +214,11 @@ class ProductoAdmin(admin.ModelAdmin):
         "is_active",
         "updated_at",
     )
-    list_filter = ("is_active", "is_multicolor", "priority")
-    list_editable = ("priority",)
+    list_filter = ("is_active", "diseno_listo", "is_multicolor", "priority")
+    list_editable = ("priority", "diseno_listo")
     search_fields = ("name", "description")
     inlines = (PiezaInline, ProductoAggregateLineInline)
-    readonly_fields = ("costs_summary",)
+    readonly_fields = ("costs_summary", "diseno_listo_at")
 
     fieldsets = (
         (None, {"fields": ("name", "description", "priority", "is_multicolor", "is_active")}),
@@ -240,6 +241,10 @@ class ProductoAdmin(admin.ModelAdmin):
                 "classes": ("collapse",),
                 "fields": ("gcode", "model_file"),
             },
+        ),
+        (
+            _("Handoff a producción"),
+            {"fields": ("diseno_listo", "diseno_listo_at")},
         ),
     )
 

@@ -142,6 +142,19 @@ class Producto(models.Model):
     created_at = models.DateTimeField(_("Creado"), auto_now_add=True)
     updated_at = models.DateTimeField(_("Actualizado"), auto_now=True)
 
+    # --- Handoff diseño → producción ---
+    diseno_listo = models.BooleanField(
+        _("Diseño listo"),
+        default=False,
+        help_text=_(
+            "Marcá cuando el modelo/gcode ya está terminado y revisado, listo "
+            "para que producción lo tenga en cuenta al imprimir."
+        ),
+    )
+    diseno_listo_at = models.DateTimeField(
+        _("Diseño marcado listo el"), null=True, blank=True
+    )
+
     class Meta:
         verbose_name = _("Costeo de producto")
         verbose_name_plural = _("Costeo de productos")
@@ -149,6 +162,34 @@ class Producto(models.Model):
 
     def __str__(self):
         return self.name
+
+    def save(self, *args, **kwargs):
+        previous_ready = False
+        if self.pk:
+            previous_ready = (
+                Producto.objects.filter(pk=self.pk)
+                .values_list("diseno_listo", flat=True)
+                .first()
+                or False
+            )
+
+        just_marked_ready = self.diseno_listo and not previous_ready
+
+        if just_marked_ready:
+            self.diseno_listo_at = timezone.now()
+        elif not self.diseno_listo:
+            self.diseno_listo_at = None
+
+        super().save(*args, **kwargs)
+
+        if just_marked_ready:
+            from config.slack import notificar
+
+            notificar(
+                "diseno_listo",
+                f":white_check_mark: *{self.name}* (prioridad {self.get_priority_display()}) "
+                f"tiene el diseño listo — ya se puede poner a imprimir.",
+            )
 
     @property
     def is_low_stock(self) -> bool:
@@ -865,6 +906,20 @@ class Presupuesto(models.Model):
 
         self.stock_provisioned = True
         self.save(update_fields=["stock_provisioned", "updated_at"])
+
+        from config.zapier import notificar
+
+        notificar(
+            "presupuesto_aprobado",
+            {
+                "presupuesto_id": self.pk,
+                "cliente": self.client_name,
+                "total": str(self.total),
+                "total_piezas": self.total_pieces,
+                "para_stock": self.para_stock,
+                "faltantes": result["shortages"],
+            },
+        )
         return result
 
     def refresh_delivery(self):

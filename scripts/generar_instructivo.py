@@ -96,7 +96,7 @@ HTML = """
 
     /* INDICE */
     .toc {{ list-style: none; margin: 6px 0 0 0; padding: 0; }}
-    .toc li {{ margin: 0; padding: 7px 4px; border-bottom: 1px solid #e5e5e5; font-size: 10.5pt; }}
+    .toc li {{ margin: 0; padding: 6px 4px; border-bottom: 1px solid #e5e5e5; font-size: 10.3pt; }}
     .toc .tn {{ display: inline-block; width: 26px; color: #000; font-weight: bold; }}
 
     /* GRAFICO PLANO de ejemplo (la unica parte a color, como en la pantalla real) */
@@ -122,7 +122,7 @@ HTML = """
     <span class="spacer-lg"><br/></span>
     <span class="ct">Manual del panel<br/>de administración</span><br/>
     <span class="spacer-sm"><br/></span>
-    <span class="cs">Costeo · Presupuestos · Inventario · Producción · Métricas</span>
+    <span class="cs">Costeo · Presupuestos · Inventario · Producción · Métricas · Gastos</span>
 </div>
 <div class="cover-rule"></div>
 <p class="cover-lead">
@@ -149,15 +149,20 @@ HTML = """
     <li><span class="tn">7</span> Compras</li>
     <li><span class="tn">8</span> Movimientos de stock</li>
     <li><span class="tn">9</span> Ajustes manuales de stock</li>
-    <li><span class="tn">10</span> Costeo de productos</li>
-    <li><span class="tn">11</span> Presupuestos</li>
-    <li><span class="tn">12</span> Máquinas (impresoras)</li>
-    <li><span class="tn">13</span> Trabajos de producción</li>
-    <li><span class="tn">14</span> Cola de producción</li>
-    <li><span class="tn">15</span> Tablero de producción</li>
-    <li><span class="tn">16</span> Métricas (KPIs del negocio)</li>
-    <li><span class="tn">17</span> ¿Cuándo se descuenta el material?</li>
-    <li><span class="tn">18</span> Flujo de trabajo recomendado</li>
+    <li><span class="tn">10</span> Costeo de productos (y piezas)</li>
+    <li><span class="tn">11</span> Stock de piezas</li>
+    <li><span class="tn">12</span> Stock de productos terminados</li>
+    <li><span class="tn">13</span> Presupuestos</li>
+    <li><span class="tn">14</span> ¿Cuándo se descuenta el material?</li>
+    <li><span class="tn">15</span> Máquinas (impresoras)</li>
+    <li><span class="tn">16</span> Trabajos de producción (y reimpresión)</li>
+    <li><span class="tn">17</span> Historial de impresiones por máquina</li>
+    <li><span class="tn">18</span> Cola de producción</li>
+    <li><span class="tn">19</span> Tablero de producción</li>
+    <li><span class="tn">20</span> Métricas (KPIs del negocio)</li>
+    <li><span class="tn">21</span> Gastos (panel de gastos)</li>
+    <li><span class="tn">22</span> Selector de idioma (Español / English)</li>
+    <li><span class="tn">23</span> Flujo de trabajo recomendado</li>
 </ul>
 
 <div class="pagebreak"></div>
@@ -166,18 +171,21 @@ HTML = """
 <h2>1. Qué es este sistema y cómo entrar</h2>
 <p class="lead">
     Este panel maneja todo el circuito de tu negocio de impresión 3D en un solo lugar: cargás
-    tus materiales y su stock, registrás compras, costeás cada pieza, armás presupuestos para
-    el cliente y, cuando los aprobás, el sistema arma solo la <b>cola de producción</b> de tus
-    impresoras y te dice <b>cuándo entregás</b> y <b>qué materia prima vas a tener que comprar</b>.
+    tus materiales y su stock, registrás compras, costeás cada producto (y sus piezas), armás
+    presupuestos para el cliente y, cuando los aprobás, el sistema descuenta el material, arma
+    solo la <b>cola de producción</b> de tus impresoras y te dice <b>cuándo entregás</b> y
+    <b>qué materia prima vas a tener que comprar</b>. Además llevás tus <b>gastos</b> del negocio.
 </p>
 <p>Para entrar abrís el navegador en la dirección del panel y, al estar adentro, vas a ver en la
-   página de inicio una lista de secciones agrupadas en tres bloques:</p>
+   página de inicio una lista de secciones agrupadas en bloques:</p>
 <ul>
     <li><b>Inventario:</b> Filamentos, Agregados, Totales de inventario, Compras, Movimientos de
         stock y Ajustes manuales de stock.</li>
-    <li><b>Costeo y presupuestos:</b> Costeo de productos y Presupuestos.</li>
+    <li><b>Costeo y presupuestos:</b> Costeo de productos, Stock de piezas, Stock de productos
+        terminados, Presupuestos y Métricas.</li>
     <li><b>Producción:</b> Máquinas, Trabajos de producción, Cola de producción y Tablero de
         producción.</li>
+    <li><b>Gastos:</b> Gastos, Topes y Panel de gastos.</li>
 </ul>
 <div class="box">
     <b>Cómo se navega:</b> hacés clic en una sección para ver su lista. Arriba a la derecha de
@@ -200,17 +208,20 @@ HTML = """
     <tr><th>Vía</th><th>Efecto</th></tr>
     <tr><td><b>Compra confirmada</b></td><td>Suma stock (y actualiza el costo si cambió el precio).</td></tr>
     <tr><td><b>Ajuste manual</b></td><td>Suma o resta para corregir diferencias con la realidad.</td></tr>
-    <tr><td><b>Impresión terminada</b></td><td>Resta el material gastado cuando un trabajo se marca como "Impreso".</td></tr>
+    <tr><td><b>Aprobar un presupuesto</b></td><td>Resta el material (filamento + agregados) de todo lo que hay que producir.</td></tr>
+    <tr><td><b>Cancelar un pedido</b></td><td>Devuelve al stock el material que todavía no se usó.</td></tr>
+    <tr><td><b>Reimpresión por falla</b></td><td>Pierde lo que se gastó en la impresión fallida; el resto vuelve al stock.</td></tr>
 </table>
 <div class="box">
-    <b>Importante:</b> aprobar un presupuesto <b>no</b> descuenta material. El descuento ocurre
-    más adelante, cuando cada pieza se imprime. El porqué de esto está explicado en el punto 17.
+    <b>Lo más importante (y el cambio respecto de antes):</b> el material se descuenta <b>al
+    aprobar el presupuesto</b>, no al imprimir. Apenas aceptás un pedido, el stock baja por todo
+    lo que vas a necesitar. El porqué está explicado en el punto 14.
 </div>
 <div class="ej">
     <span class="tag">EJEMPLO</span> Comprás 5 rollos de PLA Negro de 1 kg y confirmás la compra:
     el stock de PLA Negro sube <b>+5.000 g</b> y queda un movimiento "Compra +5.000 g". Después
-    imprimís un pedido que usa 250 g y marcás el trabajo como "Impreso": el stock baja
-    <b>−250 g</b> con un movimiento "Producción". En ningún momento tocaste el número de stock a mano.
+    aprobás un pedido que usa 250 g: el stock baja <b>−250 g</b> en ese mismo momento, con un
+    movimiento de "Producción (aprobación)". En ningún momento tocaste el número de stock a mano.
 </div>
 
 <!-- CAMPANITA -->
@@ -331,7 +342,9 @@ HTML = """
 <table>
     <tr><th>Motivo</th><th>Origen</th></tr>
     <tr><td>Compra</td><td>Una compra confirmada (suma).</td></tr>
-    <tr><td>Producción (impresión)</td><td>Una pieza se marcó como "Impreso" y se descontó su material (resta).</td></tr>
+    <tr><td>Producción (aprobación)</td><td>Se aprobó un presupuesto y se descontó su material (resta).</td></tr>
+    <tr><td>Cancelación de pedido</td><td>Se canceló un pedido aprobado y volvió el material no usado (suma).</td></tr>
+    <tr><td>Reimpresión por falla</td><td>Una impresión salió mal; vuelve al stock el material no perdido (suma).</td></tr>
     <tr><td>Ajuste manual</td><td>Corregiste el stock a mano (suma o resta).</td></tr>
 </table>
 <p>Esta vista es de lectura: no se edita acá, sirve para auditar y entender por qué cambió el stock.</p>
@@ -339,8 +352,8 @@ HTML = """
 <table>
     <tr><th>Fecha</th><th>Material</th><th>Cantidad</th><th>Motivo</th></tr>
     <tr><td>02/06</td><td>PLA Negro</td><td>+3.000 g</td><td>Compra</td></tr>
-    <tr><td>04/06</td><td>PLA Negro</td><td>−250 g</td><td>Producción</td></tr>
-    <tr><td>05/06</td><td>PLA Negro</td><td>−120 g</td><td>Producción</td></tr>
+    <tr><td>04/06</td><td>PLA Negro</td><td>−250 g</td><td>Producción (aprobación)</td></tr>
+    <tr><td>05/06</td><td>PLA Negro</td><td>+120 g</td><td>Cancelación de pedido</td></tr>
     <tr><td>06/06</td><td>PLA Negro</td><td>+50 g</td><td>Ajuste manual</td></tr>
 </table>
 
@@ -358,28 +371,45 @@ HTML = """
 <div class="ej">
     <span class="tag">EJEMPLO</span> Abrís un rollo nuevo y el sistema marca 0 g, pero en realidad
     entraron 1.000 g: cargás un ajuste de <b>+1.000</b> con nota "carga inicial rollo PLA Blanco".
-    Otro caso: se te cayó y rompió medio rollo, cargás <b>−400</b> con nota "rollo dañado". Si el
-    stock decía 300 g y restás 400, queda en <b>0</b> (nunca en negativo).
+    Otro caso: se te cayó y rompió medio rollo, cargás <b>−400</b> con nota "rollo dañado". En los
+    ajustes el stock nunca queda en negativo: si restás de más, queda en 0.
 </div>
 <div class="box">
     <b>Tip:</b> si querés dejar el stock en un valor exacto, fijate cuánto hay hoy y cargá la
-    diferencia. El stock nunca queda en negativo: si restás de más, queda en 0.
+    diferencia. Los ajustes nunca dejan el stock en negativo (la producción sí puede, ver punto 14).
 </div>
 
 <!-- COSTEO DE PRODUCTOS -->
-<h2>10. Costeo de productos</h2>
-<p>Acá definís cuánto te cuesta y a cuánto vendés <b>una pieza</b>. Cada producto reúne todos
-   sus costos y calcula solo el precio de venta final.</p>
+<h2>10. Costeo de productos (y piezas)</h2>
+<p>Acá definís cuánto te cuesta y a cuánto vendés <b>un producto</b>. Un producto se arma con
+   una o varias <b>piezas</b> (las partes físicas que imprimís), más los agregados, la mano de
+   obra y el margen. El sistema suma todo y calcula solo el precio de venta final.</p>
 <h3>Qué cargás en cada producto</h3>
 <ul>
-    <li><b>Datos:</b> nombre, descripción, si es <b>multicolor</b> y si está activo (solo los activos se usan en presupuestos).</li>
-    <li><b>Material:</b> líneas de filamento (gramos por pieza) y de agregados (cantidad por pieza). El sistema toma el costo de cada material.</li>
-    <li><b>Impresión y máquina:</b> horas de impresión por pieza, costo de máquina por hora y % de merma (material que se desperdicia).</li>
-    <li><b>Mano de obra / post-proceso:</b> horas de post-proceso por pieza y costo por hora. El post-proceso es el armado, lijado, pintado, pegado de agregados, etc.</li>
+    <li><b>Datos:</b> nombre, descripción, si está activo (solo los activos se usan en
+        presupuestos) y la <b>prioridad</b> (Alta / Media / Baja / Sin prioridad).</li>
+    <li><b>Piezas:</b> cada pieza lleva los <b>gramos de filamento</b> por corrida, las
+        <b>horas de impresión</b> por corrida, cuántas <b>unidades</b> entran por producto y
+        cuántas <b>salen por corrida del gcode</b>. Una pieza con más de un color de filamento
+        queda marcada como <b>multicolor (AMS)</b> automáticamente.</li>
+    <li><b>Agregados:</b> los insumos no-filamento que lleva el producto (argollas, imanes, etc.).</li>
+    <li><b>Impresión y máquina:</b> costo de máquina por hora y % de merma (material que se desperdicia).</li>
+    <li><b>Mano de obra / post-proceso:</b> horas de post-proceso por producto y costo por hora
+        (armado, lijado, pintado, pegado de agregados, etc.).</li>
     <li><b>Precio:</b> margen de ganancia (%) y redondeo.</li>
     <li><b>Archivo del modelo:</b> opcional, podés guardar el gcode y subir el archivo .3mf/.stl.</li>
 </ul>
-<div class="ej"><span class="tag">EJEMPLO</span> &nbsp;Costeo de un <b>Llavero con logo</b>:</div>
+<div class="box">
+    <b>Prioridad:</b> ordena la cola de producción. Los productos de prioridad <b>Alta</b> entran
+    a imprimirse antes que los de <b>Media</b> y <b>Baja</b>; "Sin prioridad" va al final. Es la
+    clave de orden del scheduler, la cola y el tablero.
+</div>
+<div class="box">
+    <b>Multicolor (AMS):</b> si alguna pieza usa varios colores en simultáneo, el producto queda
+    multicolor. El sistema solo va a poder mandarlo a una impresora con AMS (las Bambu Lab), nunca
+    a la Ender. Más detalle en el punto 15.
+</div>
+<div class="ej"><span class="tag">EJEMPLO</span> &nbsp;Costeo de un <b>Llavero con logo</b> (1 pieza, 12 g, 1 argolla):</div>
 <table>
     <tr><th>Concepto (cálculo)</th><th>Subtotal</th></tr>
     <tr><td>Material — filamento: 12 g × $18/g</td><td>$216,00</td></tr>
@@ -391,18 +421,49 @@ HTML = """
     <tr><td>Margen 60% — $611,80 × 1,60</td><td>$978,88</td></tr>
     <tr><td><b>Precio de venta (redondeo a $50)</b></td><td><b>$1.000</b></td></tr>
 </table>
-<div class="box">
-    <b>Multicolor (AMS):</b> marcá esta casilla si la pieza usa varios colores en simultáneo. El
-    sistema solo va a poder mandarla a una impresora con AMS (las Bambu Lab), nunca a la Ender.
-    Más detalle en el punto 12.
-</div>
 <h3>Resumen de costos</h3>
 <p>Al guardar, el producto muestra un desglose: material (+ merma), agregados, máquina, mano de
-   obra, costo total por pieza, margen aplicado y <b>precio de venta final</b>. Ese desglose es
+   obra, costo total por producto, margen aplicado y <b>precio de venta final</b>. Ese desglose es
    interno: el cliente nunca lo ve.</p>
 
+<!-- STOCK DE PIEZAS -->
+<h2>11. Stock de piezas</h2>
+<p>Es una pantalla de solo lectura que muestra el <b>stock de piezas ya impresas</b>: las partes
+   que tenés impresas y guardadas, listas para usar sin volver a la impresora. Cada pieza tiene
+   su <b>stock</b> y su <b>mínimo</b>, igual que los materiales.</p>
+<h3>De dónde sale ese stock</h3>
+<ul>
+    <li>De la <b>sobrante de gcode</b>: si una corrida saca más piezas de las que pedías, las de
+        más se suman al stock de esa pieza cuando marcás el trabajo como Impreso.</li>
+    <li>De <b>pedidos cancelados</b>: las piezas que ya estaban impresas vuelven al stock de piezas.</li>
+</ul>
+<h3>Para qué sirve</h3>
+<p>Al aprobar un pedido, el sistema usa primero las piezas que tenés en stock y solo manda a
+   imprimir lo que falta. Eso te ahorra impresiones y tiempo de máquina.</p>
+<div class="ej">
+    <span class="tag">EJEMPLO</span> Un llavero sale de a 4 por corrida pero solo necesitabas 2:
+    las otras 2 quedan en el <b>stock de piezas</b>. La próxima vez que aprobás un pedido con
+    2 llaveros, el sistema los toma de ese stock y <b>no imprime nada</b>.
+</div>
+
+<!-- STOCK DE PRODUCTOS TERMINADOS -->
+<h2>12. Stock de productos terminados</h2>
+<p>Es la pantalla de solo lectura del <b>stock de productos ya armados</b>: terminados, listos
+   para entregar sin imprimir ni armar nada. Compara el stock de cada producto con su mínimo.</p>
+<h3>De dónde sale</h3>
+<p>Principalmente de los <b>pedidos para stock</b> (ver punto 13): cuando completás un pedido de
+   reposición interna, cada producto terminado se suma a este stock.</p>
+<h3>Para qué sirve</h3>
+<p>Cuando entra un pedido de cliente, el sistema <b>sirve primero del stock de terminados</b>: esa
+   parte no se produce, no consume piezas ni material, y queda lista para entregar.</p>
+<div class="ej">
+    <span class="tag">EJEMPLO</span> Tenés 10 llaveros terminados en stock. Entra un pedido de
+    cliente por 3 llaveros: el sistema descuenta 3 del stock de terminados, no genera ninguna
+    impresión y el pedido queda <b>listo para entregar</b> (ver punto 13).
+</div>
+
 <!-- PRESUPUESTOS -->
-<h2>11. Presupuestos</h2>
+<h2>13. Presupuestos</h2>
 <p>Un presupuesto es la cotización para un cliente. Agrupa varios productos ya costeados, cada
    uno con su cantidad, y genera el PDF para enviar.</p>
 <h3>Cómo armar un presupuesto</h3>
@@ -421,39 +482,80 @@ HTML = """
     <tr><td colspan="3">Costo fijo (envío)</td><td>$1.200</td></tr>
     <tr><td colspan="3"><b>Total (redondeo a $100)</b></td><td><b>$7.700</b></td></tr>
 </table>
-<p>Son 3 piezas en total. Ese precio unitario queda <b>congelado</b> en el presupuesto: aunque
-   después cambies el costeo del producto, este presupuesto mantiene los $1.000 y $4.500.</p>
+<p>Ese precio unitario queda <b>congelado</b> en el presupuesto: aunque después cambies el costeo
+   del producto, este presupuesto mantiene los $1.000 y $4.500.</p>
 <h3>Estados del presupuesto</h3>
 <p>Borrador → Enviado → Aprobado → En producción → Completado (o Cancelado). El estado te ayuda
-   a seguir en qué etapa está cada pedido. Cada cambio de estado importante queda registrado
-   con su fecha (enviado, aprobado, inicio y fin de producción, completado).</p>
+   a seguir en qué etapa está cada pedido. Cada cambio importante queda registrado con su fecha
+   (enviado, aprobado, inicio y fin de producción, completado).</p>
 <div class="box">
     <b>El estado se sincroniza solo con la producción:</b> cuando una pieza del pedido empieza a
     imprimirse, el presupuesto pasa a "En producción"; cuando se terminan todas, pasa a
-    "Completado". No tenés que cambiarlo a mano (aunque podés).
+    "Completado". No tenés que cambiarlo a mano (aunque podés, con el selector de estado).
 </div>
-<h3>Aprobar (arma la cola de producción)</h3>
+<h3>Aprobar (descuenta material y arma la cola)</h3>
 <div class="ok">
     <b>Al aprobar un presupuesto, el sistema:</b><br/>
-    &nbsp;&nbsp;–&nbsp; Crea un <b>trabajo de producción</b> por cada producto del pedido.<br/>
-    &nbsp;&nbsp;–&nbsp; Le <b>recomienda una impresora</b> a cada trabajo, balanceando las colas y respetando si la pieza es multicolor.<br/>
-    &nbsp;&nbsp;–&nbsp; Calcula la <b>fecha de entrega estimada</b> (impresión de la cola + post-proceso total).<br/>
-    &nbsp;&nbsp;–&nbsp; Te <b>avisa</b> si el stock no va a alcanzar, pero NO descuenta material todavía.<br/>
+    &nbsp;&nbsp;–&nbsp; Sirve lo que pueda del <b>stock de productos terminados</b> y del <b>stock de piezas</b>.<br/>
+    &nbsp;&nbsp;–&nbsp; <b>Descuenta el material</b> (filamento + agregados) de todo lo que sí hay que producir.<br/>
+    &nbsp;&nbsp;–&nbsp; Crea un <b>trabajo de producción por cada pieza</b> que falta imprimir y le recomienda una impresora (respetando AMS y prioridad).<br/>
+    &nbsp;&nbsp;–&nbsp; Calcula la <b>fecha de entrega estimada</b>.<br/>
+    &nbsp;&nbsp;–&nbsp; Te <b>avisa</b> si el stock no alcanzaba (el faltante queda visible para comprar).<br/>
     <br/>
     Usá la acción "Aprobar presupuesto(s) y generar cola de producción" desde la lista.
 </div>
+<h3>Pedido para stock (sin cliente)</h3>
+<p>Si marcás <b>"Para stock"</b>, el pedido es una reposición de stock interno, no para un
+   cliente. Se aprueba, imprime y completa igual; la diferencia es que al <b>completarlo</b> cada
+   producto terminado se suma al <b>stock de productos terminados</b> (punto 12). Si no le ponés
+   nombre de cliente, queda como "Reposición de stock".</p>
+<h3>Pedido listo para entregar (sin producción)</h3>
+<p>Si un pedido de cliente se sirve <b>100% del stock</b> (de terminados o de piezas) y no genera
+   ninguna impresión, el sistema lo marca como <b>"Listo para entregar"</b>. Lo vas a ver con la
+   columna «Sin producción ✓» y lo cerrás con la acción masiva «Marcar como entregado».</p>
 <h3>Producción y entrega</h3>
-<p>Dentro del presupuesto vas a ver un resumen de a qué máquina fue cada producto, las horas de
-   impresión, las horas de post-proceso totales y la <b>entrega estimada</b>. La fecha de entrega
-   se calcula sola, pero si la <b>editás a mano</b> queda fija y el sistema no te la pisa al
-   recalcular la cola.</p>
+<p>Dentro del presupuesto vas a ver a qué máquina fue cada pieza, las horas de impresión, las horas
+   de post-proceso y la <b>entrega estimada</b>. La fecha se calcula sola, pero si la <b>editás a
+   mano</b> queda fija y el sistema no te la pisa al recalcular la cola.</p>
 <h3>PDF para el cliente</h3>
 <p>Cada presupuesto tiene un botón <b>"PDF cliente"</b>. Ese PDF muestra solo lo que el cliente
    debe ver: producto, cantidad, precio unitario y total. <b>Nunca</b> muestra el desglose
    interno de costos ni la cola de producción.</p>
 
+<!-- DESCUENTO -->
+<h2>14. ¿Cuándo se descuenta el material?</h2>
+<p>El material se descuenta del inventario <b>cuando aprobás el presupuesto</b>, no cuando
+   imprimís. Apenas el cliente acepta y aprobás, el stock baja por todo lo que vas a producir.</p>
+<h3>Cómo es el orden de consumo al aprobar</h3>
+<ul>
+    <li><span class="step">1.</span> Primero sirve del <b>stock de productos terminados</b> (no se produce nada de eso).</li>
+    <li><span class="step">2.</span> De lo que queda, usa el <b>stock de piezas</b> ya impresas (esas tampoco se imprimen).</li>
+    <li><span class="step">3.</span> Lo que todavía falta se manda a imprimir y se le <b>descuenta el filamento</b> ahí mismo. Los <b>agregados</b> se descuentan a nivel producto.</li>
+</ul>
+<h3>Por qué es así</h3>
+<p>Porque hace que el consumo impacte de inmediato en las métricas de inventario y costos, y que
+   el aviso de "comprar materia prima" sea correcto: una vez aprobado, el sistema mira el stock
+   real (que ya bajó) y te lista todo lo que quedó por debajo del mínimo, sin contar el material
+   dos veces.</p>
+<div class="warn">
+    <b>El stock de producción puede quedar en negativo.</b> Si aprobás más de lo que tenés, el
+    stock queda en negativo a propósito: así el faltante queda visible y el tablero te dice
+    exactamente cuánto comprar. (Los ajustes y compras nunca dejan negativo; la producción sí.)
+</div>
+<div class="ej">
+    <span class="tag">EJEMPLO</span> Aprobás un pedido de 10 macetas (300 g c/u = 3.000 g) y tenés
+    2.500 g de PLA. Al aprobar, el stock pasa a <b>−500 g</b> y el tablero te avisa "PLA: faltan
+    500 g". Imprimir cada maceta ya <b>no</b> vuelve a descontar: el material se descontó al aprobar.
+</div>
+<div class="box">
+    <b>Si cancelás un pedido aprobado</b>, el sistema te <b>devuelve</b> el material que todavía
+    no se usó: el filamento de los trabajos no impresos, las piezas que se habían tomado del stock,
+    las piezas ya impresas (vuelven al stock de piezas) y los agregados. No revierte pedidos ya
+    completados.
+</div>
+
 <!-- MAQUINAS -->
-<h2>12. Máquinas (impresoras)</h2>
+<h2>15. Máquinas (impresoras)</h2>
 <p>Es el listado de tus impresoras. Cada máquina activa procesa su propia cola de trabajos, así
    que varias piezas se imprimen en paralelo. Hoy tenés tres: dos Bambu Lab A1 Combo y una
    Ender 3 V3 Plus.</p>
@@ -462,57 +564,89 @@ HTML = """
     <li><b>Activa:</b> si está inactiva, no se le asignan trabajos nuevos ni cuenta para la cola.</li>
     <li><b>Imprime multicolor (AMS):</b> marca si la máquina puede imprimir varios colores en
         simultáneo. Las Bambu Lab tienen AMS (sí); la Ender no.</li>
-    <li><b>Trabajos en cola:</b> cuántos trabajos pendientes/imprimiendo tiene.</li>
+    <li><b>Costo por hora:</b> el costo horario de esa máquina (lo cargás vos), que se usa para
+        costear y para calcular la depreciación.</li>
+    <li><b>Horas impresas y depreciación:</b> el sistema acumula las horas impresas de la máquina
+        (de solo lectura) y muestra la <b>depreciación acumulada</b> = horas impresas × costo por hora.</li>
+    <li><b>Historial de impresiones:</b> dentro de cada máquina ves su historial (punto 17).</li>
 </ul>
 <div class="ej"><span class="tag">EJEMPLO</span> &nbsp;Tu parque de máquinas:</div>
 <table>
-    <tr><th>Máquina</th><th>Activa</th><th>Multicolor (AMS)</th><th>En cola</th></tr>
-    <tr><td>Bambu Lab A1 Combo #1</td><td>Sí</td><td>Sí</td><td>4</td></tr>
-    <tr><td>Bambu Lab A1 Combo #2</td><td>Sí</td><td>Sí</td><td>3</td></tr>
-    <tr><td>Ender 3 V3 Plus</td><td>Sí</td><td>No</td><td>2</td></tr>
+    <tr><th>Máquina</th><th>Activa</th><th>AMS</th><th>$/hora</th><th>Horas impresas</th><th>Depreciación</th></tr>
+    <tr><td>Bambu Lab A1 Combo #1</td><td>Sí</td><td>Sí</td><td>$500</td><td>78 h</td><td>$39.000</td></tr>
+    <tr><td>Bambu Lab A1 Combo #2</td><td>Sí</td><td>Sí</td><td>$500</td><td>51 h</td><td>$25.500</td></tr>
+    <tr><td>Ender 3 V3 Plus</td><td>Sí</td><td>No</td><td>$350</td><td>13,5 h</td><td>$4.725</td></tr>
 </table>
-<p>Un llavero de un solo color puede ir a cualquiera de las tres; una pieza marcada multicolor
-   solo puede ir a una de las dos Bambu.</p>
 <div class="box">
-    <b>Cómo se respeta el multicolor:</b> si un producto está marcado como multicolor, el sistema
-    solo lo manda a una máquina con AMS. Aunque las dos Bambu estén ocupadas, nunca lo manda a la
-    Ender: lo deja "sin máquina" para que vos decidas. Y si intentás asignarlo a mano a la Ender,
-    el panel lo rechaza con un aviso. Las piezas de un solo color pueden ir a cualquier máquina.
+    <b>Cómo se respeta el multicolor:</b> si un producto es multicolor, el sistema solo lo manda a
+    una máquina con AMS. Aunque las dos Bambu estén ocupadas, nunca lo manda a la Ender: lo deja
+    "sin máquina" para que vos decidas. Si intentás asignarlo a mano a la Ender, el panel lo rechaza.
 </div>
 <div class="warn">
     <b>Si desactivás una máquina</b> (por ejemplo, porque se rompió), sus trabajos pendientes no
-    se pierden: el sistema los <b>libera</b> automáticamente (quedan "sin máquina") y te avisa para
-    que los reasignes a otra impresora. Vas a verlos listados en el Tablero y en la Cola, en la
-    sección "Trabajos sin máquina asignada".
+    se pierden: el sistema los <b>libera</b> (quedan "sin máquina") y te avisa para que los
+    reasignes. Vas a verlos en el Tablero y en la Cola, en "Trabajos sin máquina asignada".
 </div>
 
 <!-- TRABAJOS -->
-<h2>13. Trabajos de producción</h2>
-<p>Un trabajo es <b>un producto de un presupuesto</b> (con su cantidad) asignado a una máquina y
-   con una posición en la cola de esa máquina. Un mismo presupuesto puede tener varios trabajos
+<h2>16. Trabajos de producción (y reimpresión)</h2>
+<p>Un trabajo es <b>una pieza de un presupuesto</b> (con su cantidad) asignada a una máquina y
+   con una posición en la cola de esa máquina. Un mismo presupuesto suele tener varios trabajos
    repartidos en distintas impresoras.</p>
 <h3>Qué podés hacer</h3>
 <ul>
     <li>Desde la lista podés cambiar directo la <b>máquina</b>, el <b>orden</b> en la cola y el <b>estado</b>.</li>
     <li>Estados: <b>En cola</b> → <b>Imprimiendo</b> → <b>Impreso</b> (o <b>Cancelado</b>).</li>
     <li>Al marcar <b>Imprimiendo</b>, se registra el inicio real.</li>
-    <li>Al marcar <b>Impreso</b>, se <b>descuenta el material</b> de ese trabajo del inventario (una sola vez).</li>
+    <li>Al marcar <b>Impreso</b>: el material <b>ya se descontó al aprobar</b>, así que acá NO se
+        vuelve a descontar. Lo que sí pasa: si la corrida sacó piezas de más, la <b>sobrante se
+        suma al stock de piezas</b>, y se registra en el historial de la máquina.</li>
     <li>Cualquier cambio de máquina, orden o estado <b>recalcula la cola</b> y las fechas estimadas.</li>
 </ul>
 <div class="ej">
-    <span class="tag">EJEMPLO</span> El presupuesto de "Estudio Belgrano" (2 llaveros + 1 maceta)
-    genera al aprobarse 2 trabajos: "Llavero ×2" a la Bambu #1 (posición 4) y "Maceta ×1" a la
-    Ender (posición 2). Cuando arrancás el llavero, lo marcás <b>Imprimiendo</b>; al sacarlo de la
-    cama lo marcás <b>Impreso</b> y ahí recién se descuentan 24 g de filamento (12 g × 2) y 2 argollas.
+    <span class="tag">EJEMPLO</span> El pedido de "Estudio Belgrano" (2 llaveros + 1 maceta) genera
+    al aprobarse trabajos por pieza: "Llavero ×2" a la Bambu #1 y "Maceta ×1" a la Ender. El
+    filamento ya se descontó al aprobar. Cuando arrancás el llavero lo marcás <b>Imprimiendo</b>;
+    al sacarlo de la cama lo marcás <b>Impreso</b> y queda registrado en el historial de la Bambu #1.
 </div>
+<h3>Reimpresión por falla (impresión obsoleta)</h3>
+<p>Si una impresión sale mal, usás la acción <b>«Marcar impresión obsoleta (reimprimir)»</b>. El
+   trabajo vuelve a la cola para reimprimirse. Como el filamento ya se había descontado al aprobar,
+   se te pide cargar <b>cuántos gramos se perdieron</b> en la impresión fallida: eso se pierde de
+   verdad y el resto vuelve al stock. Los <b>agregados no se tocan</b>. Al reimprimirse, el sistema
+   vuelve a contar el material de la pieza buena.</p>
 <div class="box">
     <b>Ventana de carga:</b> las impresoras imprimen de corrido (un trabajo puede cruzar la noche),
     pero un trabajo nuevo solo <b>arranca</b> entre las 07:00 y las 23:00, porque alguien tiene que
     cargar la pieza. Si una máquina queda libre de madrugada, el siguiente arranca a las 07:00.
 </div>
 
+<!-- HISTORIAL -->
+<h2>17. Historial de impresiones por máquina</h2>
+<p>Cada máquina lleva su propio <b>historial de impresiones</b>: una lista de solo lectura, dentro
+   de la ficha de la máquina, con todo lo que pasó por esa impresora. Te sirve para saber qué
+   imprimió cada máquina, cuándo y en qué cantidad.</p>
+<h3>Qué guarda cada registro</h3>
+<ul>
+    <li><b>Título</b> descriptivo (producto/pieza, cantidad y pedido al que pertenece).</li>
+    <li><b>Cantidad</b> y <b>horas de impresión</b>.</li>
+    <li><b>Estado:</b> <b>Impreso</b> (terminó bien) o <b>Cancelado</b> (se canceló el trabajo o el pedido).</li>
+    <li><b>Fecha de finalización.</b></li>
+</ul>
+<p>El historial se arma solo: se agrega un registro cuando marcás un trabajo como <b>Impreso</b> y
+   también cuando se <b>cancela</b> (sea el trabajo suelto o el pedido entero). Es una foto: aunque
+   después borres o cambies el trabajo, el historial de la máquina queda. Está ordenado de lo más
+   nuevo a lo más viejo.</p>
+<div class="ej"><span class="tag">EJEMPLO</span> &nbsp;Historial de la Bambu Lab A1 Combo #1:</div>
+<table>
+    <tr><th>Título</th><th>Cant.</th><th>Horas</th><th>Estado</th><th>Finalizado</th></tr>
+    <tr><td>Llavero con logo ×2 — Pedido #18 (Estudio Belgrano)</td><td>2</td><td>0,80</td><td>Impreso</td><td>26/06 15:10</td></tr>
+    <tr><td>Maceta hexagonal ×1 — Pedido #17 (Casa Norte)</td><td>1</td><td>3,20</td><td>Cancelado</td><td>25/06 11:40</td></tr>
+    <tr><td>Soporte de celular ×5 — Pedido #15 (Kiosco 24h)</td><td>5</td><td>2,50</td><td>Impreso</td><td>24/06 18:05</td></tr>
+</table>
+
 <!-- COLA -->
-<h2>14. Cola de producción</h2>
+<h2>18. Cola de producción</h2>
 <p>Vista de solo lectura con la cola de cada máquina: qué trabajos tiene, en qué orden, con su
    inicio y fin de impresión estimados, y cuándo queda libre cada impresora. Abajo muestra la
    <b>cola total</b> de todos los trabajos ordenados por inicio. Sirve para ver el panorama de
@@ -525,21 +659,21 @@ HTML = """
 </div>
 
 <!-- TABLERO -->
-<h2>15. Tablero de producción</h2>
+<h2>19. Tablero de producción</h2>
 <p>Es la pantalla "entro y me dice todo". De solo lectura, reúne en un solo lugar:</p>
 <ul>
     <li><b>Qué se está imprimiendo</b> ahora en cada máquina y cuándo termina.</li>
     <li><b>Próximas entregas:</b> los presupuestos aprobados o en producción ordenados por fecha de entrega.</li>
-    <li><b>Comprar materia prima:</b> cruza la cola de producción contra el stock real y te avisa
-        qué filamento o agregado no va a alcanzar, cuánto falta comprar y <b>cuándo</b> te vas a
-        quedar sin ese material.</li>
+    <li><b>Comprar materia prima:</b> como el material ya se descontó al aprobar, el tablero mira el
+        <b>stock real</b> y te lista todo lo que quedó <b>por debajo del mínimo</b> (o en negativo),
+        cuánto falta comprar y <b>cuándo</b> lo vas a necesitar en la máquina.</li>
     <li>Indicadores rápidos: trabajos en cola, horas de impresión pendientes y pedidos en producción.</li>
 </ul>
 <div class="ej">
     <span class="tag">EJEMPLO</span> Entrás un lunes a la mañana y el tablero te dice: Bambu #1
     imprimiendo "Maceta ×3" (termina 11:20); próxima entrega "Estudio Belgrano" para el 27/06; y en
-    <b>Comprar materia prima</b>: "PLA Negro: faltan 800 g, se agota el 26/06". Sabés que tenés que
-    comprar PLA Negro antes del martes.
+    <b>Comprar materia prima</b>: "PLA Negro: faltan 800 g, lo necesitás el 26/06". Sabés que tenés
+    que comprar PLA Negro antes del martes.
 </div>
 <div class="ok">
     <b>Para qué sirve:</b> entrás a la mañana, mirás el tablero y sabés qué está corriendo, cuándo
@@ -547,7 +681,7 @@ HTML = """
 </div>
 
 <!-- METRICAS -->
-<h2>16. Métricas (KPIs del negocio)</h2>
+<h2>20. Métricas (KPIs del negocio)</h2>
 <p>Es el panel de indicadores del negocio por período. Te muestra cómo venís en <b>ventas</b>,
    <b>producción</b> e <b>inventario</b>, con números y gráficos, para tomar decisiones (cuánto
    facturaste, qué se vende más, cuánto imprimís, cuánto gastás en material).</p>
@@ -577,8 +711,6 @@ HTML = """
     <tr><td class="cl">Figura articulada — 64</td><td><div style="background:#dc2626; width:154pt; height:11px;">&nbsp;</div></td></tr>
     <tr><td class="cl">Organizador escritorio — 50</td><td><div style="background:#7c3aed; width:120pt; height:11px;">&nbsp;</div></td></tr>
     <tr><td class="cl">Topper para torta — 38</td><td><div style="background:#0891b2; width:91pt; height:11px;">&nbsp;</div></td></tr>
-    <tr><td class="cl">Engranaje a pedido — 25</td><td><div style="background:#db2777; width:60pt; height:11px;">&nbsp;</div></td></tr>
-    <tr><td class="cl">Posavasos — 12</td><td><div style="background:#65a30d; width:29pt; height:11px;">&nbsp;</div></td></tr>
   </table>
   <p class="chart-note">El gráfico de facturación se ve igual pero en barras azules; el embudo de
      estados se dibuja como una dona con un color por estado. Todos a color, no en gris.</p>
@@ -590,18 +722,12 @@ HTML = """
     <tr><td>Facturación aprobada</td><td>Suma del total de los presupuestos aprobados en el período.</td><td>$1.240.000</td></tr>
     <tr><td>Presupuestos aprobados</td><td>Cuántos se aprobaron en el período.</td><td>8</td></tr>
     <tr><td>Ticket promedio</td><td>Facturación ÷ cantidad de aprobados.</td><td>$155.000</td></tr>
-    <tr><td>Conversión</td><td>De los presupuestos enviados en el período, cuántos se aprobaron.</td><td>66,7% (8 de 12)</td></tr>
+    <tr><td>Conversión</td><td>De los presupuestos enviados, cuántos se aprobaron.</td><td>66,7% (8 de 12)</td></tr>
     <tr><td>Margen bruto</td><td>(Facturación − costo de lo vendido) ÷ facturación.</td><td>50%</td></tr>
     <tr><td>Tiempo de ciclo</td><td>Días promedio entre aprobar y entregar (completar).</td><td>6,5 días</td></tr>
 </table>
-<p>Además vas a ver tres tablas: <b>productos más vendidos</b> (por cantidad y por $), <b>top
-   clientes</b> (por facturación) y el <b>embudo de estados</b>, que es una foto de cuántos
-   presupuestos hay <i>hoy</i> en cada estado (no del período).</p>
-<div class="ej">
-    <span class="tag">EJEMPLO</span> Embudo de estados (foto actual): 3 Borrador · 2 Enviado ·
-    1 Aprobado · 4 En producción · 10 Completado · 1 Cancelado. Te muestra de un vistazo cuántos
-    pedidos tenés "trabados" en cada etapa.
-</div>
+<p>Además vas a ver tres tablas: <b>productos más vendidos</b>, <b>top clientes</b> y el <b>embudo
+   de estados</b>, que es una foto de cuántos presupuestos hay <i>hoy</i> en cada estado.</p>
 
 <h3>B) Producción (verde)</h3>
 <table>
@@ -612,60 +738,72 @@ HTML = """
     <tr><td>Cumplimiento de entrega</td><td>Entregados a tiempo ÷ entregados con fecha pactada.</td><td>87,5% (7 de 8)</td></tr>
 </table>
 <p>Y la tabla <b>Uso por máquina</b>, con trabajos, piezas y horas por impresora.</p>
-<div class="ej">
-    <span class="tag">EJEMPLO</span> Uso por máquina del mes: Bambu #1 → 28 trabajos / 180 piezas /
-    78 h; Bambu #2 → 22 / 110 / 51 h; Ender → 9 / 30 / 13,5 h. Ves cuál está más cargada.
-</div>
 
 <h3>C) Inventario y costos (ámbar)</h3>
 <table>
     <tr><th>Indicador</th><th>Qué mide</th><th>Ejemplo (mes)</th></tr>
     <tr><td>Gasto en compras</td><td>Total de las compras confirmadas en el período.</td><td>$380.000 (3 compras)</td></tr>
-    <tr><td>Consumo de material ($)</td><td>Valor del material descontado al imprimir.</td><td>$210.000</td></tr>
-    <tr><td>Filamento consumido</td><td>Gramos de filamento descontados por impresión.</td><td>11.800 g</td></tr>
+    <tr><td>Consumo de material ($)</td><td>Valor del material descontado al aprobar pedidos.</td><td>$210.000</td></tr>
+    <tr><td>Filamento consumido</td><td>Gramos de filamento descontados por producción.</td><td>11.800 g</td></tr>
     <tr><td>Insumos bajo stock mínimo</td><td>Cuántos materiales están por debajo del mínimo hoy.</td><td>2</td></tr>
 </table>
 <div class="box">
     <b>Qué fecha define cada métrica:</b> las ventas se miden por <b>fecha de aprobación</b>, la
     producción por <b>fin de impresión</b> y las compras por <b>fecha de confirmación</b>. El embudo
-    de estados y los insumos bajo stock son una <b>foto del momento actual</b>, no dependen del
-    período elegido.
+    de estados y los insumos bajo stock son una <b>foto del momento actual</b>, no del período.
 </div>
 
-<!-- DESCUENTO -->
-<h2>17. ¿Cuándo se descuenta el material?</h2>
-<p>El material se descuenta del inventario <b>cuando cada pieza se imprime</b> (cuando marcás el
-   trabajo como "Impreso"), no cuando aprobás el presupuesto.</p>
-<h3>Por qué es así</h3>
-<p>Porque es lo que pasa de verdad: el filamento se gasta al imprimir, no al aceptar el pedido.
-   Y porque hace que el aviso de "comprar materia prima" del tablero sea correcto. Si el stock se
-   restara al aprobar, el tablero contaría el mismo material dos veces (una al aprobar y otra al
-   proyectar la cola) y te diría que falta más de lo que falta en realidad.</p>
+<!-- GASTOS -->
+<h2>21. Gastos (panel de gastos)</h2>
+<p>Esta sección lleva los <b>gastos operativos y de estructura</b> del negocio: lo que NO es compra
+   de insumos ni costo de producción (eso va por Inventario). Por ejemplo: alquiler, contador,
+   suscripciones, publicidad, internet, etc. Sirve para saber tu <b>resultado operativo</b>.</p>
+<h3>Cargar un gasto</h3>
+<ul>
+    <li>Cargás un <b>Gasto</b> por cada pago real, con su <b>fecha</b>.</li>
+    <li><b>Categoría</b> (Administración / Comercialización / Suscripciones / IT / Otro),
+        <b>concepto</b>, <b>monto</b>, proveedor y medio de pago.</li>
+    <li>Si es recurrente, marcalo y elegí la <b>periodicidad</b> (Único / Mensual / Anual). El
+        sistema calcula el equivalente mensual para el compromiso fijo (run-rate).</li>
+</ul>
+<h3>Topes</h3>
+<p>En <b>Topes</b> ponés un presupuesto mensual por categoría. El panel te avisa si te pasaste.</p>
+<h3>Panel de gastos</h3>
+<p>Pantalla de solo lectura con <b>filtro por mes y año</b> (mes 0 = todo el año). Muestra el total
+   y el desglose por categoría (tabla + torta), la evolución mensual (barras), el comparativo vs el
+   período anterior, el compromiso mensual recurrente, el <b>resultado operativo</b> (ventas
+   aprobadas del período − gastos) y el control de topes. También exporta a Excel.</p>
 <div class="ej">
-    <span class="tag">EJEMPLO</span> Aprobás un pedido de 10 macetas (300 g c/u = 3.000 g). Tu stock
-    de PLA sigue mostrando lo mismo: aprobar <b>no</b> descontó nada, solo te avisó "ojo, vas a
-    necesitar 3.000 g". Recién cuando imprimís y marcás cada maceta como "Impreso", el stock va
-    bajando de a 300 g por maceta.
+    <span class="tag">EJEMPLO</span> En junio cargaste: alquiler $120.000 (mensual), contador
+    $40.000 (mensual), publicidad $25.000 (único). El panel muestra gastos del mes <b>$185.000</b>,
+    y si las ventas aprobadas fueron $1.240.000, el <b>resultado operativo</b> es $1.055.000 y los
+    gastos son el <b>14,9%</b> de las ventas.
 </div>
+
+<!-- IDIOMA -->
+<h2>22. Selector de idioma (Español / English)</h2>
+<p>Arriba en la barra del panel hay un <b>selector de idioma</b>. Podés cambiar todo el admin entre
+   <b>Español</b> y <b>English</b>: menús, botones, nombres de las secciones, ayudas y mensajes.
+   El idioma queda guardado para tu usuario.</p>
 <div class="box">
-    <b>En resumen:</b> aprobar = arma la cola y te <i>avisa</i> si el stock no alcanza.
-    Imprimir (marcar "Impreso") = descuenta el material de verdad y queda registrado como
-    movimiento de "Producción".
+    <b>Nota:</b> el <b>PDF que se le manda al cliente</b> queda siempre en español, aunque tengas el
+    panel en inglés. El idioma es solo para vos, para operar el sistema.
 </div>
 
 <!-- FLUJO -->
-<h2>18. Flujo de trabajo recomendado</h2>
+<h2>23. Flujo de trabajo recomendado</h2>
 <ul>
     <li><span class="step">1.</span> Cargá tus <b>filamentos</b> y <b>agregados</b> con su costo y su stock mínimo.</li>
     <li><span class="step">2.</span> Cargá el stock inicial con <b>Ajustes manuales</b> o <b>Compras</b>.</li>
-    <li><span class="step">3.</span> Revisá que tus <b>máquinas</b> estén bien marcadas (cuáles son multicolor).</li>
-    <li><span class="step">4.</span> Creá un <b>producto</b> por cada pieza que vendés, con su costo, precio y si es multicolor.</li>
+    <li><span class="step">3.</span> Revisá tus <b>máquinas</b>: cuáles son multicolor y su costo por hora.</li>
+    <li><span class="step">4.</span> Creá un <b>producto</b> por cada cosa que vendés, con sus <b>piezas</b>, costo, precio y prioridad.</li>
     <li><span class="step">5.</span> Cuando un cliente pide, armá un <b>presupuesto</b> y enviale el <b>PDF</b>.</li>
-    <li><span class="step">6.</span> Cuando acepta, <b>aprobá</b> el presupuesto: se arma la cola y obtenés la entrega estimada.</li>
-    <li><span class="step">7.</span> A medida que imprimís, marcá cada trabajo como <b>Imprimiendo</b> y luego <b>Impreso</b> (ahí se descuenta el material).</li>
+    <li><span class="step">6.</span> Cuando acepta, <b>aprobá</b> el presupuesto: ahí se descuenta el material y se arma la cola con la entrega estimada.</li>
+    <li><span class="step">7.</span> A medida que imprimís, marcá cada trabajo como <b>Imprimiendo</b> y luego <b>Impreso</b>. Si una sale mal, usá <b>reimprimir</b>.</li>
     <li><span class="step">8.</span> Mirá el <b>Tablero</b> cada día para ver producción, entregas y qué comprar.</li>
     <li><span class="step">9.</span> Repuestás materiales con <b>Compras</b> confirmadas; la <b>campanita</b> te avisa cuando algo está bajo.</li>
-    <li><span class="step">10.</span> Una vez por semana o por mes, mirá <b>Métricas</b> para ver cómo viene el negocio y bajá el Excel si querés guardarlo.</li>
+    <li><span class="step">10.</span> Cargá tus <b>gastos</b> a medida que pagás y revisá el <b>Panel de gastos</b>.</li>
+    <li><span class="step">11.</span> Una vez por semana o por mes, mirá <b>Métricas</b> para ver cómo viene el negocio y bajá el Excel si querés guardarlo.</li>
 </ul>
 
 </body>

@@ -99,12 +99,25 @@ class Filament(models.Model):
         if grams <= 0:
             return Decimal("0")
 
+        was_low_stock = self.is_low_stock
         shortage = max(Decimal("0"), grams - self.stock_grams)
         if allow_negative:
             self.stock_grams = self.stock_grams - grams
         else:
             self.stock_grams = max(Decimal("0"), self.stock_grams - grams)
         self.save(update_fields=["stock_grams", "updated_at"])
+        if self.is_low_stock and not was_low_stock:
+            from config.zapier import notificar
+
+            notificar(
+                "stock_bajo",
+                {
+                    "tipo": "filamento",
+                    "item": str(self),
+                    "stock_actual": str(self.stock_grams),
+                    "stock_minimo": str(self.min_stock),
+                },
+            )
         return shortage
 
 
@@ -178,12 +191,25 @@ class Aggregate(models.Model):
         if qty <= 0:
             return Decimal("0")
 
+        was_low_stock = self.is_low_stock
         shortage = max(Decimal("0"), qty - self.stock_quantity)
         if allow_negative:
             self.stock_quantity = self.stock_quantity - qty
         else:
             self.stock_quantity = max(Decimal("0"), self.stock_quantity - qty)
         self.save(update_fields=["stock_quantity", "updated_at"])
+        if self.is_low_stock and not was_low_stock:
+            from config.zapier import notificar
+
+            notificar(
+                "stock_bajo",
+                {
+                    "tipo": "agregado",
+                    "item": str(self),
+                    "stock_actual": str(self.stock_quantity),
+                    "stock_minimo": str(self.min_stock),
+                },
+            )
         return shortage
 
 
