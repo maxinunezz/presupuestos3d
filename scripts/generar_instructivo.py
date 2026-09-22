@@ -5,7 +5,7 @@ Uso:
     source venv/bin/activate
     python scripts/generar_instructivo.py
 
-El PDF se guarda en /home/pmaximiliano/Escritorio/3darg/.
+El PDF se guarda en la carpeta del proyecto (escritorio/presupuestos3d/).
 """
 
 import base64
@@ -15,8 +15,8 @@ from pathlib import Path
 from xhtml2pdf import pisa
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-LOGO_PATH = BASE_DIR / "budgets" / "assets" / "logo3darg.jpeg"
-OUTPUT_PATH = Path("/home/pmaximiliano/Escritorio/3darg/instructivo_admin_3darg.pdf")
+LOGO_PATH = BASE_DIR / "budgets" / "assets" / "logo3darg.png"
+OUTPUT_PATH = BASE_DIR / "instructivo_admin_3darg.pdf"
 
 
 def logo_data_uri() -> str:
@@ -25,7 +25,7 @@ def logo_data_uri() -> str:
     except FileNotFoundError:
         return ""
     encoded = base64.b64encode(data).decode("ascii")
-    return f"data:image/jpeg;base64,{encoded}"
+    return f"data:image/png;base64,{encoded}"
 
 
 HTML = """
@@ -408,6 +408,16 @@ HTML = """
     <b>Multicolor (AMS):</b> si alguna pieza usa varios colores en simultáneo, el producto queda
     multicolor. El sistema solo va a poder mandarlo a una impresora con AMS (las Bambu Lab), nunca
     a la Ender. Más detalle en el punto 15.
+</div>
+<div class="box">
+    <b>Diseño listo:</b> cada producto tiene un check <b>"Diseño listo"</b> (visible y editable
+    directo desde el listado, sin entrar al detalle) para que el diseñador avise cuándo el
+    modelo/gcode está terminado y revisado. Al tildarlo, el sistema guarda la fecha y hora
+    ("Diseño marcado listo el") y manda automáticamente un aviso a un canal de Slack del equipo
+    (vía Incoming Webhook) para que producción sepa que ya puede tenerlo en cuenta al armar la
+    cola de impresión. Si se destilda, la fecha se limpia. Si no hay un webhook de Slack
+    configurado, el check funciona igual como simple marca visual — el aviso automático es
+    opcional y no rompe nada si está apagado.
 </div>
 <div class="ej"><span class="tag">EJEMPLO</span> &nbsp;Costeo de un <b>Llavero con logo</b> (1 pieza, 12 g, 1 argolla):</div>
 <table>
