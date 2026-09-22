@@ -18,6 +18,7 @@ def make_producto(multicolor=False):
     return Producto.objects.create(
         name="Pieza",
         is_multicolor=multicolor,
+        waste_percent=Decimal("0"),
     )
 
 
@@ -29,7 +30,7 @@ def add_pieza(producto, filament, grams, print_hours=Decimal("2"), name="Pieza p
         name=name,
         units_needed=1,
         pieces_per_gcode=1,
-        print_time_hours=print_hours,
+        print_time_minutes=print_hours * 60,
     )
     PiezaFilamentLine.objects.create(pieza=pieza, filament=filament, grams_used=grams)
     return pieza

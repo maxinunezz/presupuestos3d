@@ -667,8 +667,8 @@ msgstr "Material waste (%)"
 msgid "Desperdicio de filamento por purga (multicolor), soportes y fallas. Se aplica sobre el costo y el consumo de material."
 msgstr "Filament wasted on purge (multicolor), supports and failures. Applied to material cost and consumption."
 
-msgid "Post-proceso por pieza (hs)"
-msgstr "Post-processing per part (hrs)"
+msgid "Post-proceso por pieza (min)"
+msgstr "Post-processing per part (min)"
 
 msgid "Tiempo de armado, lijado, pintado, pegado de agregados, etc."
 msgstr "Time for assembly, sanding, painting, gluing add-ons, etc."
@@ -676,14 +676,11 @@ msgstr "Time for assembly, sanding, painting, gluing add-ons, etc."
 msgid "Costo de mano de obra por hora"
 msgstr "Labor cost per hour"
 
-msgid "Margen (%)"
-msgstr "Margin (%)"
+msgid "Precio de venta"
+msgstr "Sale price"
 
-msgid "Redondear precio a múltiplo de"
-msgstr "Round price to a multiple of"
-
-msgid "Ej: 100 redondea el precio a la centena más cercana. 0 = sin redondeo."
-msgstr "E.g. 100 rounds the price to the nearest hundred. 0 = no rounding."
+msgid "Precio final al que se vende UNA unidad. Se carga a mano en base al costo (ver arriba); no se recalcula solo si cambian los costos."
+msgstr "Final price for ONE unit. Entered by hand based on the cost (see above); it does not recalculate automatically if costs change."
 
 msgid "G-code"
 msgstr "G-code"
@@ -742,8 +739,8 @@ msgstr "Parts per gcode run"
 msgid "Cuántas unidades de esta pieza salen en UNA impresión (un gcode)."
 msgstr "How many units of this part come out of ONE print (a single gcode)."
 
-msgid "Horas de máquina por corrida de gcode"
-msgstr "Machine hours per gcode run"
+msgid "Minutos de máquina por corrida de gcode"
+msgstr "Machine minutes per gcode run"
 
 msgid "Tiempo de impresión de UNA corrida del gcode (saca `piezas por gcode`)."
 msgstr "Print time of ONE gcode run (yields `parts per gcode`)."
@@ -901,6 +898,12 @@ msgstr "Number of parts"
 msgid "Precio unitario (congelado)"
 msgstr "Unit price (frozen)"
 
+msgid "Precio de costeo (actual)"
+msgstr "Costing price (current)"
+
+msgid "Guardá para congelar el precio."
+msgstr "Save to freeze the price."
+
 msgid "Precio por pieza guardado al armar el presupuesto. Si se deja vacío, se toma el precio actual del producto. Queda fijo aunque después cambie el costeo del producto."
 msgstr "Price per part saved when building the budget. If left empty, the product's current price is used. It stays fixed even if the product costing changes later."
 
@@ -919,14 +922,23 @@ msgstr "Budget products"
 msgid "Por producto (corridas · gramos · horas)"
 msgstr "Per product (runs · grams · hours)"
 
-msgid "Guardá para ver el cálculo."
-msgstr "Save to see the calculation."
+msgid "Guardá el producto para poder cargar el filamento de esta pieza."
+msgstr "Save the product to be able to load this part's filament."
 
 msgid "%(runs)s corrida/s · %(grams)s g · %(hours)s h"
 msgstr "%(runs)s run/s · %(grams)s g · %(hours)s h"
 
 msgid "Costo de línea (por corrida)"
 msgstr "Line cost (per run)"
+
+msgid "Precio actual del filamento (referencia)"
+msgstr "Filament's current price (reference)"
+
+msgid "Vacío = precio actual del filamento"
+msgstr "Empty = filament's current price"
+
+msgid "Para cargar el filamento de una pieza: completá sus datos acá abajo y guardá el producto (botón «Guardar y continuar editando»); en cada fila ya guardada va a aparecer un enlace «Modificar» para entrar a esa pieza y cargar sus líneas de filamento."
+msgstr "To load a part's filament: fill in its details below and save the product (the \"Save and continue editing\" button); each already-saved row will then show a \"Change\" link to go into that part and load its filament lines."
 
 msgid "Cálculo de la pieza"
 msgstr "Part calculation"
@@ -970,6 +982,12 @@ msgstr "Labor / post-processing"
 msgid "Precio"
 msgstr "Price"
 
+msgid "1. Costeo"
+msgstr "1. Costing"
+
+msgid "2. Precio"
+msgstr "2. Price"
+
 msgid "Archivo del modelo"
 msgstr "Model file"
 
@@ -984,6 +1002,18 @@ msgstr "Cost summary"
 
 msgid "Guardá el producto para ver el resumen de costos."
 msgstr "Save the product to see the cost summary."
+
+msgid "Costo y margen"
+msgstr "Cost and margin"
+
+msgid "Guardá el producto para ver el costo y el margen."
+msgstr "Save the product to see the cost and margin."
+
+msgid "Tu costo:"
+msgstr "Your cost:"
+
+msgid "Margen con el precio actual:"
+msgstr "Margin with the current price:"
 
 msgid "corrida/s"
 msgstr "run/s"
@@ -1501,6 +1531,24 @@ msgstr "'%(name)s' stopped printing multicolor: %(count)s multicolor job(s) in q
 
 msgid "Marcar impresión obsoleta (reimprimir)"
 msgstr "Mark print obsolete (reprint)"
+
+msgid "Diseño"
+msgstr "Design"
+
+msgid "▶ Marcar como Imprimiendo"
+msgstr "▶ Mark as Printing"
+
+msgid "✅ Marcar como Impreso"
+msgstr "✅ Mark as Printed"
+
+msgid "%(count)s trabajo(s) se ignoraron (ya estaban Impresos o Cancelados)."
+msgstr "%(count)s job(s) were ignored (already Printed or Cancelled)."
+
+msgid "%(count)s trabajo(s) actualizados."
+msgstr "%(count)s job(s) updated."
+
+msgid ":package: *%(pieza)s* (x%(cantidad)s) del pedido #%(pedido)s — %(cliente)s se terminó de imprimir."
+msgstr ":package: *%(pieza)s* (x%(cantidad)s) from order #%(pedido)s — %(cliente)s finished printing."
 
 msgid "%(count)s trabajo(s) no se pueden marcar obsoletos (deben ser por pieza, En cola/Imprimiendo y con material descontado). Se ignoraron."
 msgstr "%(count)s job(s) cannot be marked obsolete (they must be per-part, Queued/Printing and with material deducted). They were ignored."

@@ -69,13 +69,13 @@ class Producto(models.Model):
     # Las horas de máquina y el filamento ya NO viven acá: ahora están en cada
     # Pieza (ver modelo Pieza). El producto suma las piezas para sus totales.
     machine_cost_per_hour = models.DecimalField(
-        _("Costo de máquina por hora"), max_digits=10, decimal_places=2, default=0
+        _("Costo de máquina por hora"), max_digits=10, decimal_places=2, default=300
     )
     waste_percent = models.DecimalField(
         _("Merma de material (%)"),
         max_digits=5,
         decimal_places=2,
-        default=0,
+        default=5,
         help_text=_(
             "Desperdicio de filamento por purga (multicolor), soportes y fallas. "
             "Se aplica sobre el costo y el consumo de material."
@@ -83,27 +83,27 @@ class Producto(models.Model):
     )
 
     # --- Mano de obra / post-proceso ---
-    post_processing_hours = models.DecimalField(
-        _("Post-proceso por pieza (hs)"),
-        max_digits=6,
+    post_processing_minutes = models.DecimalField(
+        _("Post-proceso por pieza (min)"),
+        max_digits=7,
         decimal_places=2,
-        default=0,
+        default=1,
         help_text=_("Tiempo de armado, lijado, pintado, pegado de agregados, etc."),
     )
     labor_cost_per_hour = models.DecimalField(
-        _("Costo de mano de obra por hora"), max_digits=10, decimal_places=2, default=0
+        _("Costo de mano de obra por hora"), max_digits=10, decimal_places=2, default=5000
     )
 
     # --- Precio ---
-    margin_percent = models.DecimalField(
-        _("Margen (%)"), max_digits=5, decimal_places=2, default=0
-    )
-    round_to = models.DecimalField(
-        _("Redondear precio a múltiplo de"),
+    sale_price = models.DecimalField(
+        _("Precio de venta"),
         max_digits=10,
         decimal_places=2,
         default=0,
-        help_text=_("Ej: 100 redondea el precio a la centena más cercana. 0 = sin redondeo."),
+        help_text=_(
+            "Precio final al que se vende UNA unidad. Se carga a mano en base al "
+            "costo (ver arriba); no se recalcula solo si cambian los costos."
+        ),
     )
 
     # --- Archivo del modelo (solo local por ahora) ---
@@ -266,7 +266,8 @@ class Producto(models.Model):
 
     @property
     def labor_cost(self) -> Decimal:
-        return (_dec(self.post_processing_hours) * _dec(self.labor_cost_per_hour)).quantize(
+        post_processing_hours = _dec(self.post_processing_minutes) / Decimal("60")
+        return (post_processing_hours * _dec(self.labor_cost_per_hour)).quantize(
             Decimal("0.01")
         )
 
@@ -283,17 +284,18 @@ class Producto(models.Model):
 
     @property
     def unit_price(self) -> Decimal:
-        """Precio de venta por pieza: costo + margen, redondeado."""
-        margin_multiplier = Decimal("1") + (self.margin_percent / Decimal("100"))
-        price = (self.unit_cost * margin_multiplier).quantize(Decimal("0.01"))
+        """Precio de venta por pieza: el que se cargó a mano en `sale_price`."""
+        return _dec(self.sale_price).quantize(Decimal("0.01"))
 
-        if self.round_to and self.round_to > 0:
-            steps = (price / self.round_to).quantize(
-                Decimal("1"), rounding=ROUND_HALF_UP
-            )
-            price = (steps * self.round_to).quantize(Decimal("0.01"))
-
-        return price
+    @property
+    def margin_percent(self) -> Decimal:
+        """Margen resultante del precio cargado a mano sobre el costo. 0 si no hay costo."""
+        cost = self.unit_cost
+        if cost <= 0:
+            return Decimal("0.00")
+        return (
+            (self.unit_price - cost) / cost * Decimal("100")
+        ).quantize(Decimal("0.01"))
 
     # ---- Stock (consumo para una cantidad dada de productos) ----
 
@@ -397,9 +399,9 @@ class Pieza(models.Model):
         default=1,
         help_text=_("Cuántas unidades de esta pieza salen en UNA impresión (un gcode)."),
     )
-    print_time_hours = models.DecimalField(
-        _("Horas de máquina por corrida de gcode"),
-        max_digits=6,
+    print_time_minutes = models.DecimalField(
+        _("Minutos de máquina por corrida de gcode"),
+        max_digits=8,
         decimal_places=2,
         default=0,
         help_text=_("Tiempo de impresión de UNA corrida del gcode (saca `piezas por gcode`)."),
@@ -453,7 +455,8 @@ class Pieza(models.Model):
     @property
     def machine_hours(self) -> Decimal:
         """Horas de máquina para UN producto (corridas × horas por corrida)."""
-        return (_dec(self.print_time_hours) * self.gcode_runs).quantize(Decimal("0.01"))
+        hours_per_run = _dec(self.print_time_minutes) / Decimal("60")
+        return (hours_per_run * self.gcode_runs).quantize(Decimal("0.01"))
 
     @property
     def material_cost_per_run(self) -> Decimal:
@@ -719,11 +722,11 @@ class Presupuesto(models.Model):
         ).quantize(Decimal("0.01"))
 
     @property
-    def total_post_processing_hours(self) -> Decimal:
+    def total_post_processing_minutes(self) -> Decimal:
         """Suma del post-proceso de todos los productos del pedido × cantidad."""
         return sum(
             (
-                Decimal(item.quantity) * _dec(item.producto.post_processing_hours)
+                Decimal(item.quantity) * _dec(item.producto.post_processing_minutes)
                 for item in self.items.select_related("producto").all()
             ),
             Decimal("0"),
@@ -753,7 +756,7 @@ class Presupuesto(models.Model):
         print_ready = self.estimated_print_ready
         if print_ready is None:
             return None
-        return print_ready + timedelta(hours=float(self.total_post_processing_hours))
+        return print_ready + timedelta(minutes=float(self.total_post_processing_minutes))
 
     def _provision_production(self):
         """
@@ -837,7 +840,7 @@ class Presupuesto(models.Model):
         #    colas) y descontamos el filamento de cada uno.
         def _job_hours(pieza, to_print):
             runs = math.ceil(to_print / (pieza.pieces_per_gcode or 1))
-            return _dec(pieza.print_time_hours) * runs
+            return (_dec(pieza.print_time_minutes) / Decimal("60")) * runs
 
         # Prioridad manual del producto primero (1=Alta … 9=Sin prioridad va al
         # final); a igual prioridad, el trabajo más largo se asigna antes.

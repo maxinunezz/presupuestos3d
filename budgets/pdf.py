@@ -20,7 +20,7 @@ BUSINESS_CONTACT = "3darg1@gmail.com"
 QUOTE_VALIDITY_DAYS = 30
 
 # Logo del negocio (se embebe en el PDF como data URI para no depender de rutas).
-LOGO_PATH = Path(__file__).resolve().parent / "assets" / "logo3darg.jpeg"
+LOGO_PATH = Path(__file__).resolve().parent / "assets" / "logo3darg.png"
 
 
 def _logo_data_uri() -> str:
@@ -30,7 +30,7 @@ def _logo_data_uri() -> str:
     except FileNotFoundError:
         return ""
     encoded = base64.b64encode(data).decode("ascii")
-    return f"data:image/jpeg;base64,{encoded}"
+    return f"data:image/png;base64,{encoded}"
 
 
 def format_money(value) -> str:

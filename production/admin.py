@@ -153,6 +153,7 @@ class ProductionJobAdmin(admin.ModelAdmin):
     list_display = (
         "producto",
         "pieza",
+        "diseno_listo_display",
         "quantity",
         "presupuesto",
         "machine",
@@ -163,7 +164,7 @@ class ProductionJobAdmin(admin.ModelAdmin):
         "estimated_print_end_display",
     )
     list_editable = ("machine", "order", "status")
-    list_filter = ("machine", "status")
+    list_filter = ("machine", "status", "producto__diseno_listo")
     search_fields = ("producto__name", "pieza__name", "presupuesto__client_name")
     autocomplete_fields = ("presupuesto", "producto", "pieza", "machine")
     readonly_fields = (
@@ -173,7 +174,55 @@ class ProductionJobAdmin(admin.ModelAdmin):
         "finished_at",
         "created_at",
     )
-    actions = ("marcar_obsoleta",)
+    actions = ("marcar_obsoleta", "marcar_imprimiendo", "marcar_impreso")
+
+    @admin.display(description=_("Diseño"), boolean=True)
+    def diseno_listo_display(self, obj):
+        return bool(obj.producto_id and obj.producto.diseno_listo)
+
+    def _bulk_set_status(self, request, queryset, new_status, desde):
+        """Cambia de estado en lote, reusando el mismo camino que guardar una
+        fila a mano (save_model) para que se disparen todos los efectos
+        (descuento de material, sobrante, historial, recalcular cola, etc.)."""
+        elegibles = list(
+            queryset.filter(status__in=desde).select_related(
+                "presupuesto", "producto", "pieza", "machine"
+            )
+        )
+        descartados = queryset.exclude(status__in=desde).count()
+        if descartados:
+            self.message_user(
+                request,
+                gettext(
+                    "%(count)s trabajo(s) se ignoraron (ya estaban Impresos o "
+                    "Cancelados)."
+                )
+                % {"count": descartados},
+                level=messages.WARNING,
+            )
+        for job in elegibles:
+            job.status = new_status
+            self.save_model(request, job, None, True)
+        if elegibles:
+            self.message_user(
+                request,
+                gettext("%(count)s trabajo(s) actualizados.") % {"count": len(elegibles)},
+            )
+
+    @admin.action(description=_("▶ Marcar como Imprimiendo"))
+    def marcar_imprimiendo(self, request, queryset):
+        self._bulk_set_status(
+            request, queryset, ProductionJob.Status.PRINTING, desde=[ProductionJob.Status.PENDING]
+        )
+
+    @admin.action(description=_("✅ Marcar como Impreso"))
+    def marcar_impreso(self, request, queryset):
+        self._bulk_set_status(
+            request,
+            queryset,
+            ProductionJob.Status.DONE,
+            desde=[ProductionJob.Status.PENDING, ProductionJob.Status.PRINTING],
+        )
 
     @admin.action(description=_("Marcar impresión obsoleta (reimprimir)"))
     def marcar_obsoleta(self, request, queryset):
@@ -269,6 +318,18 @@ class ProductionJobAdmin(admin.ModelAdmin):
         return _fmt_dt(obj.estimated_print_end)
 
     def save_model(self, request, obj, form, change):
+        previous_status = None
+        if obj.pk:
+            previous_status = (
+                ProductionJob.objects.filter(pk=obj.pk)
+                .values_list("status", flat=True)
+                .first()
+            )
+        just_marked_done = (
+            obj.status == ProductionJob.Status.DONE
+            and previous_status != ProductionJob.Status.DONE
+        )
+
         # Marca inicio real al empezar a imprimir.
         if obj.status == ProductionJob.Status.PRINTING and not obj.started_at:
             obj.started_at = timezone.now()
@@ -298,6 +359,26 @@ class ProductionJobAdmin(admin.ModelAdmin):
                 obj.machine.recalc_printed_hours()
             # Guarda el trabajo impreso en el historial de su máquina.
             obj.register_history()
+
+            # Avisa a Slack (canal "pedidos-listos") la primera vez que este
+            # trabajo pasa a Impreso.
+            if just_marked_done:
+                from config.slack import notificar
+
+                pieza_nombre = obj.pieza.name if obj.pieza_id else str(obj.producto)
+                notificar(
+                    "trabajo_impreso",
+                    gettext(
+                        ":package: *%(pieza)s* (x%(cantidad)s) del pedido "
+                        "#%(pedido)s — %(cliente)s se terminó de imprimir."
+                    )
+                    % {
+                        "pieza": pieza_nombre,
+                        "cantidad": obj.quantity,
+                        "pedido": obj.presupuesto_id,
+                        "cliente": obj.presupuesto.client_name,
+                    },
+                )
 
         # Al cancelar un trabajo también queda registrado en el historial de su
         # máquina (con estado Cancelado).

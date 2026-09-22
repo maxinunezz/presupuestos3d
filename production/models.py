@@ -261,10 +261,10 @@ class ProductionJob(models.Model):
     def print_hours(self) -> Decimal:
         """Horas de impresión de este trabajo."""
         if self.pieza:
-            # Por pieza: corridas de gcode × horas por corrida.
+            # Por pieza: corridas de gcode × horas por corrida (el campo está en minutos).
+            minutes_per_run = Decimal(str(self.pieza.print_time_minutes or 0))
             return (
-                Decimal(self.gcode_runs)
-                * Decimal(str(self.pieza.print_time_hours or 0))
+                Decimal(self.gcode_runs) * (minutes_per_run / Decimal("60"))
             ).quantize(Decimal("0.01"))
         # Modo anterior (sin pieza): cantidad × horas por producto.
         return (
@@ -274,10 +274,10 @@ class ProductionJob(models.Model):
     @property
     def post_hours(self) -> Decimal:
         """Horas de post-proceso de este trabajo: cantidad × post-proceso por pieza."""
-        return (
-            Decimal(self.quantity)
-            * Decimal(str(self.producto.post_processing_hours or 0))
-        ).quantize(Decimal("0.01"))
+        minutes = Decimal(self.quantity) * Decimal(
+            str(self.producto.post_processing_minutes or 0)
+        )
+        return (minutes / Decimal("60")).quantize(Decimal("0.01"))
 
     @property
     def is_open(self) -> bool:
