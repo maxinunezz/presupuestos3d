@@ -1,5 +1,8 @@
 from django.contrib import admin, messages
+from django.http import HttpResponseNotAllowed
+from django.shortcuts import get_object_or_404, redirect
 from django.template.response import TemplateResponse
+from django.urls import path, reverse
 from django.utils import timezone
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext
@@ -13,6 +16,34 @@ def _fmt_dt(dt):
     if not dt:
         return "—"
     return timezone.localtime(dt).strftime("%d/%m %H:%M")
+
+
+def _marcar_impreso_view(model_admin, request, job_id, redirect_url_name):
+    """Marca un trabajo como Impreso directo desde un tablero (cola o tablero
+    general), reusando save_model de ProductionJobAdmin para disparar todos
+    los efectos (descuento/sobrante, historial, aviso a Slack, recalcular
+    cola, etc.). Compartido entre ColaProduccionAdmin y TableroAdmin."""
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+    job = get_object_or_404(
+        ProductionJob.objects.select_related("presupuesto", "producto", "pieza", "machine"),
+        pk=job_id,
+    )
+    if job.status not in (ProductionJob.Status.PENDING, ProductionJob.Status.PRINTING):
+        model_admin.message_user(
+            request,
+            gettext("Ese trabajo ya estaba Impreso o Cancelado."),
+            level=messages.WARNING,
+        )
+    else:
+        job.status = ProductionJob.Status.DONE
+        job_admin = admin.site._registry[ProductionJob]
+        job_admin.save_model(request, job, None, True)
+        model_admin.message_user(
+            request,
+            gettext("Trabajo '%(job)s' marcado como Impreso.") % {"job": job},
+        )
+    return redirect(reverse(redirect_url_name))
 
 
 class HistorialImpresionInline(admin.TabularInline):
@@ -151,19 +182,27 @@ class MaquinaAdmin(admin.ModelAdmin):
 @admin.register(ProductionJob)
 class ProductionJobAdmin(admin.ModelAdmin):
     list_display = (
+        "creado_display",
         "producto",
         "pieza",
+        "diseno_listo_display",
         "quantity",
-        "presupuesto",
-        "machine",
-        "order",
         "status",
+        "machine",
+        "presupuesto",
+        "order",
         "print_hours_display",
         "estimated_start_display",
         "estimated_print_end_display",
     )
+    # Por defecto se ordenan por fecha de ingreso a la cola (más viejo primero,
+    # como una cola real): el trabajo se crea al aprobar su presupuesto, así
+    # que esta fecha es cuándo entró a producción. Antes no había `ordering`
+    # explícito y el admin caía en el orden del modelo (por máquina), por eso
+    # la lista se veía "desordenada" sin relación con cuándo entró cada pedido.
+    ordering = ("created_at",)
     list_editable = ("machine", "order", "status")
-    list_filter = ("machine", "status")
+    list_filter = ("machine", "status", "producto__diseno_listo")
     search_fields = ("producto__name", "pieza__name", "presupuesto__client_name")
     autocomplete_fields = ("presupuesto", "producto", "pieza", "machine")
     readonly_fields = (
@@ -173,7 +212,59 @@ class ProductionJobAdmin(admin.ModelAdmin):
         "finished_at",
         "created_at",
     )
-    actions = ("marcar_obsoleta",)
+    actions = ("marcar_obsoleta", "marcar_imprimiendo", "marcar_impreso")
+
+    @admin.display(description=_("Ingresó"), ordering="created_at")
+    def creado_display(self, obj):
+        return _fmt_dt(obj.created_at)
+
+    @admin.display(description=_("Diseño"), boolean=True)
+    def diseno_listo_display(self, obj):
+        return bool(obj.producto_id and obj.producto.diseno_listo)
+
+    def _bulk_set_status(self, request, queryset, new_status, desde):
+        """Cambia de estado en lote, reusando el mismo camino que guardar una
+        fila a mano (save_model) para que se disparen todos los efectos
+        (descuento de material, sobrante, historial, recalcular cola, etc.)."""
+        elegibles = list(
+            queryset.filter(status__in=desde).select_related(
+                "presupuesto", "producto", "pieza", "machine"
+            )
+        )
+        descartados = queryset.exclude(status__in=desde).count()
+        if descartados:
+            self.message_user(
+                request,
+                gettext(
+                    "%(count)s trabajo(s) se ignoraron (ya estaban Impresos o "
+                    "Cancelados)."
+                )
+                % {"count": descartados},
+                level=messages.WARNING,
+            )
+        for job in elegibles:
+            job.status = new_status
+            self.save_model(request, job, None, True)
+        if elegibles:
+            self.message_user(
+                request,
+                gettext("%(count)s trabajo(s) actualizados.") % {"count": len(elegibles)},
+            )
+
+    @admin.action(description=_("▶ Marcar como Imprimiendo"))
+    def marcar_imprimiendo(self, request, queryset):
+        self._bulk_set_status(
+            request, queryset, ProductionJob.Status.PRINTING, desde=[ProductionJob.Status.PENDING]
+        )
+
+    @admin.action(description=_("✅ Marcar como Impreso"))
+    def marcar_impreso(self, request, queryset):
+        self._bulk_set_status(
+            request,
+            queryset,
+            ProductionJob.Status.DONE,
+            desde=[ProductionJob.Status.PENDING, ProductionJob.Status.PRINTING],
+        )
 
     @admin.action(description=_("Marcar impresión obsoleta (reimprimir)"))
     def marcar_obsoleta(self, request, queryset):
@@ -269,6 +360,18 @@ class ProductionJobAdmin(admin.ModelAdmin):
         return _fmt_dt(obj.estimated_print_end)
 
     def save_model(self, request, obj, form, change):
+        previous_status = None
+        if obj.pk:
+            previous_status = (
+                ProductionJob.objects.filter(pk=obj.pk)
+                .values_list("status", flat=True)
+                .first()
+            )
+        just_marked_done = (
+            obj.status == ProductionJob.Status.DONE
+            and previous_status != ProductionJob.Status.DONE
+        )
+
         # Marca inicio real al empezar a imprimir.
         if obj.status == ProductionJob.Status.PRINTING and not obj.started_at:
             obj.started_at = timezone.now()
@@ -298,6 +401,26 @@ class ProductionJobAdmin(admin.ModelAdmin):
                 obj.machine.recalc_printed_hours()
             # Guarda el trabajo impreso en el historial de su máquina.
             obj.register_history()
+
+            # Avisa a Slack (canal "produccion-3darg") la primera vez que este
+            # trabajo pasa a Impreso.
+            if just_marked_done:
+                from config.slack import notificar
+
+                pieza_nombre = obj.pieza.name if obj.pieza_id else str(obj.producto)
+                notificar(
+                    "trabajo_impreso",
+                    gettext(
+                        ":package: *%(pieza)s* (x%(cantidad)s) del pedido "
+                        "#%(pedido)s — %(cliente)s se terminó de imprimir."
+                    )
+                    % {
+                        "pieza": pieza_nombre,
+                        "cantidad": obj.quantity,
+                        "pedido": obj.presupuesto_id,
+                        "cliente": obj.presupuesto.client_name,
+                    },
+                )
 
         # Al cancelar un trabajo también queda registrado en el historial de su
         # máquina (con estado Cancelado).
@@ -353,6 +476,21 @@ class ColaProduccionAdmin(admin.ModelAdmin):
     def has_delete_permission(self, request, obj=None):
         return False
 
+    def get_urls(self):
+        urls = [
+            path(
+                "marcar-impreso/<int:job_id>/",
+                self.admin_site.admin_view(self.marcar_impreso_view),
+                name="production_colaproduccion_marcar_impreso",
+            ),
+        ]
+        return urls + super().get_urls()
+
+    def marcar_impreso_view(self, request, job_id):
+        return _marcar_impreso_view(
+            self, request, job_id, "admin:production_colaproduccion_changelist"
+        )
+
     def changelist_view(self, request, extra_context=None):
         now = timezone.now()
         schedule = compute_schedule(now)
@@ -364,14 +502,24 @@ class ColaProduccionAdmin(admin.ModelAdmin):
                     ProductionJob.Status.PRINTING,
                 ]
             )
-            .select_related("producto", "presupuesto", "machine")
+            .select_related("producto", "pieza", "presupuesto", "machine")
             .order_by("machine", "producto__priority", "order", "id")
         )
 
         def row(job):
             data = schedule.get(job.id, {})
+            print_end_raw = data.get("print_end")
+            # "Atrasado": sigue como Imprimiendo pero su fin estimado ya pasó,
+            # así que probablemente ya terminó en la realidad y falta marcarlo
+            # como Impreso (el estado nunca cambia solo con el paso del tiempo).
+            overdue = (
+                job.status == ProductionJob.Status.PRINTING
+                and print_end_raw is not None
+                and print_end_raw < now
+            )
             return {
                 "producto": str(job.producto),
+                "pieza": job.pieza.name if job.pieza_id else None,
                 "priority": job.producto.get_priority_display(),
                 "priority_high": job.producto.priority <= 2,
                 "quantity": job.quantity,
@@ -380,8 +528,13 @@ class ColaProduccionAdmin(admin.ModelAdmin):
                 "status": job.get_status_display(),
                 "print_hours": job.print_hours,
                 "start": _fmt_dt(data.get("start")),
-                "print_end": _fmt_dt(data.get("print_end")),
+                "print_end": _fmt_dt(print_end_raw),
                 "start_raw": data.get("start"),
+                "overdue": overdue,
+                "printing": job.status == ProductionJob.Status.PRINTING,
+                "mark_done_url": reverse(
+                    "admin:production_colaproduccion_marcar_impreso", args=[job.id]
+                ),
             }
 
         # Colas por máquina (solo activas).
@@ -399,12 +552,26 @@ class ColaProduccionAdmin(admin.ModelAdmin):
             ]
             if ends:
                 free = _fmt_dt(max(ends))
+            recent = list(
+                HistorialImpresion.objects.filter(
+                    maquina=machine, estado=HistorialImpresion.Estado.IMPRESO
+                ).order_by("-finalizado_el")[:5]
+            )
             machines.append(
                 {
                     "name": machine.name,
                     "jobs": mjobs,
                     "free_at": free or gettext("Libre ahora"),
                     "count": len(mjobs),
+                    "recent": [
+                        {
+                            "titulo": h.titulo,
+                            "cantidad": h.cantidad,
+                            "horas": h.horas_impresion,
+                            "finalizado_el": _fmt_dt(h.finalizado_el),
+                        }
+                        for h in recent
+                    ],
                 }
             )
 
@@ -416,6 +583,7 @@ class ColaProduccionAdmin(admin.ModelAdmin):
             (row(j) for j in jobs),
             key=lambda r: (r["start_raw"] is None, r["start_raw"] or now),
         )
+        overdue_count = sum(1 for r in total if r["overdue"])
 
         context = {
             **self.admin_site.each_context(request),
@@ -423,6 +591,7 @@ class ColaProduccionAdmin(admin.ModelAdmin):
             "machines": machines,
             "unassigned": unassigned,
             "total": total,
+            "overdue_count": overdue_count,
             "window": "07:00 a 23:00",
             **(extra_context or {}),
         }
@@ -448,6 +617,21 @@ class TableroAdmin(admin.ModelAdmin):
     def has_delete_permission(self, request, obj=None):
         return False
 
+    def get_urls(self):
+        urls = [
+            path(
+                "marcar-impreso/<int:job_id>/",
+                self.admin_site.admin_view(self.marcar_impreso_view),
+                name="production_tablero_marcar_impreso",
+            ),
+        ]
+        return urls + super().get_urls()
+
+    def marcar_impreso_view(self, request, job_id):
+        return _marcar_impreso_view(
+            self, request, job_id, "admin:production_tablero_changelist"
+        )
+
     def changelist_view(self, request, extra_context=None):
         from budgets.models import Presupuesto
 
@@ -461,7 +645,7 @@ class TableroAdmin(admin.ModelAdmin):
                     ProductionJob.Status.PRINTING,
                 ]
             )
-            .select_related("producto", "presupuesto", "machine")
+            .select_related("producto", "pieza", "presupuesto", "machine")
             .order_by("machine", "producto__priority", "order", "id")
         )
 
@@ -501,13 +685,23 @@ class TableroAdmin(admin.ModelAdmin):
             cur = None
             if current:
                 data = schedule.get(current.id, {})
+                printing = current.status == ProductionJob.Status.PRINTING
                 cur = {
                     "producto": str(current.producto),
+                    "pieza": current.pieza.name if current.pieza_id else None,
                     "quantity": current.quantity,
                     "cliente": current.presupuesto.client_name,
                     "presupuesto_id": current.presupuesto_id,
-                    "printing": current.status == ProductionJob.Status.PRINTING,
+                    "printing": printing,
                     "print_end": _fmt_dt(data.get("print_end")),
+                    "mark_done_url": (
+                        reverse(
+                            "admin:production_tablero_marcar_impreso",
+                            args=[current.id],
+                        )
+                        if printing
+                        else None
+                    ),
                 }
             machines.append(
                 {

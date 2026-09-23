@@ -69,13 +69,13 @@ class Producto(models.Model):
     # Las horas de máquina y el filamento ya NO viven acá: ahora están en cada
     # Pieza (ver modelo Pieza). El producto suma las piezas para sus totales.
     machine_cost_per_hour = models.DecimalField(
-        _("Costo de máquina por hora"), max_digits=10, decimal_places=2, default=0
+        _("Costo de máquina por hora"), max_digits=10, decimal_places=2, default=300
     )
     waste_percent = models.DecimalField(
         _("Merma de material (%)"),
         max_digits=5,
         decimal_places=2,
-        default=0,
+        default=5,
         help_text=_(
             "Desperdicio de filamento por purga (multicolor), soportes y fallas. "
             "Se aplica sobre el costo y el consumo de material."
@@ -83,27 +83,27 @@ class Producto(models.Model):
     )
 
     # --- Mano de obra / post-proceso ---
-    post_processing_hours = models.DecimalField(
-        _("Post-proceso por pieza (hs)"),
-        max_digits=6,
+    post_processing_minutes = models.DecimalField(
+        _("Post-proceso por pieza (min)"),
+        max_digits=7,
         decimal_places=2,
-        default=0,
+        default=1,
         help_text=_("Tiempo de armado, lijado, pintado, pegado de agregados, etc."),
     )
     labor_cost_per_hour = models.DecimalField(
-        _("Costo de mano de obra por hora"), max_digits=10, decimal_places=2, default=0
+        _("Costo de mano de obra por hora"), max_digits=10, decimal_places=2, default=5000
     )
 
     # --- Precio ---
-    margin_percent = models.DecimalField(
-        _("Margen (%)"), max_digits=5, decimal_places=2, default=0
-    )
-    round_to = models.DecimalField(
-        _("Redondear precio a múltiplo de"),
+    sale_price = models.DecimalField(
+        _("Precio de venta"),
         max_digits=10,
         decimal_places=2,
         default=0,
-        help_text=_("Ej: 100 redondea el precio a la centena más cercana. 0 = sin redondeo."),
+        help_text=_(
+            "Precio final al que se vende UNA unidad. Se carga a mano en base al "
+            "costo (ver arriba); no se recalcula solo si cambian los costos."
+        ),
     )
 
     # --- Archivo del modelo (solo local por ahora) ---
@@ -266,7 +266,8 @@ class Producto(models.Model):
 
     @property
     def labor_cost(self) -> Decimal:
-        return (_dec(self.post_processing_hours) * _dec(self.labor_cost_per_hour)).quantize(
+        post_processing_hours = _dec(self.post_processing_minutes) / Decimal("60")
+        return (post_processing_hours * _dec(self.labor_cost_per_hour)).quantize(
             Decimal("0.01")
         )
 
@@ -283,17 +284,69 @@ class Producto(models.Model):
 
     @property
     def unit_price(self) -> Decimal:
-        """Precio de venta por pieza: costo + margen, redondeado."""
-        margin_multiplier = Decimal("1") + (self.margin_percent / Decimal("100"))
-        price = (self.unit_cost * margin_multiplier).quantize(Decimal("0.01"))
+        """Precio de venta por pieza: el que se cargó a mano en `sale_price`."""
+        return _dec(self.sale_price).quantize(Decimal("0.01"))
 
-        if self.round_to and self.round_to > 0:
-            steps = (price / self.round_to).quantize(
-                Decimal("1"), rounding=ROUND_HALF_UP
-            )
-            price = (steps * self.round_to).quantize(Decimal("0.01"))
+    # ---- Costo "promedio" (si se aprovechan las sobrantes de cada corrida) ----
+    # `unit_cost` carga la corrida entera al primer producto que la necesita
+    # (es el costo real de esta unidad, imprimiéndola ahora, sola). Acá en
+    # cambio se prorratea el material/máquina entre TODAS las unidades que
+    # salen de cada corrida (no solo las que usa este producto): es el costo
+    # promedio esperado si las piezas sobrantes se terminan usando en otros
+    # pedidos (quedan en stock y no se vuelven a pagar). Los agregados y la
+    # mano de obra son siempre por unidad real, no cambian entre uno y otro.
 
-        return price
+    @property
+    def total_filament_grams_avg(self) -> Decimal:
+        return sum(
+            (pieza.filament_grams_avg for pieza in self.piezas.all()), Decimal("0")
+        ).quantize(Decimal("0.01"))
+
+    @property
+    def total_machine_hours_avg(self) -> Decimal:
+        return sum(
+            (pieza.machine_hours_avg for pieza in self.piezas.all()), Decimal("0")
+        ).quantize(Decimal("0.01"))
+
+    @property
+    def material_cost_avg(self) -> Decimal:
+        """Costo de filamento promedio de UN producto, sin merma."""
+        return sum(
+            (pieza.material_cost_avg for pieza in self.piezas.all()), Decimal("0")
+        ).quantize(Decimal("0.01"))
+
+    @property
+    def material_waste_cost_avg(self) -> Decimal:
+        return (
+            self.material_cost_avg * (self.waste_percent / Decimal("100"))
+        ).quantize(Decimal("0.01"))
+
+    @property
+    def machine_cost_avg(self) -> Decimal:
+        return (
+            self.total_machine_hours_avg * _dec(self.machine_cost_per_hour)
+        ).quantize(Decimal("0.01"))
+
+    @property
+    def unit_cost_avg(self) -> Decimal:
+        """Costo promedio de UNA pieza si se aprovechan las sobrantes de corrida."""
+        return (
+            self.material_cost_avg
+            + self.material_waste_cost_avg
+            + self.aggregate_cost
+            + self.machine_cost_avg
+            + self.labor_cost
+        ).quantize(Decimal("0.01"))
+
+    @property
+    def margin_percent(self) -> Decimal:
+        """Margen resultante del precio cargado a mano sobre el costo. 0 si no hay costo."""
+        cost = self.unit_cost
+        if cost <= 0:
+            return Decimal("0.00")
+        return (
+            (self.unit_price - cost) / cost * Decimal("100")
+        ).quantize(Decimal("0.01"))
 
     # ---- Stock (consumo para una cantidad dada de productos) ----
 
@@ -397,9 +450,9 @@ class Pieza(models.Model):
         default=1,
         help_text=_("Cuántas unidades de esta pieza salen en UNA impresión (un gcode)."),
     )
-    print_time_hours = models.DecimalField(
-        _("Horas de máquina por corrida de gcode"),
-        max_digits=6,
+    print_time_minutes = models.DecimalField(
+        _("Minutos de máquina por corrida de gcode"),
+        max_digits=8,
         decimal_places=2,
         default=0,
         help_text=_("Tiempo de impresión de UNA corrida del gcode (saca `piezas por gcode`)."),
@@ -408,8 +461,9 @@ class Pieza(models.Model):
         _("Necesita AMS (multicolor)"),
         default=False,
         help_text=_(
-            "Se marca solo cuando la pieza usa más de una línea de filamento "
-            "(multicolor): debe ir a una máquina con AMS. Podés forzarlo a mano."
+            "Marcala si la pieza usa más de una línea de filamento (multicolor): "
+            "debe ir a una máquina con AMS. Con esto marcado hacen falta 2 o más "
+            "líneas de filamento; sin marcar, no puede haber más de una."
         ),
     )
     stock_quantity = models.PositiveIntegerField(
@@ -453,7 +507,8 @@ class Pieza(models.Model):
     @property
     def machine_hours(self) -> Decimal:
         """Horas de máquina para UN producto (corridas × horas por corrida)."""
-        return (_dec(self.print_time_hours) * self.gcode_runs).quantize(Decimal("0.01"))
+        hours_per_run = _dec(self.print_time_minutes) / Decimal("60")
+        return (hours_per_run * self.gcode_runs).quantize(Decimal("0.01"))
 
     @property
     def material_cost_per_run(self) -> Decimal:
@@ -466,6 +521,36 @@ class Pieza(models.Model):
     def material_cost(self) -> Decimal:
         """Costo de filamento para UN producto (corridas × costo por corrida)."""
         return (self.material_cost_per_run * self.gcode_runs).quantize(Decimal("0.01"))
+
+    # ---- Cálculos "promedio" (si se aprovecha toda la sobrante de la corrida) ----
+    # La corrida se paga entera aunque el producto solo use `units_needed` de las
+    # `pieces_per_gcode` que salen: acá prorrateamos el costo/tiempo de la corrida
+    # entre TODAS las unidades que salen (no solo las que usa este producto), para
+    # estimar cuánto sale en promedio si esas sobrantes se terminan usando en
+    # otros pedidos (quedan en `stock_quantity` y no vuelven a costar).
+
+    @property
+    def filament_grams_avg(self) -> Decimal:
+        """Gramos de filamento por UN producto, prorrateados sobre toda la corrida."""
+        ppg = self.pieces_per_gcode or 1
+        return (
+            self.filament_grams_per_run / ppg * (self.units_needed or 0)
+        ).quantize(Decimal("0.01"))
+
+    @property
+    def machine_hours_avg(self) -> Decimal:
+        """Horas de máquina por UN producto, prorrateadas sobre toda la corrida."""
+        ppg = self.pieces_per_gcode or 1
+        hours_per_run = _dec(self.print_time_minutes) / Decimal("60")
+        return (hours_per_run / ppg * (self.units_needed or 0)).quantize(Decimal("0.01"))
+
+    @property
+    def material_cost_avg(self) -> Decimal:
+        """Costo de filamento por UN producto, prorrateado sobre toda la corrida."""
+        ppg = self.pieces_per_gcode or 1
+        return (
+            self.material_cost_per_run / ppg * (self.units_needed or 0)
+        ).quantize(Decimal("0.01"))
 
     def auto_requires_ams(self) -> bool:
         """True si la pieza tiene más de una línea de filamento (multicolor)."""
@@ -550,6 +635,14 @@ class PresupuestoNotApprovableError(Exception):
     """
     Se intentó aprobar un presupuesto que no está en estado aprobable.
     Evita descontar stock dos veces sobre el mismo presupuesto.
+    """
+
+
+class DisenoNoListoError(Exception):
+    """
+    Se intentó aprobar (= mandar a la cola de producción) un presupuesto que
+    incluye algún producto que necesita imprimirse pero todavía no tiene
+    marcado 'Diseño listo' en su costeo.
     """
 
 
@@ -719,11 +812,11 @@ class Presupuesto(models.Model):
         ).quantize(Decimal("0.01"))
 
     @property
-    def total_post_processing_hours(self) -> Decimal:
+    def total_post_processing_minutes(self) -> Decimal:
         """Suma del post-proceso de todos los productos del pedido × cantidad."""
         return sum(
             (
-                Decimal(item.quantity) * _dec(item.producto.post_processing_hours)
+                Decimal(item.quantity) * _dec(item.producto.post_processing_minutes)
                 for item in self.items.select_related("producto").all()
             ),
             Decimal("0"),
@@ -753,7 +846,37 @@ class Presupuesto(models.Model):
         print_ready = self.estimated_print_ready
         if print_ready is None:
             return None
-        return print_ready + timedelta(hours=float(self.total_post_processing_hours))
+        return print_ready + timedelta(minutes=float(self.total_post_processing_minutes))
+
+    def productos_sin_diseno_listo(self):
+        """
+        Sin modificar nada: si este presupuesto se aprobara AHORA, calcula qué
+        productos necesitarían imprimirse (no se cubren 100% con el stock de
+        terminados + stock de piezas) pero todavía no tienen marcado 'Diseño
+        listo' en su costeo. Devuelve una lista de nombres (ordenada), vacía si
+        no hay ninguno. Se usa para avisar/bloquear ANTES de aprobar.
+        """
+        sin_diseno = set()
+        for item in self.items.select_related("producto").all():
+            qty = item.quantity
+            if qty <= 0:
+                continue
+            if not self.para_stock:
+                qty = max(qty - item.producto.stock_quantity, 0)
+            if qty <= 0:
+                continue
+            producto = item.producto
+            if producto.diseno_listo:
+                continue
+            for pieza in producto.piezas.all():
+                units_required = pieza.units_needed * qty
+                if units_required <= 0:
+                    continue
+                to_print = units_required - min(pieza.stock_quantity, units_required)
+                if to_print > 0:
+                    sin_diseno.add(producto.name)
+                    break
+        return sorted(sin_diseno)
 
     def _provision_production(self):
         """
@@ -783,6 +906,20 @@ class Presupuesto(models.Model):
         result = {"from_stock": [], "from_finished": [], "shortages": []}
         if self.stock_provisioned:
             return result
+
+        # Antes de tocar el inventario: si algún producto necesita imprimirse
+        # y no tiene el diseño marcado como listo, no se aprueba (no se puede
+        # mandar a la cola de producción sin diseño listo).
+        sin_diseno = self.productos_sin_diseno_listo()
+        if sin_diseno:
+            raise DisenoNoListoError(
+                gettext(
+                    "No se puede aprobar: falta marcar 'Diseño listo' en el "
+                    "costeo de estos productos antes de mandarlos a la cola de "
+                    "producción: %(productos)s."
+                )
+                % {"productos": ", ".join(sin_diseno)}
+            )
 
         free = machine_free_times()
 
@@ -837,7 +974,7 @@ class Presupuesto(models.Model):
         #    colas) y descontamos el filamento de cada uno.
         def _job_hours(pieza, to_print):
             runs = math.ceil(to_print / (pieza.pieces_per_gcode or 1))
-            return _dec(pieza.print_time_hours) * runs
+            return (_dec(pieza.print_time_minutes) / Decimal("60")) * runs
 
         # Prioridad manual del producto primero (1=Alta … 9=Sin prioridad va al
         # final); a igual prioridad, el trabajo más largo se asigna antes.
@@ -1394,6 +1531,19 @@ class Presupuesto(models.Model):
         # stock de productos terminados.
         if target == Status.COMPLETED:
             self.add_finished_to_stock()
+
+            # Avisa a Slack (canal "pedidos-listos") que ya se imprimieron
+            # todas las piezas de este pedido.
+            from config.slack import notificar
+
+            notificar(
+                "pedido_completado",
+                gettext(
+                    ":white_check_mark: Pedido #%(pedido)s — %(cliente)s: se "
+                    "terminaron de imprimir todas las piezas."
+                )
+                % {"pedido": self.pk, "cliente": self.client_name},
+            )
         return True
 
 

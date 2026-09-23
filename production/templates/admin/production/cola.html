@@ -25,8 +25,33 @@
     .machine-card .pos { color: #888; font-weight: bold; width: 22px; }
     .machine-card .empty { color: #999; padding: 14px; }
     .badge-print { background: #ffeeba; color: #7a5b00; border-radius: 3px; padding: 1px 6px; font-size: 11px; }
+    .badge-overdue { background: #b3261e; color: #fff; border-radius: 3px; padding: 1px 6px; font-size: 11px; }
     .badge-prio { background: #111; color: #fff; border-radius: 3px; padding: 1px 6px; font-size: 11px; }
     .badge-prio.high { background: #b3261e; }
+    tr.row-overdue td { background: #fdecea !important; }
+    html[data-theme="dark"] tr.row-overdue td { background: #3a1613 !important; }
+
+    .btn-mark-done {
+        background: #b3261e; color: #fff; border: none; border-radius: 4px;
+        padding: 3px 8px; font-size: 11px; cursor: pointer; white-space: nowrap;
+    }
+    .btn-mark-done:hover { background: #8c1e18; }
+
+    .recent-machines { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 8px; }
+    .recent-card {
+        flex: 1 1 280px; min-width: 260px; background: #fff; border: 1px solid #ddd;
+        border-radius: 8px; overflow: hidden;
+    }
+    .recent-card .mc-head {
+        background: #111; color: #fff; padding: 8px 12px; font-weight: bold; font-size: 13px;
+    }
+    .recent-card table { width: 100%; border-collapse: collapse; }
+    .recent-card td, .recent-card th {
+        padding: 6px 12px; border-bottom: 1px solid #eee; font-size: 12px;
+        color: #1a1a1a; background: #fff; text-align: left;
+    }
+    .recent-card th { background: #f5f5f5; font-size: 10px; text-transform: uppercase; color: #555; }
+    .recent-card .empty { color: #999; padding: 12px; font-size: 12px; }
 
     table.total-queue { width: 100%; border-collapse: collapse; background: #fff; margin-top: 8px; }
     table.total-queue th { background: #111; color: #fff; text-align: left; padding: 8px 10px; font-size: 12px; text-transform: uppercase; }
@@ -41,6 +66,13 @@
     El post-proceso se suma después, sobre la fecha de entrega de cada presupuesto.{% endblocktranslate %}
 </p>
 
+{% if overdue_count %}
+<div class="warn-box">
+    <b>⚠ {% blocktranslate with n=overdue_count %}{{ n }} trabajo(s) siguen como "imprimiendo" pero su fin estimado ya pasó.{% endblocktranslate %}</b>
+    {% translate 'Seguramente ya terminaron: marcalos como "Impreso" en la cola o en "Trabajos de producción" (el estado nunca cambia solo).' %}
+</div>
+{% endif %}
+
 <div class="section-title">🖨️ {% translate "Cola por máquina" %}</div>
 <div class="machines">
     {% for m in machines %}
@@ -51,23 +83,33 @@
         </div>
         <table>
             <thead>
-                <tr><th class="pos">#</th><th>{% translate "Producto" %}</th><th>{% translate "Inicio" %}</th><th>{% translate "Fin impr." %}</th></tr>
+                <tr><th class="pos">#</th><th>{% translate "Producto" %}</th><th>{% translate "Inicio" %}</th><th>{% translate "Fin impr." %}</th><th></th></tr>
             </thead>
             <tbody>
                 {% for j in m.jobs %}
-                <tr>
+                <tr{% if j.overdue %} class="row-overdue"{% endif %}>
                     <td class="pos">{{ forloop.counter }}</td>
                     <td>
-                        {{ j.producto }} ×{{ j.quantity }}
+                        {% if j.pieza %}{{ j.pieza }} ×{{ j.quantity }}{% else %}{{ j.producto }} ×{{ j.quantity }}{% endif %}
                         {% if j.priority_high %}<span class="badge-prio high">{{ j.priority }}</span>{% endif %}<br>
+                        {% if j.pieza %}<small>{% translate "de" %} {{ j.producto }}</small><br>{% endif %}
                         <small>{{ j.cliente }} · #{{ j.presupuesto_id }} · {{ j.print_hours }} h</small>
                         {% if j.status == "Imprimiendo" %} <span class="badge-print">{% translate "imprimiendo" %}</span>{% endif %}
+                        {% if j.overdue %} <span class="badge-overdue">⚠ {% translate "atrasado" %}</span>{% endif %}
                     </td>
                     <td>{{ j.start }}</td>
                     <td>{{ j.print_end }}</td>
+                    <td>
+                        {% if j.printing %}
+                        <form method="post" action="{{ j.mark_done_url }}" onsubmit="return confirm('{% translate "¿Marcar este trabajo como Impreso?" %}');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn-mark-done">✅ {% translate "Impreso" %}</button>
+                        </form>
+                        {% endif %}
+                    </td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="4" class="empty">{% translate "Sin trabajos en cola." %}</td></tr>
+                <tr><td colspan="5" class="empty">{% translate "Sin trabajos en cola." %}</td></tr>
                 {% endfor %}
             </tbody>
         </table>
@@ -88,24 +130,61 @@
     <thead>
         <tr>
             <th>{% translate "Producto" %}</th><th>{% translate "Cliente" %}</th><th>{% translate "Máquina / estado" %}</th>
-            <th>{% translate "Horas" %}</th><th>{% translate "Inicio est." %}</th><th>{% translate "Fin impr. est." %}</th>
+            <th>{% translate "Horas" %}</th><th>{% translate "Inicio est." %}</th><th>{% translate "Fin impr. est." %}</th><th></th>
         </tr>
     </thead>
     <tbody>
         {% for j in total %}
-        <tr>
-            <td>{{ j.producto }} ×{{ j.quantity }}
-                {% if j.priority_high %}<span class="badge-prio high">{{ j.priority }}</span>{% endif %}</td>
+        <tr{% if j.overdue %} class="row-overdue"{% endif %}>
+            <td>{% if j.pieza %}{{ j.pieza }} ×{{ j.quantity }}{% else %}{{ j.producto }} ×{{ j.quantity }}{% endif %}
+                {% if j.priority_high %}<span class="badge-prio high">{{ j.priority }}</span>{% endif %}
+                {% if j.pieza %}<br><small>{% translate "de" %} {{ j.producto }}</small>{% endif %}</td>
             <td>{{ j.cliente }} (#{{ j.presupuesto_id }})</td>
-            <td>{{ j.status }}</td>
+            <td>{{ j.status }}{% if j.overdue %} <span class="badge-overdue">⚠ {% translate "atrasado" %}</span>{% endif %}</td>
             <td>{{ j.print_hours }} h</td>
             <td>{{ j.start }}</td>
             <td>{{ j.print_end }}</td>
+            <td>
+                {% if j.printing %}
+                <form method="post" action="{{ j.mark_done_url }}" onsubmit="return confirm('{% translate "¿Marcar este trabajo como Impreso?" %}');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn-mark-done">✅ {% translate "Impreso" %}</button>
+                </form>
+                {% endif %}
+            </td>
         </tr>
         {% empty %}
-        <tr><td colspan="6" class="empty">{% translate "No hay trabajos en cola." %}</td></tr>
+        <tr><td colspan="7" class="empty">{% translate "No hay trabajos en cola." %}</td></tr>
         {% endfor %}
     </tbody>
 </table>
+
+<div class="section-title">🗂️ {% translate "Últimos impresos por máquina" %}</div>
+<div class="recent-machines">
+    {% for m in machines %}
+    <div class="recent-card">
+        <div class="mc-head">{{ m.name }}</div>
+        <table>
+            <thead>
+                <tr><th>{% translate "Producto" %}</th><th>{% translate "Cant." %}</th><th>{% translate "Horas" %}</th><th>{% translate "Finalizado" %}</th></tr>
+            </thead>
+            <tbody>
+                {% for r in m.recent %}
+                <tr>
+                    <td>{{ r.titulo }}</td>
+                    <td>{{ r.cantidad }}</td>
+                    <td>{{ r.horas }} h</td>
+                    <td>{{ r.finalizado_el }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="4" class="empty">{% translate "Todavía no hay impresiones terminadas." %}</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% empty %}
+    <p class="empty">{% translate 'No hay máquinas activas.' %}</p>
+    {% endfor %}
+</div>
 
 {% endblock %}

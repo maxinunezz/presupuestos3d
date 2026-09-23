@@ -40,6 +40,12 @@
     .buy-box { background: #fdecea; border: 1px solid #f3b9b2; border-radius: 8px; padding: 4px 14px 14px; margin-top: 10px; }
     .buy-ok { background: #eaf7ec; border: 1px solid #b7e0bf; border-radius: 8px; padding: 12px 14px; margin-top: 10px; color: #1e7e34; }
     table.tb.buy th { background: #b3261e; }
+
+    .btn-mark-done {
+        background: #b3261e; color: #fff; border: none; border-radius: 4px;
+        padding: 5px 10px; font-size: 12px; cursor: pointer; margin-top: 8px;
+    }
+    .btn-mark-done:hover { background: #8c1e18; }
 </style>
 
 <p class="tb-intro">
@@ -62,10 +68,17 @@
         <div class="nc-body">
             {% if m.current %}
                 {% if m.current.printing %}<span class="badge-print">{% translate "imprimiendo" %}</span>{% else %}<span class="badge-next">{% translate "próximo" %}</span>{% endif %}
-                <div class="prod">{{ m.current.producto }} ×{{ m.current.quantity }}</div>
+                <div class="prod">{% if m.current.pieza %}{{ m.current.pieza }} ×{{ m.current.quantity }}{% else %}{{ m.current.producto }} ×{{ m.current.quantity }}{% endif %}</div>
+                {% if m.current.pieza %}<div class="meta">{% translate "de" %} {{ m.current.producto }}</div>{% endif %}
                 <div class="meta">{{ m.current.cliente }} · #{{ m.current.presupuesto_id }}</div>
                 <div class="meta">{% translate "Termina:" %} <b>{{ m.current.print_end }}</b></div>
                 <div class="meta">{% blocktranslate with n=m.queue_count %}{{ n }} en cola en esta máquina{% endblocktranslate %}</div>
+                {% if m.current.printing %}
+                <form method="post" action="{{ m.current.mark_done_url }}" onsubmit="return confirm('{% translate "¿Marcar este trabajo como Impreso?" %}');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn-mark-done">✅ {% translate "Marcar como Impreso" %}</button>
+                </form>
+                {% endif %}
             {% else %}
                 <div class="idle">{% translate "Libre — sin trabajos en cola." %}</div>
             {% endif %}

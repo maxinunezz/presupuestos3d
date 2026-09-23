@@ -19,8 +19,12 @@ def make_producto(**kwargs):
     defaults = dict(
         name="Pieza",
         machine_cost_per_hour=Decimal("100"),
+        waste_percent=Decimal("0"),
         labor_cost_per_hour=Decimal("0"),
-        margin_percent=Decimal("0"),
+        sale_price=Decimal("0"),
+        # Diseño listo por default: la mayoría de los tests no ejercitan esa
+        # regla y solo les interesa poder aprobar/mandar a producción.
+        diseno_listo=True,
     )
     defaults.update(kwargs)
     return Producto.objects.create(**defaults)
@@ -34,7 +38,7 @@ def add_pieza(producto, filament, grams, print_hours=Decimal("2"), name="Pieza p
         name=name,
         units_needed=1,
         pieces_per_gcode=1,
-        print_time_hours=print_hours,
+        print_time_minutes=print_hours * 60,
     )
     PiezaFilamentLine.objects.create(pieza=pieza, filament=filament, grams_used=grams)
     return pieza
@@ -50,21 +54,16 @@ class ProductoCosteoTests(TestCase):
             stock_grams=Decimal("10000"),
         )
 
-    def test_unit_cost_y_unit_price(self):
-        p = make_producto(margin_percent=Decimal("50"))
+    def test_unit_cost_y_margin_percent(self):
+        p = make_producto(sale_price=Decimal("1800"))
         add_pieza(p, self.fil, Decimal("100"))
         # material 100g * $10 = 1000 ; máquina 2h * 100 = 200 ; total 1200
         self.assertEqual(p.material_cost, Decimal("1000.00"))
         self.assertEqual(p.machine_cost, Decimal("200.00"))
         self.assertEqual(p.unit_cost, Decimal("1200.00"))
-        # margen 50% -> 1800
         self.assertEqual(p.unit_price, Decimal("1800.00"))
-
-    def test_redondeo_precio(self):
-        p = make_producto(margin_percent=Decimal("0"), round_to=Decimal("100"))
-        add_pieza(p, self.fil, Decimal("123"))
-        # material 123*10=1230 + máquina 200 = 1430 -> redondea a 1400
-        self.assertEqual(p.unit_price, Decimal("1400.00"))
+        # margen resultante del precio cargado a mano sobre el costo: 50%
+        self.assertEqual(p.margin_percent, Decimal("50.00"))
 
 
 class PresupuestoTotalTests(TestCase):
@@ -76,7 +75,7 @@ class PresupuestoTotalTests(TestCase):
             cost_per_kg=Decimal("10000"),
             stock_grams=Decimal("10000"),
         )
-        self.p = make_producto(margin_percent=Decimal("0"))
+        self.p = make_producto(sale_price=Decimal("1200"))
         add_pieza(self.p, self.fil, Decimal("100"))  # unit_price = 1000 + 200 = 1200
 
     def test_item_congela_precio(self):
@@ -237,7 +236,7 @@ class AprobacionStockPiezasTests(TestCase):
         # Pieza que saca 4 por corrida; se piden 3 -> imprime 1 corrida (4), sobra 1.
         pieza = Pieza.objects.create(
             producto=self.p, name="Tapa", units_needed=1, pieces_per_gcode=4,
-            print_time_hours=Decimal("1"),
+            print_time_minutes=Decimal("60"),
         )
         PiezaFilamentLine.objects.create(
             pieza=pieza, filament=self.fil, grams_used=Decimal("50")

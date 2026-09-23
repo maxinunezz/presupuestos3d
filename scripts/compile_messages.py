@@ -184,6 +184,8 @@ INVENTORY = {
     '(no ambos, no ninguno).':
         'Choose exactly one item: a Filament or an Aggregate (not both, not neither).',
     'Ingresá una cantidad distinta de cero.': 'Enter a non-zero quantity.',
+    'Ingresó': 'Entered',
+    'Marcar como Impreso': 'Mark as Printed',
     'Stock ajustado en %(delta)s%(unidad)s. Nuevo stock: %(resultante)s %(unidad)s.':
         'Stock adjusted by %(delta)s%(unidad)s. New stock: %(resultante)s %(unidad)s.',
     'Buscar marca, color, material o agregado…':
@@ -311,6 +313,10 @@ GASTOS = {
 }
 
 BUDGETS = {
+    ':white_check_mark: Pedido #%(pedido)s — %(cliente)s: se '
+    'terminaron de imprimir todas las piezas.':
+        ':white_check_mark: Order #%(pedido)s — %(cliente)s: all '
+        'parts finished printing.',
     'Alta': 'High',
     'Media': 'Medium',
     'Baja': 'Low',
@@ -324,12 +330,11 @@ BUDGETS = {
     'Costo de máquina por hora': 'Machine cost per hour',
     'Merma de material (%)': 'Material waste (%)',
     'Desperdicio de filamento por purga (multicolor), soportes y fallas. Se aplica sobre el costo y el consumo de material.': 'Filament wasted on purge (multicolor), supports and failures. Applied to material cost and consumption.',
-    'Post-proceso por pieza (hs)': 'Post-processing per part (hrs)',
+    'Post-proceso por pieza (min)': 'Post-processing per part (min)',
     'Tiempo de armado, lijado, pintado, pegado de agregados, etc.': 'Time for assembly, sanding, painting, gluing add-ons, etc.',
     'Costo de mano de obra por hora': 'Labor cost per hour',
-    'Margen (%)': 'Margin (%)',
-    'Redondear precio a múltiplo de': 'Round price to a multiple of',
-    'Ej: 100 redondea el precio a la centena más cercana. 0 = sin redondeo.': 'E.g. 100 rounds the price to the nearest hundred. 0 = no rounding.',
+    'Precio de venta': 'Sale price',
+    'Precio final al que se vende UNA unidad. Se carga a mano en base al costo (ver arriba); no se recalcula solo si cambian los costos.': 'Final price for ONE unit. Entered by hand based on the cost (see above); it does not recalculate automatically if costs change.',
     'G-code': 'G-code',
     'Pegá acá el g-code del laminador (opcional).': 'Paste the slicer g-code here (optional).',
     'Archivo .3mf / modelo': 'File .3mf / model',
@@ -349,10 +354,12 @@ BUDGETS = {
     'Cuántas unidades de esta pieza lleva UN producto.': 'How many units of this part ONE product requires.',
     'Piezas por corrida de gcode': 'Parts per gcode run',
     'Cuántas unidades de esta pieza salen en UNA impresión (un gcode).': 'How many units of this part come out of ONE print (a single gcode).',
-    'Horas de máquina por corrida de gcode': 'Machine hours per gcode run',
+    'Minutos de máquina por corrida de gcode': 'Machine minutes per gcode run',
     'Tiempo de impresión de UNA corrida del gcode (saca `piezas por gcode`).': 'Print time of ONE gcode run (yields `parts per gcode`).',
     'Necesita AMS (multicolor)': 'Requires AMS (multicolor)',
-    'Se marca solo cuando la pieza usa más de una línea de filamento (multicolor): debe ir a una máquina con AMS. Podés forzarlo a mano.': 'Set automatically when the part uses more than one filament line (multicolor): it must go to an AMS machine. You can force it manually.',
+    'Marcala si la pieza usa más de una línea de filamento (multicolor): debe ir a una máquina con AMS. Con esto marcado hacen falta 2 o más líneas de filamento; sin marcar, no puede haber más de una.': 'Check it if the part uses more than one filament line (multicolor): it must go to an AMS machine. With this checked you need 2 or more filament lines; unchecked, there can be no more than one.',
+    "Esta pieza tiene marcado 'Necesita AMS (multicolor)': cargá al menos 2 líneas de filamento (una por color).": "This part has 'Requires AMS (multicolor)' checked: load at least 2 filament lines (one per color).",
+    "Para cargar más de una línea de filamento primero tenés que marcar 'Necesita AMS (multicolor)'.": "To load more than one filament line you first need to check 'Requires AMS (multicolor)'.",
     'Stock de piezas impresas': 'Printed parts stock',
     'Unidades de esta pieza ya impresas y disponibles en stock.': 'Units of this part already printed and available in stock.',
     'Orden': 'Order',
@@ -402,15 +409,20 @@ BUDGETS = {
     'Cancelación pedido #%(pk)s: %(name)s ×%(qty)s': 'Order cancellation #%(pk)s: %(name)s ×%(qty)s',
     'Cantidad de piezas': 'Number of parts',
     'Precio unitario (congelado)': 'Unit price (frozen)',
+    'Precio de costeo (actual)': 'Costing price (current)',
+    'Guardá para congelar el precio.': 'Save to freeze the price.',
     'Precio por pieza guardado al armar el presupuesto. Si se deja vacío, se toma el precio actual del producto. Queda fijo aunque después cambie el costeo del producto.': "Price per part saved when building the budget. If left empty, the product's current price is used. It stays fixed even if the product costing changes later.",
     'Servido del stock de terminados': 'Served from finished stock',
     'Unidades de esta línea que se sirvieron del stock de productos terminados al aprobar (no se produjeron). Se usa para devolver el stock si el pedido se cancela.': 'Units of this line served from the finished products stock on approval (not produced). Used to return stock if the order is cancelled.',
     'Producto del presupuesto': 'Budget product',
     'Productos del presupuesto': 'Budget products',
     'Por producto (corridas · gramos · horas)': 'Per product (runs · grams · hours)',
-    'Guardá para ver el cálculo.': 'Save to see the calculation.',
+    'Guardá el producto para poder cargar el filamento de esta pieza.': 'Save the product to be able to load this part\'s filament.',
     '%(runs)s corrida/s · %(grams)s g · %(hours)s h': '%(runs)s run/s · %(grams)s g · %(hours)s h',
     'Costo de línea (por corrida)': 'Line cost (per run)',
+    'Precio actual del filamento (referencia)': "Filament's current price (reference)",
+    'Vacío = precio actual del filamento': 'Empty = filament\'s current price',
+    'Para cargar el filamento de una pieza: completá sus datos acá abajo y guardá el producto (botón «Guardar y continuar editando»); en cada fila ya guardada va a aparecer un enlace «Modificar» para entrar a esa pieza y cargar sus líneas de filamento.': 'To load a part\'s filament: fill in its details below and save the product (the "Save and continue editing" button); each already-saved row will then show a "Change" link to go into that part and load its filament lines.',
     'Cálculo de la pieza': 'Part calculation',
     'Guardá la pieza y agregá su filamento para ver el cálculo.': 'Save the part and add its filament to see the calculation.',
     'Por UN producto:': 'Per ONE product:',
@@ -425,11 +437,17 @@ BUDGETS = {
     'Impresión y máquina': 'Printing and machine',
     'Mano de obra / post-proceso': 'Labor / post-processing',
     'Precio': 'Price',
+    '1. Costeo': '1. Costing',
+    '2. Precio': '2. Price',
     'Archivo del modelo': 'Model file',
     'Costo/pieza': 'Cost/part',
     'Precio/pieza': 'Price/part',
     'Resumen de costos': 'Cost summary',
     'Guardá el producto para ver el resumen de costos.': 'Save the product to see the cost summary.',
+    'Costo y margen': 'Cost and margin',
+    'Guardá el producto para ver el costo y el margen.': 'Save the product to see the cost and margin.',
+    'Tu costo:': 'Your cost:',
+    'Margen con el precio actual:': 'Margin with the current price:',
     'corrida/s': 'run/s',
     '(sin piezas todavía)': '(no parts yet)',
     'Piezas del producto:': 'Product parts:',
@@ -443,6 +461,11 @@ BUDGETS = {
     'Máquina:': 'Machine:',
     'Mano de obra:': 'Labor:',
     'Costo por producto:': 'Cost per product:',
+    'imprimiendo esta unidad sola, ahora': 'printing just this unit, now',
+    "No se puede aprobar: falta marcar 'Diseño listo' en el costeo de estos productos antes de mandarlos a la cola de producción: %(productos)s.": "Can't approve: you need to check 'Design ready' in the costing of these products before queuing them for production: %(productos)s.",
+    "No se aprobó el presupuesto #%(pk)s: falta marcar 'Diseño listo' en el costeo de estos productos antes de mandarlos a la cola de producción: %(productos)s.": "Budget #%(pk)s was not approved: you need to check 'Design ready' in the costing of these products before queuing them for production: %(productos)s.",
+    'Costo promedio por producto:': 'Average cost per product:',
+    'si se aprovechan las piezas sobrantes de cada corrida en otros pedidos': 'if the leftover parts from each run get used in other orders',
     'Margen:': 'Margin:',
     'PRECIO DE VENTA:': 'SALE PRICE:',
     'Importe': 'Amount',
@@ -553,6 +576,7 @@ BUDGETS = {
 }
 
 PRODUCTION = {
+    'de': 'from',
     'Activa': 'Active',
     'Si está inactiva, no se le asignan trabajos nuevos ni cuenta para la cola.':
         'If inactive, no new jobs are assigned to it and it does not count toward the queue.',
@@ -654,6 +678,17 @@ PRODUCTION = {
         "job(s) in queue were released (no machine). Reassign them to "
         "a printer with AMS.",
     'Marcar impresión obsoleta (reimprimir)': 'Mark print obsolete (reprint)',
+    'Diseño': 'Design',
+    '▶ Marcar como Imprimiendo': '▶ Mark as Printing',
+    '✅ Marcar como Impreso': '✅ Mark as Printed',
+    '%(count)s trabajo(s) se ignoraron (ya estaban Impresos o '
+    'Cancelados).':
+        '%(count)s job(s) were ignored (already Printed or Cancelled).',
+    '%(count)s trabajo(s) actualizados.': '%(count)s job(s) updated.',
+    ':package: *%(pieza)s* (x%(cantidad)s) del pedido '
+    '#%(pedido)s — %(cliente)s se terminó de imprimir.':
+        ':package: *%(pieza)s* (x%(cantidad)s) from order '
+        '#%(pedido)s — %(cliente)s finished printing.',
     '%(count)s trabajo(s) no se pueden marcar obsoletos '
     '(deben ser por pieza, En cola/Imprimiendo y con material '
     'descontado). Se ignoraron.':
@@ -702,6 +737,17 @@ PRODUCTION = {
         '%(n)s job(s) with no machine assigned.',
     'Asignales una máquina en "Trabajos de producción" para que entren a la cola.':
         'Assign them a machine under "Production jobs" so they enter the queue.',
+    '%(n)s trabajo(s) siguen como "imprimiendo" pero su fin estimado ya pasó.':
+        '%(n)s job(s) are still "printing" but their estimated finish already passed.',
+    'Seguramente ya terminaron: marcalos como "Impreso" en la cola o en "Trabajos de producción" (el estado nunca cambia solo).':
+        'They probably finished already: mark them as "Printed" in the queue or under "Production jobs" (the status never changes on its own).',
+    'atrasado': 'overdue',
+    '¿Marcar este trabajo como Impreso?': 'Mark this job as Printed?',
+    'Ese trabajo ya estaba Impreso o Cancelado.': 'That job was already Printed or Cancelled.',
+    "Trabajo '%(job)s' marcado como Impreso.": "Job '%(job)s' marked as Printed.",
+    'Últimos impresos por máquina': 'Latest prints per machine',
+    'Finalizado': 'Finished',
+    'Todavía no hay impresiones terminadas.': 'No finished prints yet.',
     'Cola total': 'Full queue',
     'Máquina / estado': 'Machine / status',
     'No hay trabajos en cola.': 'There are no jobs in the queue.',

@@ -1,4 +1,6 @@
 from django.contrib import admin, messages
+from django.core.exceptions import ValidationError
+from django.forms.models import BaseInlineFormSet
 from django.http import HttpResponse
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
@@ -10,6 +12,7 @@ from production.models import HistorialImpresion, ProductionJob
 
 from .metrics import PERIODS, build_metrics, export_xlsx, template_context
 from .models import (
+    DisenoNoListoError,
     Metricas,
     Pieza,
     PiezaFilamentLine,
@@ -32,19 +35,92 @@ from .pdf import (
 # ===========================================================================
 
 
+class PiezaFilamentLineFormSet(BaseInlineFormSet):
+    """Valida la relación entre 'Necesita AMS (multicolor)' y la cantidad de
+    líneas de filamento cargadas: con AMS hacen falta 2 o más (varios
+    colores); sin AMS no puede haber más de una."""
+
+    def clean(self):
+        super().clean()
+        lineas_cargadas = 0
+        for form in self.forms:
+            if not hasattr(form, "cleaned_data"):
+                continue
+            if form.cleaned_data.get("DELETE"):
+                continue
+            if form.cleaned_data.get("filament"):
+                lineas_cargadas += 1
+
+        requires_ams = getattr(self.instance, "requires_ams", False)
+        if requires_ams and lineas_cargadas < 2:
+            raise ValidationError(
+                gettext(
+                    "Esta pieza tiene marcado 'Necesita AMS (multicolor)': "
+                    "cargá al menos 2 líneas de filamento (una por color)."
+                )
+            )
+        if not requires_ams and lineas_cargadas > 1:
+            raise ValidationError(
+                gettext(
+                    "Para cargar más de una línea de filamento primero tenés "
+                    "que marcar 'Necesita AMS (multicolor)'."
+                )
+            )
+
+
+class PiezaFilamentLineInline(admin.TabularInline):
+    """El costo por gramo casi nunca hay que tocarlo a mano: si se deja
+    vacío, se congela solo con el precio actual del filamento (ver
+    Filament.cost_per_gram) al guardar. Solo completarlo a mano para forzar
+    un precio distinto del que figura en Inventario (ej: un lote comprado
+    más caro). La columna "Precio actual del filamento" es de referencia
+    (no se guarda), para no confundirse con el campo editable de al lado."""
+
+    model = PiezaFilamentLine
+    formset = PiezaFilamentLineFormSet
+    extra = 1
+    autocomplete_fields = ("filament",)
+    readonly_fields = ("precio_actual_display", "line_cost_display")
+    fields = (
+        "filament",
+        "grams_used",
+        "precio_actual_display",
+        "unit_cost",
+        "line_cost_display",
+    )
+
+    def formfield_for_dbfield(self, db_field, request, **kwargs):
+        field = super().formfield_for_dbfield(db_field, request, **kwargs)
+        if db_field.name == "unit_cost" and field is not None:
+            field.widget.attrs["placeholder"] = gettext(
+                "Vacío = precio actual del filamento"
+            )
+        return field
+
+    @admin.display(description=_("Precio actual del filamento (referencia)"))
+    def precio_actual_display(self, obj):
+        if not obj or not obj.filament_id:
+            return "-"
+        return f"${obj.filament.cost_per_gram}/g"
+
+    @admin.display(description=_("Costo de línea (por corrida)"))
+    def line_cost_display(self, obj):
+        return f"${obj.line_cost}" if obj and obj.pk else "-"
+
+
 class PiezaInline(admin.TabularInline):
     """Piezas que componen el producto. El filamento de cada pieza se carga
-    entrando a la pieza (botón 'Editar' / 'Cambiar'), porque lleva sus propias
-    líneas de filamento."""
+    entrando a la pieza (enlace 'Modificar' que aparece en la fila una vez
+    guardada), porque lleva sus propias líneas de filamento."""
 
     model = Pieza
-    extra = 1
+    extra = 0
     show_change_link = True
     fields = (
         "name",
         "units_needed",
         "pieces_per_gcode",
-        "print_time_hours",
+        "print_time_minutes",
         "requires_ams",
         "stock_quantity",
         "resumen",
@@ -54,7 +130,9 @@ class PiezaInline(admin.TabularInline):
     @admin.display(description=_("Por producto (corridas · gramos · horas)"))
     def resumen(self, obj):
         if not obj.pk:
-            return gettext("Guardá para ver el cálculo.")
+            return gettext(
+                "Guardá el producto para poder cargar el filamento de esta pieza."
+            )
         return gettext("%(runs)s corrida/s · %(grams)s g · %(hours)s h") % {
             "runs": obj.gcode_runs,
             "grams": obj.filament_grams,
@@ -62,20 +140,14 @@ class PiezaInline(admin.TabularInline):
         }
 
 
-class PiezaFilamentLineInline(admin.TabularInline):
-    model = PiezaFilamentLine
-    extra = 1
-    autocomplete_fields = ("filament",)
-    readonly_fields = ("line_cost_display",)
-    fields = ("filament", "grams_used", "unit_cost", "line_cost_display")
-
-    @admin.display(description=_("Costo de línea (por corrida)"))
-    def line_cost_display(self, obj):
-        return f"${obj.line_cost}" if obj.pk else "-"
-
-
 @admin.register(Pieza)
 class PiezaAdmin(admin.ModelAdmin):
+    """Se mantiene registrado para poder buscar/filtrar piezas sueltas y para
+    que funcione el enlace 'Modificar' de cada fila en el inline de Piezas
+    del producto (PiezaInline, ver ProductoAdmin), pero se saca del menú
+    principal del admin: los datos básicos de la pieza se cargan desde
+    adentro del producto; el filamento se carga entrando a la pieza."""
+
     list_display = (
         "name",
         "producto",
@@ -94,12 +166,18 @@ class PiezaAdmin(admin.ModelAdmin):
         "name",
         "units_needed",
         "pieces_per_gcode",
-        "print_time_hours",
+        "print_time_minutes",
         "requires_ams",
         "stock_quantity",
         "resumen",
     )
     readonly_fields = ("resumen",)
+
+    def has_module_permission(self, request):
+        # Oculta "Piezas" del menú principal: se editan desde adentro del
+        # producto (nested admin). Se mantiene registrado por si hace falta
+        # acceder por URL directa o para el autocomplete.
+        return False
 
     @admin.display(description=_("Cálculo de la pieza"))
     def resumen(self, obj):
@@ -116,34 +194,58 @@ class PiezaAdmin(admin.ModelAdmin):
             "&nbsp;&nbsp;" + gettext("Necesita AMS:") + f" {ams}"
         )
 
-    def save_related(self, request, form, formsets, change):
-        super().save_related(request, form, formsets, change)
-        # Auto-marca AMS si la pieza quedó con más de una línea de filamento
-        # (multicolor). Si tiene una o ninguna, se respeta lo que haya elegido
-        # el usuario (puede forzar AMS a mano).
-        obj = form.instance
-        if obj.filament_lines.count() > 1 and not obj.requires_ams:
-            obj.requires_ams = True
-            obj.save(update_fields=["requires_ams"])
-
 
 @admin.register(StockPiezas)
 class StockPiezasAdmin(admin.ModelAdmin):
     """Stock de piezas ya impresas, por producto. Sube solo cuando un trabajo se
     imprime con sobrante de gcode y baja al aprobar pedidos que las usan. Podés
-    ajustar el stock a mano acá si hace falta."""
+    ajustar el stock a mano acá si hace falta.
+
+    También sirve como pantalla principal para terminar de cargar una pieza
+    después de costear el producto: entrando a una fila (no desde el listado
+    editable) se ve el form completo, con el inline de filamento incluido
+    (igual que 'Piezas', que queda oculta del menú y solo se usa desde el
+    link 'Modificar' del producto)."""
 
     list_display = ("producto", "name", "requires_ams", "stock_quantity")
     list_filter = ("producto", "requires_ams")
     search_fields = ("name", "producto__name")
     list_editable = ("stock_quantity",)
     ordering = ("producto__name", "order", "id")
+    autocomplete_fields = ("producto",)
+    inlines = (PiezaFilamentLineInline,)
+    fields = (
+        "producto",
+        "name",
+        "units_needed",
+        "pieces_per_gcode",
+        "print_time_minutes",
+        "requires_ams",
+        "stock_quantity",
+        "resumen",
+    )
+    readonly_fields = ("resumen",)
 
     def has_add_permission(self, request):
         return False
 
     def has_delete_permission(self, request, obj=None):
         return False
+
+    @admin.display(description=_("Cálculo de la pieza"))
+    def resumen(self, obj):
+        if not obj.pk:
+            return gettext("Guardá la pieza y agregá su filamento para ver el cálculo.")
+        ams = gettext("Sí") if obj.requires_ams else gettext("No")
+        return mark_safe(
+            "<b>" + gettext("Por UN producto:") + "</b><br>"
+            "&nbsp;&nbsp;" + gettext("Corridas de gcode:") + f" {obj.gcode_runs} "
+            f"(ceil({obj.units_needed} / {obj.pieces_per_gcode}))<br>"
+            "&nbsp;&nbsp;" + gettext("Filamento:") + f" {obj.filament_grams} g<br>"
+            "&nbsp;&nbsp;" + gettext("Horas de máquina:") + f" {obj.machine_hours} h<br>"
+            "&nbsp;&nbsp;" + gettext("Costo de filamento:") + f" ${obj.material_cost}<br>"
+            "&nbsp;&nbsp;" + gettext("Necesita AMS:") + f" {ams}"
+        )
 
 
 @admin.register(StockProductos)
@@ -190,7 +292,7 @@ class StockProductosAdmin(admin.ModelAdmin):
 
 class ProductoAggregateLineInline(admin.TabularInline):
     model = ProductoAggregateLine
-    extra = 1
+    extra = 0
     autocomplete_fields = ("aggregate",)
     readonly_fields = ("line_cost_display",)
     fields = ("aggregate", "quantity", "unit_cost", "line_cost_display")
@@ -218,7 +320,7 @@ class ProductoAdmin(admin.ModelAdmin):
     list_editable = ("priority", "diseno_listo")
     search_fields = ("name", "description")
     inlines = (PiezaInline, ProductoAggregateLineInline)
-    readonly_fields = ("costs_summary", "diseno_listo_at")
+    readonly_fields = ("costs_summary", "price_info", "diseno_listo_at")
 
     fieldsets = (
         (None, {"fields": ("name", "description", "priority", "is_multicolor", "is_active")}),
@@ -232,9 +334,10 @@ class ProductoAdmin(admin.ModelAdmin):
         ),
         (
             _("Mano de obra / post-proceso"),
-            {"fields": ("post_processing_hours", "labor_cost_per_hour")},
+            {"fields": ("post_processing_minutes", "labor_cost_per_hour")},
         ),
-        (_("Precio"), {"fields": ("margin_percent", "round_to", "costs_summary")}),
+        (_("1. Costeo"), {"fields": ("costs_summary",)}),
+        (_("2. Precio"), {"fields": ("price_info", "sale_price")}),
         (
             _("Archivo del modelo"),
             {
@@ -277,15 +380,37 @@ class ProductoAdmin(admin.ModelAdmin):
             "&nbsp;&nbsp;<b>" + gettext("Total filamento:") + f" {obj.total_filament_grams} g</b><br>"
             "&nbsp;&nbsp;<b>" + gettext("Total horas de máquina:") + f" {obj.total_machine_hours} h</b><br>"
             "&nbsp;&nbsp;" + gettext("Necesita AMS (multicolor):") + f" {ams}<br>"
-            "<br><b>" + gettext("Costos por producto:") + "</b><br>"
+            "<br><b>" + gettext("Costos por producto:") + "</b> "
+            "<span style=\"font-weight:normal\">("
+            + gettext("imprimiendo esta unidad sola, ahora")
+            + ")</span><br>"
             "&nbsp;&nbsp;" + gettext("Material:") + f" ${obj.material_cost} "
             "(+ " + gettext("merma") + f" ${obj.material_waste_cost})<br>"
             "&nbsp;&nbsp;" + gettext("Agregados:") + f" ${obj.aggregate_cost}<br>"
             "&nbsp;&nbsp;" + gettext("Máquina:") + f" ${obj.machine_cost}<br>"
             "&nbsp;&nbsp;" + gettext("Mano de obra:") + f" ${obj.labor_cost}<br>"
             "&nbsp;&nbsp;<b>" + gettext("Costo por producto:") + f" ${obj.unit_cost}</b><br>"
-            "&nbsp;&nbsp;" + gettext("Margen:") + f" {obj.margin_percent}%<br>"
-            "&nbsp;&nbsp;<b>" + gettext("PRECIO DE VENTA:") + f" ${obj.unit_price}</b>"
+            "<br><b>" + gettext("Costo promedio por producto:") + "</b> "
+            "<span style=\"font-weight:normal\">("
+            + gettext("si se aprovechan las piezas sobrantes de cada corrida en otros pedidos")
+            + ")</span><br>"
+            "&nbsp;&nbsp;" + gettext("Material:") + f" ${obj.material_cost_avg} "
+            "(+ " + gettext("merma") + f" ${obj.material_waste_cost_avg})<br>"
+            "&nbsp;&nbsp;" + gettext("Agregados:") + f" ${obj.aggregate_cost}<br>"
+            "&nbsp;&nbsp;" + gettext("Máquina:") + f" ${obj.machine_cost_avg}<br>"
+            "&nbsp;&nbsp;" + gettext("Mano de obra:") + f" ${obj.labor_cost}<br>"
+            "&nbsp;&nbsp;<b>" + gettext("Costo promedio por producto:") + f" ${obj.unit_cost_avg}</b>"
+        )
+
+    @admin.display(description=_("Costo y margen"))
+    def price_info(self, obj):
+        if not obj.pk:
+            return gettext("Guardá el producto para ver el costo y el margen.")
+        return mark_safe(
+            "&nbsp;&nbsp;" + gettext("Tu costo:") + f" <b>${obj.unit_cost}</b>"
+            "&nbsp;&nbsp;|&nbsp;&nbsp;"
+            + gettext("Margen con el precio actual:")
+            + f" <b>{obj.margin_percent}%</b>"
         )
 
 
@@ -295,15 +420,44 @@ class ProductoAdmin(admin.ModelAdmin):
 
 
 class PresupuestoItemInline(admin.TabularInline):
+    """El precio unitario NO se carga a mano: se toma siempre del costeo del
+    producto (Producto.sale_price) y queda congelado en PresupuestoItem al
+    guardar (ver PresupuestoItem.save()). Por eso acá solo se muestran
+    columnas de solo lectura; para cambiar el precio de una línea hay que
+    ajustar el costeo del producto (o, si cambió después de creado el
+    presupuesto, el precio de esta línea queda igual, "congelado")."""
+
     model = PresupuestoItem
     extra = 1
     autocomplete_fields = ("producto",)
-    readonly_fields = ("line_total_display",)
-    fields = ("producto", "quantity", "unit_price", "line_total_display")
+    readonly_fields = (
+        "precio_costeo_display",
+        "precio_unitario_display",
+        "line_total_display",
+    )
+    fields = (
+        "producto",
+        "quantity",
+        "precio_costeo_display",
+        "precio_unitario_display",
+        "line_total_display",
+    )
+
+    @admin.display(description=_("Precio de costeo (actual)"))
+    def precio_costeo_display(self, obj):
+        if not obj or not obj.producto_id:
+            return "-"
+        return f"${obj.producto.unit_price}"
+
+    @admin.display(description=_("Precio unitario (congelado)"))
+    def precio_unitario_display(self, obj):
+        if not obj or not obj.pk:
+            return gettext("Guardá para congelar el precio.")
+        return f"${obj.effective_unit_price}"
 
     @admin.display(description=_("Importe"))
     def line_total_display(self, obj):
-        return f"${obj.line_total}" if obj.pk else "-"
+        return f"${obj.line_total}" if obj and obj.pk else "-"
 
 
 class ProductionJobInline(admin.TabularInline):
@@ -364,7 +518,7 @@ class PresupuestoAdmin(admin.ModelAdmin):
 
     fieldsets = (
         (None, {"fields": ("client_name", "para_stock", "description", "status")}),
-        (_("Precio del pedido"), {"fields": ("fixed_cost", "round_to", "totals_summary")}),
+        (_("Precio del pedido"), {"fields": ("fixed_cost", "totals_summary")}),
         (
             _("Producción y entrega"),
             {
@@ -495,7 +649,7 @@ class PresupuestoAdmin(admin.ModelAdmin):
         return mark_safe(
             f"{rows}"
             "&nbsp;&nbsp;" + gettext("Impresión total:") + f" <b>{obj.total_print_hours} h</b><br>"
-            "&nbsp;&nbsp;" + gettext("Post-proceso total:") + f" <b>{obj.total_post_processing_hours} h</b><br>"
+            "&nbsp;&nbsp;" + gettext("Post-proceso total:") + f" <b>{obj.total_post_processing_minutes} min</b><br>"
             "&nbsp;&nbsp;<b>" + gettext("ENTREGA ESTIMADA:") + f" {entrega}</b>"
         )
 
@@ -521,6 +675,26 @@ class PresupuestoAdmin(admin.ModelAdmin):
             request._old_presupuesto_status = Presupuesto.Status.DRAFT
         super().save_model(request, obj, form, change)
 
+    def save_formset(self, request, form, formset, change):
+        # Trabajos de producción editados desde este inline: el formset los
+        # guarda directo (sin pasar por ProductionJobAdmin.save_model), así
+        # que si alguno pasó a "Imprimiendo" acá mismo le marcamos el inicio
+        # real. Si no, `compute_schedule` no tiene de dónde tomar el inicio y
+        # lo recalcula desde "ahora" cada vez que se entra a la cola (las
+        # fechas "flotan" en vez de quedar fijas). El resto de los efectos
+        # (impreso/cancelado) ya se manejan después en save_related.
+        if formset.model is ProductionJob:
+            instances = formset.save(commit=False)
+            for deleted in formset.deleted_objects:
+                deleted.delete()
+            for job in instances:
+                if job.status == ProductionJob.Status.PRINTING and not job.started_at:
+                    job.started_at = timezone.now()
+                job.save()
+            formset.save_m2m()
+        else:
+            super().save_formset(request, form, formset, change)
+
     def save_related(self, request, form, formsets, change):
         super().save_related(request, form, formsets, change)
         obj = form.instance
@@ -529,6 +703,24 @@ class PresupuestoAdmin(admin.ModelAdmin):
         # disparamos los efectos (al aprobar: genera la cola de producción).
         old_status = getattr(request, "_old_presupuesto_status", None)
         if old_status is not None and old_status != obj.status:
+            if obj.status == Presupuesto.Status.APPROVED:
+                sin_diseno = obj.productos_sin_diseno_listo()
+                if sin_diseno:
+                    # No se aprueba: revertimos el estado (ya había quedado
+                    # guardado por save_model) y avisamos qué falta marcar.
+                    obj.status = old_status
+                    obj.save(update_fields=["status", "updated_at"])
+                    self.message_user(
+                        request,
+                        gettext(
+                            "No se aprobó el presupuesto #%(pk)s: falta marcar "
+                            "'Diseño listo' en el costeo de estos productos antes "
+                            "de mandarlos a la cola de producción: %(productos)s."
+                        )
+                        % {"pk": obj.pk, "productos": ", ".join(sin_diseno)},
+                        level=messages.ERROR,
+                    )
+                    return
             result = obj.apply_status_change(old_status)
             if obj.status == Presupuesto.Status.APPROVED:
                 self._message_approval(request, obj, result)
@@ -699,7 +891,7 @@ class PresupuestoAdmin(admin.ModelAdmin):
         for presupuesto in queryset:
             try:
                 result = presupuesto.approve()
-            except PresupuestoNotApprovableError as exc:
+            except (PresupuestoNotApprovableError, DisenoNoListoError) as exc:
                 self.message_user(request, str(exc), level=messages.ERROR)
                 continue
             self._message_approval(request, presupuesto, result)

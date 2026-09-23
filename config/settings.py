@@ -119,6 +119,8 @@ ZAPIER_WEBHOOKS = {
 # de un solo destino. Vacío = no notifica, no rompe nada.
 SLACK_WEBHOOKS = {
     'diseno_listo': os.environ.get('SLACK_WEBHOOK_DISENO_LISTO', ''),
+    'trabajo_impreso': os.environ.get('SLACK_WEBHOOK_TRABAJO_IMPRESO', ''),
+    'pedido_completado': os.environ.get('SLACK_WEBHOOK_PEDIDO_COMPLETADO', ''),
 }
 
 ROOT_URLCONF = 'config.urls'

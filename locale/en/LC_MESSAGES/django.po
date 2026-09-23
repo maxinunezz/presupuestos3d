@@ -295,6 +295,12 @@ msgstr "Choose exactly one item: a Filament or an Aggregate (not both, not neith
 msgid "Ingresá una cantidad distinta de cero."
 msgstr "Enter a non-zero quantity."
 
+msgid "Ingresó"
+msgstr "Entered"
+
+msgid "Marcar como Impreso"
+msgstr "Mark as Printed"
+
 msgid "Stock ajustado en %(delta)s%(unidad)s. Nuevo stock: %(resultante)s %(unidad)s."
 msgstr "Stock adjusted by %(delta)s%(unidad)s. New stock: %(resultante)s %(unidad)s."
 
@@ -628,6 +634,9 @@ msgstr "Remaining"
 msgid "No hay topes cargados. Cargá topes mensuales en «Topes de gasto»."
 msgstr "No caps configured. Set monthly caps in «Expense caps»."
 
+msgid ":white_check_mark: Pedido #%(pedido)s — %(cliente)s: se terminaron de imprimir todas las piezas."
+msgstr ":white_check_mark: Order #%(pedido)s — %(cliente)s: all parts finished printing."
+
 msgid "Alta"
 msgstr "High"
 
@@ -667,8 +676,8 @@ msgstr "Material waste (%)"
 msgid "Desperdicio de filamento por purga (multicolor), soportes y fallas. Se aplica sobre el costo y el consumo de material."
 msgstr "Filament wasted on purge (multicolor), supports and failures. Applied to material cost and consumption."
 
-msgid "Post-proceso por pieza (hs)"
-msgstr "Post-processing per part (hrs)"
+msgid "Post-proceso por pieza (min)"
+msgstr "Post-processing per part (min)"
 
 msgid "Tiempo de armado, lijado, pintado, pegado de agregados, etc."
 msgstr "Time for assembly, sanding, painting, gluing add-ons, etc."
@@ -676,14 +685,11 @@ msgstr "Time for assembly, sanding, painting, gluing add-ons, etc."
 msgid "Costo de mano de obra por hora"
 msgstr "Labor cost per hour"
 
-msgid "Margen (%)"
-msgstr "Margin (%)"
+msgid "Precio de venta"
+msgstr "Sale price"
 
-msgid "Redondear precio a múltiplo de"
-msgstr "Round price to a multiple of"
-
-msgid "Ej: 100 redondea el precio a la centena más cercana. 0 = sin redondeo."
-msgstr "E.g. 100 rounds the price to the nearest hundred. 0 = no rounding."
+msgid "Precio final al que se vende UNA unidad. Se carga a mano en base al costo (ver arriba); no se recalcula solo si cambian los costos."
+msgstr "Final price for ONE unit. Entered by hand based on the cost (see above); it does not recalculate automatically if costs change."
 
 msgid "G-code"
 msgstr "G-code"
@@ -742,8 +748,8 @@ msgstr "Parts per gcode run"
 msgid "Cuántas unidades de esta pieza salen en UNA impresión (un gcode)."
 msgstr "How many units of this part come out of ONE print (a single gcode)."
 
-msgid "Horas de máquina por corrida de gcode"
-msgstr "Machine hours per gcode run"
+msgid "Minutos de máquina por corrida de gcode"
+msgstr "Machine minutes per gcode run"
 
 msgid "Tiempo de impresión de UNA corrida del gcode (saca `piezas por gcode`)."
 msgstr "Print time of ONE gcode run (yields `parts per gcode`)."
@@ -751,8 +757,14 @@ msgstr "Print time of ONE gcode run (yields `parts per gcode`)."
 msgid "Necesita AMS (multicolor)"
 msgstr "Requires AMS (multicolor)"
 
-msgid "Se marca solo cuando la pieza usa más de una línea de filamento (multicolor): debe ir a una máquina con AMS. Podés forzarlo a mano."
-msgstr "Set automatically when the part uses more than one filament line (multicolor): it must go to an AMS machine. You can force it manually."
+msgid "Marcala si la pieza usa más de una línea de filamento (multicolor): debe ir a una máquina con AMS. Con esto marcado hacen falta 2 o más líneas de filamento; sin marcar, no puede haber más de una."
+msgstr "Check it if the part uses more than one filament line (multicolor): it must go to an AMS machine. With this checked you need 2 or more filament lines; unchecked, there can be no more than one."
+
+msgid "Esta pieza tiene marcado 'Necesita AMS (multicolor)': cargá al menos 2 líneas de filamento (una por color)."
+msgstr "This part has 'Requires AMS (multicolor)' checked: load at least 2 filament lines (one per color)."
+
+msgid "Para cargar más de una línea de filamento primero tenés que marcar 'Necesita AMS (multicolor)'."
+msgstr "To load more than one filament line you first need to check 'Requires AMS (multicolor)'."
 
 msgid "Stock de piezas impresas"
 msgstr "Printed parts stock"
@@ -901,6 +913,12 @@ msgstr "Number of parts"
 msgid "Precio unitario (congelado)"
 msgstr "Unit price (frozen)"
 
+msgid "Precio de costeo (actual)"
+msgstr "Costing price (current)"
+
+msgid "Guardá para congelar el precio."
+msgstr "Save to freeze the price."
+
 msgid "Precio por pieza guardado al armar el presupuesto. Si se deja vacío, se toma el precio actual del producto. Queda fijo aunque después cambie el costeo del producto."
 msgstr "Price per part saved when building the budget. If left empty, the product's current price is used. It stays fixed even if the product costing changes later."
 
@@ -919,14 +937,23 @@ msgstr "Budget products"
 msgid "Por producto (corridas · gramos · horas)"
 msgstr "Per product (runs · grams · hours)"
 
-msgid "Guardá para ver el cálculo."
-msgstr "Save to see the calculation."
+msgid "Guardá el producto para poder cargar el filamento de esta pieza."
+msgstr "Save the product to be able to load this part's filament."
 
 msgid "%(runs)s corrida/s · %(grams)s g · %(hours)s h"
 msgstr "%(runs)s run/s · %(grams)s g · %(hours)s h"
 
 msgid "Costo de línea (por corrida)"
 msgstr "Line cost (per run)"
+
+msgid "Precio actual del filamento (referencia)"
+msgstr "Filament's current price (reference)"
+
+msgid "Vacío = precio actual del filamento"
+msgstr "Empty = filament's current price"
+
+msgid "Para cargar el filamento de una pieza: completá sus datos acá abajo y guardá el producto (botón «Guardar y continuar editando»); en cada fila ya guardada va a aparecer un enlace «Modificar» para entrar a esa pieza y cargar sus líneas de filamento."
+msgstr "To load a part's filament: fill in its details below and save the product (the \"Save and continue editing\" button); each already-saved row will then show a \"Change\" link to go into that part and load its filament lines."
 
 msgid "Cálculo de la pieza"
 msgstr "Part calculation"
@@ -970,6 +997,12 @@ msgstr "Labor / post-processing"
 msgid "Precio"
 msgstr "Price"
 
+msgid "1. Costeo"
+msgstr "1. Costing"
+
+msgid "2. Precio"
+msgstr "2. Price"
+
 msgid "Archivo del modelo"
 msgstr "Model file"
 
@@ -984,6 +1017,18 @@ msgstr "Cost summary"
 
 msgid "Guardá el producto para ver el resumen de costos."
 msgstr "Save the product to see the cost summary."
+
+msgid "Costo y margen"
+msgstr "Cost and margin"
+
+msgid "Guardá el producto para ver el costo y el margen."
+msgstr "Save the product to see the cost and margin."
+
+msgid "Tu costo:"
+msgstr "Your cost:"
+
+msgid "Margen con el precio actual:"
+msgstr "Margin with the current price:"
 
 msgid "corrida/s"
 msgstr "run/s"
@@ -1023,6 +1068,21 @@ msgstr "Labor:"
 
 msgid "Costo por producto:"
 msgstr "Cost per product:"
+
+msgid "imprimiendo esta unidad sola, ahora"
+msgstr "printing just this unit, now"
+
+msgid "No se puede aprobar: falta marcar 'Diseño listo' en el costeo de estos productos antes de mandarlos a la cola de producción: %(productos)s."
+msgstr "Can't approve: you need to check 'Design ready' in the costing of these products before queuing them for production: %(productos)s."
+
+msgid "No se aprobó el presupuesto #%(pk)s: falta marcar 'Diseño listo' en el costeo de estos productos antes de mandarlos a la cola de producción: %(productos)s."
+msgstr "Budget #%(pk)s was not approved: you need to check 'Design ready' in the costing of these products before queuing them for production: %(productos)s."
+
+msgid "Costo promedio por producto:"
+msgstr "Average cost per product:"
+
+msgid "si se aprovechan las piezas sobrantes de cada corrida en otros pedidos"
+msgstr "if the leftover parts from each run get used in other orders"
 
 msgid "Margen:"
 msgstr "Margin:"
@@ -1349,6 +1409,9 @@ msgstr "Inventory and costs"
 msgid "Filamento consumido"
 msgstr "Filament consumed"
 
+msgid "de"
+msgstr "from"
+
 msgid "Activa"
 msgstr "Active"
 
@@ -1502,6 +1565,24 @@ msgstr "'%(name)s' stopped printing multicolor: %(count)s multicolor job(s) in q
 msgid "Marcar impresión obsoleta (reimprimir)"
 msgstr "Mark print obsolete (reprint)"
 
+msgid "Diseño"
+msgstr "Design"
+
+msgid "▶ Marcar como Imprimiendo"
+msgstr "▶ Mark as Printing"
+
+msgid "✅ Marcar como Impreso"
+msgstr "✅ Mark as Printed"
+
+msgid "%(count)s trabajo(s) se ignoraron (ya estaban Impresos o Cancelados)."
+msgstr "%(count)s job(s) were ignored (already Printed or Cancelled)."
+
+msgid "%(count)s trabajo(s) actualizados."
+msgstr "%(count)s job(s) updated."
+
+msgid ":package: *%(pieza)s* (x%(cantidad)s) del pedido #%(pedido)s — %(cliente)s se terminó de imprimir."
+msgstr ":package: *%(pieza)s* (x%(cantidad)s) from order #%(pedido)s — %(cliente)s finished printing."
+
 msgid "%(count)s trabajo(s) no se pueden marcar obsoletos (deben ser por pieza, En cola/Imprimiendo y con material descontado). Se ignoraron."
 msgstr "%(count)s job(s) cannot be marked obsolete (they must be per-part, Queued/Printing and with material deducted). They were ignored."
 
@@ -1568,6 +1649,33 @@ msgstr "%(n)s job(s) with no machine assigned."
 
 msgid "Asignales una máquina en \"Trabajos de producción\" para que entren a la cola."
 msgstr "Assign them a machine under \"Production jobs\" so they enter the queue."
+
+msgid "%(n)s trabajo(s) siguen como \"imprimiendo\" pero su fin estimado ya pasó."
+msgstr "%(n)s job(s) are still \"printing\" but their estimated finish already passed."
+
+msgid "Seguramente ya terminaron: marcalos como \"Impreso\" en la cola o en \"Trabajos de producción\" (el estado nunca cambia solo)."
+msgstr "They probably finished already: mark them as \"Printed\" in the queue or under \"Production jobs\" (the status never changes on its own)."
+
+msgid "atrasado"
+msgstr "overdue"
+
+msgid "¿Marcar este trabajo como Impreso?"
+msgstr "Mark this job as Printed?"
+
+msgid "Ese trabajo ya estaba Impreso o Cancelado."
+msgstr "That job was already Printed or Cancelled."
+
+msgid "Trabajo '%(job)s' marcado como Impreso."
+msgstr "Job '%(job)s' marked as Printed."
+
+msgid "Últimos impresos por máquina"
+msgstr "Latest prints per machine"
+
+msgid "Finalizado"
+msgstr "Finished"
+
+msgid "Todavía no hay impresiones terminadas."
+msgstr "No finished prints yet."
 
 msgid "Cola total"
 msgstr "Full queue"
