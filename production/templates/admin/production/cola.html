@@ -93,7 +93,7 @@
                         {% if j.pieza %}{{ j.pieza }} ×{{ j.quantity }}{% else %}{{ j.producto }} ×{{ j.quantity }}{% endif %}
                         {% if j.priority_high %}<span class="badge-prio high">{{ j.priority }}</span>{% endif %}<br>
                         {% if j.pieza %}<small>{% translate "de" %} {{ j.producto }}</small><br>{% endif %}
-                        <small>{{ j.cliente }} · #{{ j.presupuesto_id }} · {{ j.print_hours }} h</small>
+                        <small>{{ j.cliente }} · #{{ j.presupuesto_id }} · {{ j.print_hours }}</small>
                         {% if j.status == "Imprimiendo" %} <span class="badge-print">{% translate "imprimiendo" %}</span>{% endif %}
                         {% if j.overdue %} <span class="badge-overdue">⚠ {% translate "atrasado" %}</span>{% endif %}
                     </td>
@@ -141,7 +141,7 @@
                 {% if j.pieza %}<br><small>{% translate "de" %} {{ j.producto }}</small>{% endif %}</td>
             <td>{{ j.cliente }} (#{{ j.presupuesto_id }})</td>
             <td>{{ j.status }}{% if j.overdue %} <span class="badge-overdue">⚠ {% translate "atrasado" %}</span>{% endif %}</td>
-            <td>{{ j.print_hours }} h</td>
+            <td>{{ j.print_hours }}</td>
             <td>{{ j.start }}</td>
             <td>{{ j.print_end }}</td>
             <td>

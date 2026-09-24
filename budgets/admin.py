@@ -8,6 +8,7 @@ from django.utils import timezone
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext, gettext_lazy as _
 
+from config.formatting import format_hours
 from production.models import HistorialImpresion, ProductionJob
 
 from .metrics import PERIODS, build_metrics, export_xlsx, template_context
@@ -133,10 +134,10 @@ class PiezaInline(admin.TabularInline):
             return gettext(
                 "Guardá el producto para poder cargar el filamento de esta pieza."
             )
-        return gettext("%(runs)s corrida/s · %(grams)s g · %(hours)s h") % {
+        return gettext("%(runs)s corrida/s · %(grams)s g · %(hours)s") % {
             "runs": obj.gcode_runs,
             "grams": obj.filament_grams,
-            "hours": obj.machine_hours,
+            "hours": format_hours(obj.machine_hours),
         }
 
 
@@ -189,7 +190,7 @@ class PiezaAdmin(admin.ModelAdmin):
             "&nbsp;&nbsp;" + gettext("Corridas de gcode:") + f" {obj.gcode_runs} "
             f"(ceil({obj.units_needed} / {obj.pieces_per_gcode}))<br>"
             "&nbsp;&nbsp;" + gettext("Filamento:") + f" {obj.filament_grams} g<br>"
-            "&nbsp;&nbsp;" + gettext("Horas de máquina:") + f" {obj.machine_hours} h<br>"
+            "&nbsp;&nbsp;" + gettext("Horas de máquina:") + f" {format_hours(obj.machine_hours)}<br>"
             "&nbsp;&nbsp;" + gettext("Costo de filamento:") + f" ${obj.material_cost}<br>"
             "&nbsp;&nbsp;" + gettext("Necesita AMS:") + f" {ams}"
         )
@@ -242,7 +243,7 @@ class StockPiezasAdmin(admin.ModelAdmin):
             "&nbsp;&nbsp;" + gettext("Corridas de gcode:") + f" {obj.gcode_runs} "
             f"(ceil({obj.units_needed} / {obj.pieces_per_gcode}))<br>"
             "&nbsp;&nbsp;" + gettext("Filamento:") + f" {obj.filament_grams} g<br>"
-            "&nbsp;&nbsp;" + gettext("Horas de máquina:") + f" {obj.machine_hours} h<br>"
+            "&nbsp;&nbsp;" + gettext("Horas de máquina:") + f" {format_hours(obj.machine_hours)}<br>"
             "&nbsp;&nbsp;" + gettext("Costo de filamento:") + f" ${obj.material_cost}<br>"
             "&nbsp;&nbsp;" + gettext("Necesita AMS:") + f" {ams}"
         )
@@ -367,7 +368,8 @@ class ProductoAdmin(admin.ModelAdmin):
         corridas = gettext("corrida/s")
         piezas_rows = "".join(
             f"&nbsp;&nbsp;&nbsp;&nbsp;{p.name}: {p.gcode_runs} {corridas} · "
-            f"{p.filament_grams} g · {p.machine_hours} h{' · AMS' if p.requires_ams else ''}<br>"
+            f"{p.filament_grams} g · {format_hours(p.machine_hours)}"
+            f"{' · AMS' if p.requires_ams else ''}<br>"
             for p in piezas
         )
         sin_piezas = (
@@ -378,7 +380,7 @@ class ProductoAdmin(admin.ModelAdmin):
             "<b>" + gettext("Piezas del producto:") + "</b><br>"
             f"{piezas_rows or sin_piezas}"
             "&nbsp;&nbsp;<b>" + gettext("Total filamento:") + f" {obj.total_filament_grams} g</b><br>"
-            "&nbsp;&nbsp;<b>" + gettext("Total horas de máquina:") + f" {obj.total_machine_hours} h</b><br>"
+            "&nbsp;&nbsp;<b>" + gettext("Total horas de máquina:") + f" {format_hours(obj.total_machine_hours)}</b><br>"
             "&nbsp;&nbsp;" + gettext("Necesita AMS (multicolor):") + f" {ams}<br>"
             "<br><b>" + gettext("Costos por producto:") + "</b> "
             "<span style=\"font-weight:normal\">("
@@ -484,7 +486,7 @@ class ProductionJobInline(admin.TabularInline):
 
     @admin.display(description=_("Horas impr."))
     def print_hours_display(self, obj):
-        return f"{obj.print_hours} h" if obj.pk else "-"
+        return format_hours(obj.print_hours) if obj.pk else "-"
 
 
 @admin.register(Presupuesto)
@@ -633,12 +635,12 @@ class PresupuestoAdmin(admin.ModelAdmin):
             )
             rows += gettext(
                 "&nbsp;&nbsp;%(producto)s ×%(qty)s → <b>%(maquina)s</b> "
-                "(%(hours)s h, fin impr. %(fin)s)<br>"
+                "(%(hours)s, fin impr. %(fin)s)<br>"
             ) % {
                 "producto": job.producto,
                 "qty": job.quantity,
                 "maquina": maquina,
-                "hours": job.print_hours,
+                "hours": format_hours(job.print_hours),
                 "fin": fin,
             }
         entrega = (
@@ -648,7 +650,7 @@ class PresupuestoAdmin(admin.ModelAdmin):
         )
         return mark_safe(
             f"{rows}"
-            "&nbsp;&nbsp;" + gettext("Impresión total:") + f" <b>{obj.total_print_hours} h</b><br>"
+            "&nbsp;&nbsp;" + gettext("Impresión total:") + f" <b>{format_hours(obj.total_print_hours)}</b><br>"
             "&nbsp;&nbsp;" + gettext("Post-proceso total:") + f" <b>{obj.total_post_processing_minutes} min</b><br>"
             "&nbsp;&nbsp;<b>" + gettext("ENTREGA ESTIMADA:") + f" {entrega}</b>"
         )

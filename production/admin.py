@@ -8,6 +8,8 @@ from django.utils.safestring import mark_safe
 from django.utils.translation import gettext
 from django.utils.translation import gettext_lazy as _
 
+from config.formatting import format_hours
+
 from .models import HistorialImpresion, Maquina, ProductionJob, Tablero
 from .scheduler import compute_schedule, material_forecast
 
@@ -349,7 +351,7 @@ class ProductionJobAdmin(admin.ModelAdmin):
 
     @admin.display(description=_("Horas impr."))
     def print_hours_display(self, obj):
-        return f"{obj.print_hours} h"
+        return format_hours(obj.print_hours)
 
     @admin.display(description=_("Inicio est."))
     def estimated_start_display(self, obj):
@@ -555,7 +557,7 @@ class ColaProduccionAdmin(admin.ModelAdmin):
                 "cliente": job.presupuesto.client_name,
                 "presupuesto_id": job.presupuesto_id,
                 "status": job.get_status_display(),
-                "print_hours": job.print_hours,
+                "print_hours": format_hours(job.print_hours),
                 "start": _fmt_dt(data.get("start")),
                 "print_end": _fmt_dt(print_end_raw),
                 "start_raw": data.get("start"),
@@ -699,17 +701,17 @@ class TableroAdmin(admin.ModelAdmin):
                 "quantity": j.quantity,
                 "cliente": j.presupuesto.client_name,
                 "presupuesto_id": j.presupuesto_id,
-                "print_hours": j.print_hours,
+                "print_hours": format_hours(j.print_hours),
             }
             for j in unassigned_jobs
         ]
 
         # --- Qué está/entra en cada máquina (el primero de cada cola) ---
         machines = []
-        total_pending_hours = sum(float(j.print_hours) for j in unassigned_jobs)
+        total_pending_hours_raw = sum(float(j.print_hours) for j in unassigned_jobs)
         for machine in Maquina.objects.filter(is_active=True):
             mjobs = [j for j in open_jobs if j.machine_id == machine.id]
-            total_pending_hours += sum(float(j.print_hours) for j in mjobs)
+            total_pending_hours_raw += sum(float(j.print_hours) for j in mjobs)
             current = mjobs[0] if mjobs else None
             cur = None
             if current:
@@ -803,7 +805,7 @@ class TableroAdmin(admin.ModelAdmin):
             "proximas": proximas,
             "buy_filaments": fc_rows(forecast["filaments"], "g"),
             "buy_aggregates": fc_rows(forecast["aggregates"]),
-            "total_pending_hours": round(total_pending_hours, 1),
+            "total_pending_hours": format_hours(total_pending_hours_raw),
             "printing_count": printing_count,
             "pending_count": pending_count,
             "in_production_count": in_production_count,

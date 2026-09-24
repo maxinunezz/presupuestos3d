@@ -940,8 +940,8 @@ msgstr "Per product (runs · grams · hours)"
 msgid "Guardá el producto para poder cargar el filamento de esta pieza."
 msgstr "Save the product to be able to load this part's filament."
 
-msgid "%(runs)s corrida/s · %(grams)s g · %(hours)s h"
-msgstr "%(runs)s run/s · %(grams)s g · %(hours)s h"
+msgid "%(runs)s corrida/s · %(grams)s g · %(hours)s"
+msgstr "%(runs)s run/s · %(grams)s g · %(hours)s"
 
 msgid "Costo de línea (por corrida)"
 msgstr "Line cost (per run)"
@@ -1147,8 +1147,8 @@ msgstr "There are no production jobs yet. They are generated when you <b>approve
 msgid "(sin máquina)"
 msgstr "(no machine)"
 
-msgid "&nbsp;&nbsp;%(producto)s ×%(qty)s → <b>%(maquina)s</b> (%(hours)s h, fin impr. %(fin)s)<br>"
-msgstr "&nbsp;&nbsp;%(producto)s ×%(qty)s → <b>%(maquina)s</b> (%(hours)s h, print end %(fin)s)<br>"
+msgid "&nbsp;&nbsp;%(producto)s ×%(qty)s → <b>%(maquina)s</b> (%(hours)s, fin impr. %(fin)s)<br>"
+msgstr "&nbsp;&nbsp;%(producto)s ×%(qty)s → <b>%(maquina)s</b> (%(hours)s, print end %(fin)s)<br>"
 
 msgid "Impresión total:"
 msgstr "Total printing:"
