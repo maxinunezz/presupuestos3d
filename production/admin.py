@@ -371,6 +371,10 @@ class ProductionJobAdmin(admin.ModelAdmin):
             obj.status == ProductionJob.Status.DONE
             and previous_status != ProductionJob.Status.DONE
         )
+        just_marked_printing = (
+            obj.status == ProductionJob.Status.PRINTING
+            and previous_status != ProductionJob.Status.PRINTING
+        )
 
         # Marca inicio real al empezar a imprimir.
         if obj.status == ProductionJob.Status.PRINTING and not obj.started_at:
@@ -446,7 +450,32 @@ class ProductionJobAdmin(admin.ModelAdmin):
         # Cualquier cambio manual (máquina, orden, estado) recalcula la cola.
         from .scheduler import persist_schedule
 
-        persist_schedule()
+        schedule = persist_schedule()
+
+        # Avisa a Slack (canal "produccion-3darg") la primera vez que este
+        # trabajo pasa a Imprimiendo, con la máquina y el fin estimado ya
+        # recalculados por el scheduler.
+        if just_marked_printing and obj.machine_id:
+            from config.slack import notificar
+
+            pieza_nombre = obj.pieza.name if obj.pieza_id else str(obj.producto)
+            fin_estimado = schedule.get(obj.pk, {}).get("print_end") or obj.estimated_print_end
+            notificar(
+                "trabajo_imprimiendo",
+                gettext(
+                    ":arrow_forward: *%(pieza)s* (x%(cantidad)s) del pedido "
+                    "#%(pedido)s — %(cliente)s se puso a imprimir en "
+                    "*%(maquina)s*. Fin estimado: %(fin)s."
+                )
+                % {
+                    "pieza": pieza_nombre,
+                    "cantidad": obj.quantity,
+                    "pedido": obj.presupuesto_id,
+                    "cliente": obj.presupuesto.client_name,
+                    "maquina": obj.machine.name,
+                    "fin": _fmt_dt(fin_estimado),
+                },
+            )
 
 
 class ColaProduccion(ProductionJob):

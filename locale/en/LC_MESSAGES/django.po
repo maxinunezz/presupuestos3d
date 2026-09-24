@@ -1583,6 +1583,9 @@ msgstr "%(count)s job(s) updated."
 msgid ":package: *%(pieza)s* (x%(cantidad)s) del pedido #%(pedido)s — %(cliente)s se terminó de imprimir."
 msgstr ":package: *%(pieza)s* (x%(cantidad)s) from order #%(pedido)s — %(cliente)s finished printing."
 
+msgid ":arrow_forward: *%(pieza)s* (x%(cantidad)s) del pedido #%(pedido)s — %(cliente)s se puso a imprimir en *%(maquina)s*. Fin estimado: %(fin)s."
+msgstr ":arrow_forward: *%(pieza)s* (x%(cantidad)s) from order #%(pedido)s — %(cliente)s started printing on *%(maquina)s*. Estimated finish: %(fin)s."
+
 msgid "%(count)s trabajo(s) no se pueden marcar obsoletos (deben ser por pieza, En cola/Imprimiendo y con material descontado). Se ignoraron."
 msgstr "%(count)s job(s) cannot be marked obsolete (they must be per-part, Queued/Printing and with material deducted). They were ignored."
 

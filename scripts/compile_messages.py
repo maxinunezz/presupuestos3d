@@ -689,6 +689,12 @@ PRODUCTION = {
     '#%(pedido)s — %(cliente)s se terminó de imprimir.':
         ':package: *%(pieza)s* (x%(cantidad)s) from order '
         '#%(pedido)s — %(cliente)s finished printing.',
+    ':arrow_forward: *%(pieza)s* (x%(cantidad)s) del pedido '
+    '#%(pedido)s — %(cliente)s se puso a imprimir en '
+    '*%(maquina)s*. Fin estimado: %(fin)s.':
+        ':arrow_forward: *%(pieza)s* (x%(cantidad)s) from order '
+        '#%(pedido)s — %(cliente)s started printing on '
+        '*%(maquina)s*. Estimated finish: %(fin)s.',
     '%(count)s trabajo(s) no se pueden marcar obsoletos '
     '(deben ser por pieza, En cola/Imprimiendo y con material '
     'descontado). Se ignoraron.':
