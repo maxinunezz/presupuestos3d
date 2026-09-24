@@ -505,6 +505,7 @@ class PresupuestoAdmin(admin.ModelAdmin):
     )
     list_filter = ("status", "para_stock")
     search_fields = ("client_name", "description")
+    list_editable = ("status",)
     inlines = (PresupuestoItemInline, ProductionJobInline)
     readonly_fields = (
         "approved_at",
