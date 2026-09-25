@@ -720,7 +720,22 @@ class PresupuestoAdmin(admin.ModelAdmin):
         # disparamos los efectos (al aprobar: genera la cola de producción).
         old_status = getattr(request, "_old_presupuesto_status", None)
         if old_status is not None and old_status != obj.status:
-            if obj.status == Presupuesto.Status.APPROVED:
+            # Si el estado salta directo a Aprobado/En producción/Completado
+            # sin pasar antes por Aprobado (p. ej. desde el dropdown del
+            # listado), igual se va a generar la cola/descontar stock acá
+            # abajo (ver Presupuesto.apply_status_change): el chequeo de
+            # "diseño listo" tiene que valer también en ese salto, si no se
+            # termina produciendo algo sin diseño confirmado.
+            dispara_produccion = (
+                obj.status
+                in (
+                    Presupuesto.Status.APPROVED,
+                    Presupuesto.Status.IN_PRODUCTION,
+                    Presupuesto.Status.COMPLETED,
+                )
+                and not obj.stock_provisioned
+            )
+            if dispara_produccion:
                 sin_diseno = obj.productos_sin_diseno_listo()
                 if sin_diseno:
                     # No se aprueba: revertimos el estado (ya había quedado
@@ -740,6 +755,10 @@ class PresupuestoAdmin(admin.ModelAdmin):
                     return
             result = obj.apply_status_change(old_status)
             if obj.status == Presupuesto.Status.APPROVED:
+                self._message_approval(request, obj, result)
+            elif dispara_produccion and result is not None:
+                # Saltó directo a En producción/Completado: mismo aviso que
+                # al aprobar (piezas servidas de stock, faltantes, etc.).
                 self._message_approval(request, obj, result)
             elif obj.status == Presupuesto.Status.CANCELLED:
                 self._message_cancellation(request, obj, result)

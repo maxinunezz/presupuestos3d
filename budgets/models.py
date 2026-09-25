@@ -1175,8 +1175,13 @@ class Presupuesto(models.Model):
         - Setea la fecha del nuevo estado si todavía está vacía (idempotente).
         - Al pasar a APROBADO, descuenta el inventario y genera la cola de
           producción (idempotente) y recalcula la entrega estimada.
-        Devuelve {"from_stock": [...], "shortages": [...]} si hubo aprobación,
-        si no None.
+        - Si el estado salta directo a EN PRODUCCIÓN o COMPLETADO sin haber
+          pasado por APROBADO (p. ej. desde el dropdown del listado), igual
+          se genera la cola/se descuenta el inventario acá: si no, el pedido
+          queda mostrando un estado de producción que nunca se generó (sin
+          trabajo asignado a ninguna máquina).
+        Devuelve {"from_stock": [...], "shortages": [...]} si hubo
+        aprobación/provisión, si no None.
 
         Pensado para llamarse DESPUÉS de guardar los ítems (en save_related),
         así _provision_production() ve los productos del presupuesto.
@@ -1194,9 +1199,18 @@ class Presupuesto(models.Model):
             if not self.approved_at:
                 self.approved_at = now
             result = self._provision_production()
-        elif self.status == Status.IN_PRODUCTION and not self.production_started_at:
-            self.production_started_at = now
+        elif self.status == Status.IN_PRODUCTION:
+            if not self.stock_provisioned:
+                if not self.approved_at:
+                    self.approved_at = now
+                result = self._provision_production()
+            if not self.production_started_at:
+                self.production_started_at = now
         elif self.status == Status.COMPLETED:
+            if not self.stock_provisioned:
+                if not self.approved_at:
+                    self.approved_at = now
+                result = self._provision_production()
             if not self.production_finished_at:
                 self.production_finished_at = now
             if not self.completed_at:

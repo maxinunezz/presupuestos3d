@@ -151,6 +151,26 @@ class StatusTransitionTests(TestCase):
         self.assertEqual(self.pres.approved_at, first)
         self.assertEqual(self.pres.jobs.count(), 1)
 
+    def test_in_production_directo_genera_cola_si_no_paso_por_aprobado(self):
+        # Bug real: si desde el listado se salta directo de Enviado a "En
+        # producción" (sin pasar por "Aprobado"), antes quedaba con la fecha
+        # de inicio seteada pero SIN trabajo en ninguna máquina y sin
+        # descontar stock. Tiene que autogenerar la cola igual.
+        self.pres.status = Presupuesto.Status.IN_PRODUCTION
+        self.pres.apply_status_change(Presupuesto.Status.SENT)
+        self.pres.refresh_from_db()
+        self.assertTrue(self.pres.stock_provisioned)
+        self.assertIsNotNone(self.pres.approved_at)
+        self.assertIsNotNone(self.pres.production_started_at)
+        self.assertEqual(self.pres.jobs.count(), 1)
+
+    def test_completed_directo_genera_cola_si_no_paso_por_aprobado(self):
+        self.pres.status = Presupuesto.Status.COMPLETED
+        self.pres.apply_status_change(Presupuesto.Status.DRAFT)
+        self.pres.refresh_from_db()
+        self.assertTrue(self.pres.stock_provisioned)
+        self.assertEqual(self.pres.jobs.count(), 1)
+
     def test_approve_action_sigue_funcionando(self):
         result = self.pres.approve()
         self.pres.refresh_from_db()
