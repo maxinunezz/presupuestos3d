@@ -323,6 +323,20 @@ class ProductoAdmin(admin.ModelAdmin):
     inlines = (PiezaInline, ProductoAggregateLineInline)
     readonly_fields = ("costs_summary", "price_info", "diseno_listo_at")
 
+    def get_queryset(self, request):
+        # unit_cost/unit_price (y el resumen de costos) recorren piezas,
+        # líneas de filamento y líneas de agregado por producto. Sin
+        # prefetch, cada fila del changelist dispara varias queries extra
+        # (N+1) y con catálogos grandes la página se vuelve inutilizable.
+        return (
+            super()
+            .get_queryset(request)
+            .prefetch_related(
+                "piezas__filament_lines__filament",
+                "aggregate_lines__aggregate",
+            )
+        )
+
     fieldsets = (
         (None, {"fields": ("name", "description", "priority", "is_multicolor", "is_active")}),
         (
