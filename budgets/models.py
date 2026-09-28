@@ -342,12 +342,27 @@ class Producto(models.Model):
     def margin_percent(self) -> Decimal:
         """Margen resultante del precio cargado a mano sobre el costo PROMEDIO
         (asume que las piezas sobrantes de cada corrida se terminan vendiendo).
+        Es un "markup": cuánto más caro vendés respecto de lo que te cuesta.
         0 si no hay costo."""
         cost = self.unit_cost_avg
         if cost <= 0:
             return Decimal("0.00")
         return (
             (self.unit_price - cost) / cost * Decimal("100")
+        ).quantize(Decimal("0.01"))
+
+    @property
+    def margin_on_price_percent(self) -> Decimal:
+        """Margen sobre el precio de venta: qué porcentaje del precio final
+        (sobre el costo PROMEDIO) es ganancia. A diferencia de `margin_percent`
+        (que compara la ganancia contra el costo), esto la compara contra lo
+        que efectivamente cobrás — el dato que sirve para saber "de cada $100
+        que factura este producto, cuánto es ganancia". 0 si no hay precio."""
+        price = self.unit_price
+        if price <= 0:
+            return Decimal("0.00")
+        return (
+            (price - self.unit_cost_avg) / price * Decimal("100")
         ).quantize(Decimal("0.01"))
 
     # ---- Stock (consumo para una cantidad dada de productos) ----

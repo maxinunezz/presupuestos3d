@@ -64,6 +64,8 @@ class ProductoCosteoTests(TestCase):
         self.assertEqual(p.unit_price, Decimal("1800.00"))
         # margen resultante del precio cargado a mano sobre el costo: 50%
         self.assertEqual(p.margin_percent, Decimal("50.00"))
+        # margen sobre el precio de venta: (1800-1200)/1800 = 33.33%
+        self.assertEqual(p.margin_on_price_percent, Decimal("33.33"))
 
 
 class PresupuestoTotalTests(TestCase):

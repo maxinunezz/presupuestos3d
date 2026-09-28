@@ -420,6 +420,9 @@ class ProductoAdmin(admin.ModelAdmin):
             "<br>&nbsp;&nbsp;"
             + gettext("Margen con el precio actual (sobre el costo promedio):")
             + f" <b>{obj.margin_percent}%</b>"
+            "<br>&nbsp;&nbsp;"
+            + gettext("Margen sobre el precio de venta:")
+            + f" <b>{obj.margin_on_price_percent}%</b>"
         )
 
 
