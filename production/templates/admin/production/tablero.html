@@ -46,6 +46,13 @@
         padding: 5px 10px; font-size: 12px; cursor: pointer; margin-top: 8px;
     }
     .btn-mark-done:hover { background: #8c1e18; }
+    .btn-mark-run {
+        background: #111; color: #fff; border: none; border-radius: 4px;
+        padding: 5px 10px; font-size: 12px; cursor: pointer; margin-top: 8px; margin-right: 6px;
+    }
+    .btn-mark-run:hover { background: #333; }
+    .runs-progress { color: #666; font-size: 12px; margin-top: 3px; }
+    html[data-theme="dark"] .runs-progress { color: #aaa; }
 </style>
 
 <p class="tb-intro">
@@ -73,8 +80,13 @@
                 <div class="meta">{{ m.current.cliente }} · #{{ m.current.presupuesto_id }}</div>
                 <div class="meta">{% translate "Termina:" %} <b>{{ m.current.print_end }}</b></div>
                 <div class="meta">{% blocktranslate with n=m.queue_count %}{{ n }} en cola en esta máquina{% endblocktranslate %}</div>
+                <div class="runs-progress">{% blocktranslate with n=m.current.completed_runs t=m.current.gcode_runs %}{{ n }}/{{ t }} corridas de gcode{% endblocktranslate %}</div>
+                <form method="post" action="{{ m.current.run_url }}" style="display:inline;">
+                    {% csrf_token %}
+                    <button type="submit" class="btn-mark-run">▶ {% translate "Corrida terminada" %}</button>
+                </form>
                 {% if m.current.printing %}
-                <form method="post" action="{{ m.current.mark_done_url }}" onsubmit="return confirm('{% translate "¿Marcar este trabajo como Impreso?" %}');">
+                <form method="post" action="{{ m.current.mark_done_url }}" onsubmit="return confirm('{% translate "¿Marcar este trabajo como Impreso?" %}');" style="display:inline;">
                     {% csrf_token %}
                     <button type="submit" class="btn-mark-done">✅ {% translate "Marcar como Impreso" %}</button>
                 </form>

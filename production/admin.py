@@ -48,6 +48,61 @@ def _marcar_impreso_view(model_admin, request, job_id, redirect_url_name):
     return redirect(reverse(redirect_url_name))
 
 
+def _marcar_corrida_view(model_admin, request, job_id, redirect_url_name):
+    """Registra una corrida de gcode terminada (botón "Corrida terminada" de
+    la cola/tablero). Si el trabajo todavía estaba En cola, la primera corrida
+    ya lo pone en Imprimiendo; si era la última corrida necesaria, el trabajo
+    pasa a Impreso. En ambos casos reusa save_model de ProductionJobAdmin para
+    disparar los mismos efectos que cambiar el estado a mano (descuento/
+    sobrante, historial, Slack, recalcular cola, etc.). Compartido entre
+    ColaProduccionAdmin y TableroAdmin, igual que _marcar_impreso_view."""
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+    job = get_object_or_404(
+        ProductionJob.objects.select_related("presupuesto", "producto", "pieza", "machine"),
+        pk=job_id,
+    )
+    if job.status not in (ProductionJob.Status.PENDING, ProductionJob.Status.PRINTING):
+        model_admin.message_user(
+            request,
+            gettext("Ese trabajo ya estaba Impreso o Cancelado."),
+            level=messages.WARNING,
+        )
+        return redirect(reverse(redirect_url_name))
+
+    total = job.gcode_runs
+    if total <= 0:
+        model_admin.message_user(
+            request,
+            gettext("Este trabajo no tiene corridas de gcode para contar."),
+            level=messages.WARNING,
+        )
+        return redirect(reverse(redirect_url_name))
+
+    completed = job.advance_run()
+    job_admin = admin.site._registry[ProductionJob]
+    if completed >= total:
+        job.status = ProductionJob.Status.DONE
+        job_admin.save_model(request, job, None, True)
+        model_admin.message_user(
+            request,
+            gettext(
+                "Trabajo '%(job)s': corrida %(n)s/%(t)s (la última) — quedó Impreso."
+            )
+            % {"job": job, "n": completed, "t": total},
+        )
+    else:
+        if job.status == ProductionJob.Status.PENDING:
+            job.status = ProductionJob.Status.PRINTING
+        job_admin.save_model(request, job, None, True)
+        model_admin.message_user(
+            request,
+            gettext("Trabajo '%(job)s': corrida %(n)s/%(t)s terminada.")
+            % {"job": job, "n": completed, "t": total},
+        )
+    return redirect(reverse(redirect_url_name))
+
+
 class HistorialImpresionInline(admin.TabularInline):
     """Historial de impresiones de la máquina (solo lectura)."""
 
@@ -514,11 +569,21 @@ class ColaProduccionAdmin(admin.ModelAdmin):
                 self.admin_site.admin_view(self.marcar_impreso_view),
                 name="production_colaproduccion_marcar_impreso",
             ),
+            path(
+                "marcar-corrida/<int:job_id>/",
+                self.admin_site.admin_view(self.marcar_corrida_view),
+                name="production_colaproduccion_marcar_corrida",
+            ),
         ]
         return urls + super().get_urls()
 
     def marcar_impreso_view(self, request, job_id):
         return _marcar_impreso_view(
+            self, request, job_id, "admin:production_colaproduccion_changelist"
+        )
+
+    def marcar_corrida_view(self, request, job_id):
+        return _marcar_corrida_view(
             self, request, job_id, "admin:production_colaproduccion_changelist"
         )
 
@@ -565,6 +630,11 @@ class ColaProduccionAdmin(admin.ModelAdmin):
                 "printing": job.status == ProductionJob.Status.PRINTING,
                 "mark_done_url": reverse(
                     "admin:production_colaproduccion_marcar_impreso", args=[job.id]
+                ),
+                "gcode_runs": job.gcode_runs,
+                "completed_runs": job.completed_runs,
+                "run_url": reverse(
+                    "admin:production_colaproduccion_marcar_corrida", args=[job.id]
                 ),
             }
 
@@ -655,11 +725,21 @@ class TableroAdmin(admin.ModelAdmin):
                 self.admin_site.admin_view(self.marcar_impreso_view),
                 name="production_tablero_marcar_impreso",
             ),
+            path(
+                "marcar-corrida/<int:job_id>/",
+                self.admin_site.admin_view(self.marcar_corrida_view),
+                name="production_tablero_marcar_corrida",
+            ),
         ]
         return urls + super().get_urls()
 
     def marcar_impreso_view(self, request, job_id):
         return _marcar_impreso_view(
+            self, request, job_id, "admin:production_tablero_changelist"
+        )
+
+    def marcar_corrida_view(self, request, job_id):
+        return _marcar_corrida_view(
             self, request, job_id, "admin:production_tablero_changelist"
         )
 
@@ -732,6 +812,11 @@ class TableroAdmin(admin.ModelAdmin):
                         )
                         if printing
                         else None
+                    ),
+                    "gcode_runs": current.gcode_runs,
+                    "completed_runs": current.completed_runs,
+                    "run_url": reverse(
+                        "admin:production_tablero_marcar_corrida", args=[current.id]
                     ),
                 }
             machines.append(

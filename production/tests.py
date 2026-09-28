@@ -491,3 +491,107 @@ class HistorialImpresionTests(TestCase):
             self.maquina.historial.first().estado,
             HistorialImpresion.Estado.CANCELADO,
         )
+
+
+class GcodeRunsProgressTests(TestCase):
+    """"X/Y corridas de gcode": progreso por corrida hasta completar el trabajo."""
+
+    def setUp(self):
+        self.fil = Filament.objects.create(
+            brand="M",
+            material_type=Filament.MaterialType.PLA,
+            color="C",
+            cost_per_kg=Decimal("10000"),
+            stock_grams=Decimal("10000"),
+        )
+        self.producto = make_producto()
+        # 2 piezas por corrida, 7 necesarias -> ceil(7/2) = 4 corridas.
+        self.pieza = Pieza.objects.create(
+            producto=self.producto,
+            name="Pin traba dorsal",
+            units_needed=7,
+            pieces_per_gcode=2,
+            print_time_minutes=Decimal("30"),
+        )
+        PiezaFilamentLine.objects.create(
+            pieza=self.pieza, filament=self.fil, grams_used=Decimal("10")
+        )
+        self.pres = Presupuesto.objects.create(client_name="Cliente")
+        self.maquina = Maquina.objects.create(name="Ender")
+        self.job = ProductionJob.objects.create(
+            presupuesto=self.pres,
+            producto=self.producto,
+            pieza=self.pieza,
+            quantity=7,
+            machine=self.maquina,
+        )
+
+    def test_gcode_runs_y_advance_run(self):
+        self.assertEqual(self.job.gcode_runs, 4)
+        self.assertEqual(self.job.completed_runs, 0)
+        self.assertEqual(self.job.advance_run(), 1)
+        self.assertEqual(self.job.advance_run(), 2)
+        # No pasa del total aunque se llame de más.
+        self.job.completed_runs = 4
+        self.assertEqual(self.job.advance_run(), 4)
+
+    def test_mark_obsolete_resetea_completed_runs(self):
+        self.job.consume_stock()
+        self.job.completed_runs = 2
+        self.job.save(update_fields=["completed_runs"])
+        self.job.mark_obsolete(Decimal("0"))
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.completed_runs, 0)
+
+    def _login(self):
+        User = get_user_model()
+        User.objects.create_superuser("admin", password="x")
+        self.client.login(username="admin", password="x")
+
+    def test_primera_corrida_pasa_a_imprimiendo_y_suma_progreso(self):
+        self._login()
+        url = reverse("admin:production_colaproduccion_marcar_corrida", args=[self.job.pk])
+        self.client.post(url)
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.status, ProductionJob.Status.PRINTING)
+        self.assertEqual(self.job.completed_runs, 1)
+        self.assertIsNotNone(self.job.started_at)
+
+    def test_ultima_corrida_completa_el_trabajo_y_dispara_efectos(self):
+        self._login()
+        url = reverse("admin:production_colaproduccion_marcar_corrida", args=[self.job.pk])
+        for _ in range(4):
+            self.client.post(url)
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.status, ProductionJob.Status.DONE)
+        self.assertEqual(self.job.completed_runs, 4)
+        self.assertTrue(self.job.stock_consumed)
+        self.assertIsNotNone(self.job.finished_at)
+        # 4 corridas × 2 piezas por corrida = 8 unidades salidas, pidieron 7:
+        # 1 unidad sobrante va al stock de la pieza.
+        self.pieza.refresh_from_db()
+        self.assertEqual(self.pieza.stock_quantity, 1)
+        self.maquina.refresh_from_db()
+        self.assertGreater(self.maquina.total_hours_printed, Decimal("0"))
+        # No sigue sumando corridas pasado el total.
+        self.client.post(url)
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.completed_runs, 4)
+
+    def test_via_tablero_tambien_funciona(self):
+        self._login()
+        url = reverse("admin:production_tablero_marcar_corrida", args=[self.job.pk])
+        self.client.post(url)
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.status, ProductionJob.Status.PRINTING)
+        self.assertEqual(self.job.completed_runs, 1)
+
+    def test_job_sin_corridas_no_rompe(self):
+        self._login()
+        self.job.quantity = 0
+        self.job.save(update_fields=["quantity"])
+        url = reverse("admin:production_colaproduccion_marcar_corrida", args=[self.job.pk])
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, 302)
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.completed_runs, 0)

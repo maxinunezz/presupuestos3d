@@ -168,6 +168,15 @@ class ProductionJob(models.Model):
             "sumó al stock de la pieza."
         ),
     )
+    completed_runs = models.PositiveIntegerField(
+        _("Corridas de gcode terminadas"),
+        default=0,
+        help_text=_(
+            "Cuántas corridas de gcode de este trabajo ya se imprimieron. Se "
+            "actualiza con el botón \"Corrida terminada\" de la cola/tablero; "
+            "al llegar al total de corridas necesarias el trabajo pasa a Impreso."
+        ),
+    )
 
     history_added = models.BooleanField(
         _("Guardado en el historial"),
@@ -244,6 +253,18 @@ class ProductionJob(models.Model):
         if self.quantity <= 0:
             return 0
         return math.ceil(self.quantity / ppg)
+
+    def advance_run(self) -> int:
+        """
+        Suma una corrida de gcode terminada (tope: `gcode_runs`). No guarda el
+        estado del trabajo ni dispara los efectos de fin (eso lo hace quien
+        llama, vía `ProductionJobAdmin.save_model`, para que se comporte igual
+        que marcar el trabajo Impreso a mano). Devuelve `completed_runs`.
+        """
+        total = self.gcode_runs
+        if self.completed_runs < total:
+            self.completed_runs += 1
+        return self.completed_runs
 
     @property
     def units_printed(self) -> int:
@@ -542,6 +563,7 @@ class ProductionJob(models.Model):
             self.finished_at = None
             self.surplus_added = False
             self.history_added = False
+            self.completed_runs = 0
             self.save(
                 update_fields=[
                     "status",
@@ -550,6 +572,7 @@ class ProductionJob(models.Model):
                     "finished_at",
                     "surplus_added",
                     "history_added",
+                    "completed_runs",
                 ]
             )
         return summary

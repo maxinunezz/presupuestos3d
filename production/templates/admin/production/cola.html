@@ -36,6 +36,14 @@
         padding: 3px 8px; font-size: 11px; cursor: pointer; white-space: nowrap;
     }
     .btn-mark-done:hover { background: #8c1e18; }
+    .btn-mark-run {
+        background: #111; color: #fff; border: none; border-radius: 4px;
+        padding: 3px 8px; font-size: 11px; cursor: pointer; white-space: nowrap;
+        margin-bottom: 4px;
+    }
+    .btn-mark-run:hover { background: #333; }
+    .runs-progress { color: #666; font-size: 11px; }
+    html[data-theme="dark"] .runs-progress { color: #aaa; }
 
     .recent-machines { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 8px; }
     .recent-card {
@@ -96,10 +104,15 @@
                         <small>{{ j.cliente }} · #{{ j.presupuesto_id }} · {{ j.print_hours }}</small>
                         {% if j.status == "Imprimiendo" %} <span class="badge-print">{% translate "imprimiendo" %}</span>{% endif %}
                         {% if j.overdue %} <span class="badge-overdue">⚠ {% translate "atrasado" %}</span>{% endif %}
+                        <br><span class="runs-progress">{% blocktranslate with n=j.completed_runs t=j.gcode_runs %}{{ n }}/{{ t }} corridas de gcode{% endblocktranslate %}</span>
                     </td>
                     <td>{{ j.start }}</td>
                     <td>{{ j.print_end }}</td>
                     <td>
+                        <form method="post" action="{{ j.run_url }}">
+                            {% csrf_token %}
+                            <button type="submit" class="btn-mark-run">▶ {% translate "Corrida terminada" %}</button>
+                        </form>
                         {% if j.printing %}
                         <form method="post" action="{{ j.mark_done_url }}" onsubmit="return confirm('{% translate "¿Marcar este trabajo como Impreso?" %}');">
                             {% csrf_token %}
@@ -140,11 +153,16 @@
                 {% if j.priority_high %}<span class="badge-prio high">{{ j.priority }}</span>{% endif %}
                 {% if j.pieza %}<br><small>{% translate "de" %} {{ j.producto }}</small>{% endif %}</td>
             <td>{{ j.cliente }} (#{{ j.presupuesto_id }})</td>
-            <td>{{ j.status }}{% if j.overdue %} <span class="badge-overdue">⚠ {% translate "atrasado" %}</span>{% endif %}</td>
+            <td>{{ j.status }}{% if j.overdue %} <span class="badge-overdue">⚠ {% translate "atrasado" %}</span>{% endif %}
+                <br><span class="runs-progress">{% blocktranslate with n=j.completed_runs t=j.gcode_runs %}{{ n }}/{{ t }} corridas de gcode{% endblocktranslate %}</span></td>
             <td>{{ j.print_hours }}</td>
             <td>{{ j.start }}</td>
             <td>{{ j.print_end }}</td>
             <td>
+                <form method="post" action="{{ j.run_url }}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn-mark-run">▶ {% translate "Corrida terminada" %}</button>
+                </form>
                 {% if j.printing %}
                 <form method="post" action="{{ j.mark_done_url }}" onsubmit="return confirm('{% translate "¿Marcar este trabajo como Impreso?" %}');">
                     {% csrf_token %}
