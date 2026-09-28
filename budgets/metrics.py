@@ -165,7 +165,7 @@ def build_metrics(period: str, now: datetime = None) -> dict:
             line = it.line_total
             by_money[name] += line
             revenue += line
-            cost += Decimal(it.quantity) * it.producto.unit_cost
+            cost += Decimal(it.quantity) * it.producto.unit_cost_avg
 
     top_productos_qty = by_qty.most_common(10)
     top_productos_money = sorted(by_money.items(), key=lambda kv: kv[1], reverse=True)[:10]

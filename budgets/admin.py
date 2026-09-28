@@ -396,16 +396,6 @@ class ProductoAdmin(admin.ModelAdmin):
             "&nbsp;&nbsp;<b>" + gettext("Total filamento:") + f" {obj.total_filament_grams} g</b><br>"
             "&nbsp;&nbsp;<b>" + gettext("Total horas de máquina:") + f" {format_hours(obj.total_machine_hours)}</b><br>"
             "&nbsp;&nbsp;" + gettext("Necesita AMS (multicolor):") + f" {ams}<br>"
-            "<br><b>" + gettext("Costos por producto:") + "</b> "
-            "<span style=\"font-weight:normal\">("
-            + gettext("imprimiendo esta unidad sola, ahora")
-            + ")</span><br>"
-            "&nbsp;&nbsp;" + gettext("Material:") + f" ${obj.material_cost} "
-            "(+ " + gettext("merma") + f" ${obj.material_waste_cost})<br>"
-            "&nbsp;&nbsp;" + gettext("Agregados:") + f" ${obj.aggregate_cost}<br>"
-            "&nbsp;&nbsp;" + gettext("Máquina:") + f" ${obj.machine_cost}<br>"
-            "&nbsp;&nbsp;" + gettext("Mano de obra:") + f" ${obj.labor_cost}<br>"
-            "&nbsp;&nbsp;<b>" + gettext("Costo por producto:") + f" ${obj.unit_cost}</b><br>"
             "<br><b>" + gettext("Costo promedio por producto:") + "</b> "
             "<span style=\"font-weight:normal\">("
             + gettext("si se aprovechan las piezas sobrantes de cada corrida en otros pedidos")
@@ -423,9 +413,12 @@ class ProductoAdmin(admin.ModelAdmin):
         if not obj.pk:
             return gettext("Guardá el producto para ver el costo y el margen.")
         return mark_safe(
-            "&nbsp;&nbsp;" + gettext("Tu costo:") + f" <b>${obj.unit_cost}</b>"
+            "&nbsp;&nbsp;" + gettext("Tu costo por producto:") + f" <b>${obj.unit_cost}</b>"
             "&nbsp;&nbsp;|&nbsp;&nbsp;"
-            + gettext("Margen con el precio actual:")
+            + gettext("Tu costo promedio por producto:")
+            + f" <b>${obj.unit_cost_avg}</b>"
+            "<br>&nbsp;&nbsp;"
+            + gettext("Margen con el precio actual (sobre el costo promedio):")
             + f" <b>{obj.margin_percent}%</b>"
         )
 

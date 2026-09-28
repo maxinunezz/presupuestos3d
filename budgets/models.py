@@ -340,8 +340,10 @@ class Producto(models.Model):
 
     @property
     def margin_percent(self) -> Decimal:
-        """Margen resultante del precio cargado a mano sobre el costo. 0 si no hay costo."""
-        cost = self.unit_cost
+        """Margen resultante del precio cargado a mano sobre el costo PROMEDIO
+        (asume que las piezas sobrantes de cada corrida se terminan vendiendo).
+        0 si no hay costo."""
+        cost = self.unit_cost_avg
         if cost <= 0:
             return Decimal("0.00")
         return (
