@@ -311,6 +311,7 @@ class ProductoAdmin(admin.ModelAdmin):
         "diseno_listo",
         "unit_cost_display",
         "unit_price_display",
+        "margin_on_price_display",
         "stock_quantity",
         "min_stock",
         "is_multicolor",
@@ -373,6 +374,10 @@ class ProductoAdmin(admin.ModelAdmin):
     @admin.display(description=_("Precio/pieza"))
     def unit_price_display(self, obj):
         return f"${obj.unit_price}"
+
+    @admin.display(description=_("Margen s/ precio"))
+    def margin_on_price_display(self, obj):
+        return f"{obj.margin_on_price_percent}%"
 
     @admin.display(description=_("Resumen de costos"))
     def costs_summary(self, obj):
