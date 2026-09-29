@@ -1,5 +1,6 @@
 from datetime import date
 from decimal import Decimal
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
@@ -84,14 +85,17 @@ class GastosMetricsTests(TestCase):
     def test_run_rate_anual_usa_meses_transcurridos(self):
         # Año en curso (2026): una suscripción mensual cargada como un gasto por
         # mes (ene–jun). En vista anual el compromiso mensual debe dar ~el monto,
-        # no monto×meses/12 (que subestimaría).
+        # no monto×meses/12 (que subestimaría). "meses_transcurridos" se calcula
+        # a partir de la fecha real de hoy, así que hay que fijarla (con mock)
+        # para que el test no dependa de en qué mes se corra.
         Gasto.objects.all().delete()
-        for mes in range(1, 7):  # ene..jun (hoy es jun 2026)
+        for mes in range(1, 7):  # ene..jun
             gasto(
                 Gasto.Categoria.SUBSCRIPTION, 1000, 5, mes=mes,
                 recurrente=True, periodicidad=Gasto.Periodicidad.MENSUAL,
             )
-        m = build_gastos_metrics(2026, None)
+        with patch("gastos.metrics.timezone.localdate", return_value=date(2026, 6, 30)):
+            m = build_gastos_metrics(2026, None)
         self.assertEqual(m["run_rate_mensual"], Decimal("1000.00"))
 
     def test_ventas_excluye_para_stock_y_cancelados(self):
