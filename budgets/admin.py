@@ -216,11 +216,14 @@ class StockPiezasAdmin(admin.ModelAdmin):
     (igual que 'Piezas', que queda oculta del menú y solo se usa desde el
     link 'Modificar' del producto)."""
 
-    list_display = ("producto", "name", "requires_ams", "stock_quantity")
+    list_display = ("producto", "name", "requires_ams", "stock_quantity", "created_at")
     list_filter = ("producto", "requires_ams")
     search_fields = ("name", "producto__name")
     list_editable = ("stock_quantity",)
-    ordering = ("producto__name", "order", "id")
+    # Por defecto alfabético por nombre; hacé clic en "Agregada el" para
+    # ordenar por fecha en que se agregó la pieza (o en "Producto"/"Nombre"
+    # para ordenar por esas columnas).
+    ordering = ("name",)
     autocomplete_fields = ("producto",)
     inlines = (PiezaFilamentLineInline,)
     formfield_overrides = DECIMAL_LOCALIZE

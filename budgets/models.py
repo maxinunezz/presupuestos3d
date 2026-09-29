@@ -489,6 +489,7 @@ class Pieza(models.Model):
         help_text=_("Unidades de esta pieza ya impresas y disponibles en stock."),
     )
     order = models.PositiveIntegerField(_("Orden"), default=0)
+    created_at = models.DateTimeField(_("Agregada el"), auto_now_add=True)
 
     class Meta:
         verbose_name = _("Pieza")
