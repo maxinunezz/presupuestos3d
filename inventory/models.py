@@ -189,6 +189,14 @@ class Aggregate(models.Model):
             "agregado. Los decimales pueden ir con coma o con punto."
         ),
     )
+    notes = models.TextField(
+        _("Notas"),
+        blank=True,
+        help_text=_(
+            "Cosas propias de este agregado: proveedor, medida exacta, color, "
+            "dónde se compra, etc."
+        ),
+    )
     is_active = models.BooleanField(_("Activo"), default=True)
     created_at = models.DateTimeField(_("Creado"), auto_now_add=True)
     updated_at = models.DateTimeField(_("Actualizado"), auto_now=True)

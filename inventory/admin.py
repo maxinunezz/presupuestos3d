@@ -142,7 +142,7 @@ class AggregateAdmin(admin.ModelAdmin):
         "is_active",
     )
     list_filter = (AggregateLowStockFilter, "category", "is_active")
-    search_fields = ("name",)
+    search_fields = ("name", "notes")
     list_editable = ("cost_per_unit", "min_stock", "is_active")
     formfield_overrides = DECIMAL_LOCALIZE
     # El stock NO se edita a mano: solo cambia al confirmar una Compra.
