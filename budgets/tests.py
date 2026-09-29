@@ -1,6 +1,8 @@
 from decimal import Decimal
 
+from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.urls import reverse
 from django.utils import timezone
 
 from gastos.models import Gasto
@@ -1144,3 +1146,60 @@ class MetricasPanelVentasTests(TestCase):
         self.assertEqual(por_medio[Presupuesto.MedioPago.EFECTIVO]["count"], 1)
         self.assertEqual(por_medio[Presupuesto.MedioPago.TRANSFERENCIA]["count"], 1)
         self.assertNotIn(Presupuesto.MedioPago.TARJETA, por_medio)
+
+
+class MetricasPanelMesDropdownTests(TestCase):
+    """Selector de mes/año en la pestaña "Mes" del panel de Métricas."""
+
+    def setUp(self):
+        User = get_user_model()
+        User.objects.create_superuser("admin", password="x")
+        self.client.login(username="admin", password="x")
+        self.url = reverse("admin:budgets_metricas_changelist")
+
+        self.fil = Filament.objects.create(
+            brand="M",
+            material_type=Filament.MaterialType.PLA,
+            color="C",
+            cost_per_kg=Decimal("10000"),
+            stock_grams=Decimal("1000000"),
+        )
+
+    def _aprobado(self, sale_price, when):
+        p = make_producto(sale_price=sale_price, machine_cost_per_hour=Decimal("10"))
+        add_pieza(p, self.fil, Decimal("10"), print_hours=Decimal("1"))
+        pres = Presupuesto.objects.create(client_name="Cliente")
+        PresupuestoItem.objects.create(presupuesto=pres, producto=p, quantity=1)
+        Presupuesto.objects.filter(pk=pres.pk).update(
+            status=Presupuesto.Status.APPROVED, approved_at=when,
+        )
+        return pres
+
+    def test_sin_date_muestra_el_mes_actual_real(self):
+        hoy = timezone.localtime(timezone.now())
+        self._aprobado(Decimal("1000"), hoy)
+        resp = self.client.get(self.url, {"period": "month"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.context["selected_date_value"], hoy.strftime("%Y-%m"))
+        self.assertEqual(resp.context["facturacion"], "$ 1.000,00")
+
+    def test_date_valido_muestra_ese_mes(self):
+        otro_mes = timezone.make_aware(timezone.datetime(2026, 3, 15, 10, 0))
+        self._aprobado(Decimal("2000"), otro_mes)
+        resp = self.client.get(self.url, {"period": "month", "date": "2026-03"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.context["selected_date_value"], "2026-03")
+        self.assertEqual(resp.context["facturacion"], "$ 2.000,00")
+
+    def test_date_invalido_cae_al_mes_actual(self):
+        hoy = timezone.localtime(timezone.now())
+        resp = self.client.get(self.url, {"period": "month", "date": "no-es-una-fecha"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.context["selected_date_value"], hoy.strftime("%Y-%m"))
+
+    def test_date_se_ignora_fuera_de_la_pestana_mes(self):
+        # El parámetro date solo aplica al período "month"; en otros períodos
+        # se ignora y no rompe la vista.
+        resp = self.client.get(self.url, {"period": "week", "date": "2026-03"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.context["period"], "week")

@@ -14,6 +14,10 @@
     }
     .mx-tab.active { background: #111; color: #fff; }
     .mx-range { color: var(--body-quiet-color, #555); font-size: 13px; font-weight: 600; }
+    .mx-month-select {
+        padding: 6px 10px; border: 1px solid #111; border-radius: 6px; font-size: 13px;
+        font-weight: 600; background: #fff; color: #111;
+    }
     .mx-excel {
         margin-left: auto; padding: 8px 18px; background: #16a34a; color: #fff; border-radius: 6px;
         text-decoration: none; font-size: 13px; font-weight: 600;
@@ -85,8 +89,15 @@
         <a class="mx-tab {% if p.active %}active{% endif %}" href="?period={{ p.key }}">{{ p.label }}</a>
         {% endfor %}
     </div>
+    {% if period == "month" %}
+    <select class="mx-month-select" onchange="if(this.value){window.location.href='?period=month&date=' + this.value;}">
+        {% for opt in month_options %}
+        <option value="{{ opt.value }}" {% if opt.value == selected_date_value %}selected{% endif %}>{{ opt.date|date:"F Y" }}</option>
+        {% endfor %}
+    </select>
+    {% endif %}
     <span class="mx-range">{{ range_str }}</span>
-    <a class="mx-excel" href="?period={{ period }}&export=xlsx">⬇ {% translate "Descargar Excel" %}</a>
+    <a class="mx-excel" href="?period={{ period }}{% if period == "month" %}&date={{ selected_date_value }}{% endif %}&export=xlsx">⬇ {% translate "Descargar Excel" %}</a>
 </div>
 
 <!-- ===================== A) VENTAS ===================== -->

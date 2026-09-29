@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from django.contrib import admin, messages
 from django.core.exceptions import ValidationError
 from django.db.models import DecimalField
@@ -1130,7 +1132,23 @@ class MetricasAdmin(admin.ModelAdmin):
         if period not in PERIODS:
             period = "month"
 
-        metrics = build_metrics(period)
+        # En la pestaña "Mes" se puede elegir un mes/año puntual con
+        # ?date=YYYY-MM. Si falta o es inválido, siempre cae en el mes actual
+        # (comportamiento default de build_metrics con now=None).
+        selected_month = None
+        if period == "month":
+            date_param = request.GET.get("date", "")
+            try:
+                anio_str, mes_str = date_param.split("-")
+                anio, mes = int(anio_str), int(mes_str)
+                if 1 <= mes <= 12 and 2000 <= anio <= 2100:
+                    selected_month = timezone.make_aware(
+                        datetime(anio, mes, 1), timezone.get_current_timezone()
+                    )
+            except (ValueError, AttributeError):
+                selected_month = None
+
+        metrics = build_metrics(period, now=selected_month)
 
         # Descarga de la planilla de Excel.
         if request.GET.get("export") == "xlsx":
@@ -1145,6 +1163,31 @@ class MetricasAdmin(admin.ModelAdmin):
             response["Content-Disposition"] = f'attachment; filename="{fname}"'
             return response
 
+        # Opciones del dropdown de mes: últimos 24 meses (más reciente primero),
+        # contados desde el mes actual real (no desde el mes elegido).
+        month_options = []
+        real_now = timezone.localtime(timezone.now()).replace(
+            day=1, hour=0, minute=0, second=0, microsecond=0
+        )
+        cursor = real_now
+        for _ in range(24):
+            month_options.append(
+                {
+                    "value": cursor.strftime("%Y-%m"),
+                    "date": cursor,
+                }
+            )
+            cursor = (
+                cursor.replace(year=cursor.year - 1, month=12)
+                if cursor.month == 1
+                else cursor.replace(month=cursor.month - 1)
+            )
+        selected_date_value = (
+            timezone.localtime(selected_month).strftime("%Y-%m")
+            if selected_month
+            else real_now.strftime("%Y-%m")
+        )
+
         context = {
             **self.admin_site.each_context(request),
             "title": gettext("Métricas"),
@@ -1152,6 +1195,8 @@ class MetricasAdmin(admin.ModelAdmin):
                 {"key": k, "label": v["label"], "active": k == period}
                 for k, v in PERIODS.items()
             ],
+            "month_options": month_options,
+            "selected_date_value": selected_date_value,
             **template_context(metrics),
             **(extra_context or {}),
         }
