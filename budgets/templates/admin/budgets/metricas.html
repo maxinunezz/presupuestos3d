@@ -43,6 +43,8 @@
     .mx-kpis--resultado .kpi { background: #1f2937; }
     .mx-kpis--resultado .kpi.mx-negativo { background: #b91c1c; }
     .mx-kpis--resultado .kpi.mx-positivo { background: #15803d; }
+    .mx-section--ventaspanel { border-bottom-color: #0891b2; }
+    .mx-kpis--ventaspanel .kpi { background: #0e7490; }
 
     .mx-grid { display: flex; flex-wrap: wrap; gap: 20px; margin-top: 14px; }
     .mx-card {
@@ -207,6 +209,35 @@
     <div class="kpi {% if beneficio_neto_positivo %}mx-positivo{% else %}mx-negativo{% endif %}"><span class="n">{{ beneficio_neto }}</span><span class="l">{% translate "Beneficio neto" %}</span><span class="s">{% translate "− gastos operativos" %}</span></div>
 </div>
 
+<!-- ===================== F) PANEL DE VENTAS (cobros) ===================== -->
+<div class="mx-section mx-section--ventaspanel">🧾 {% translate "Panel de ventas (cobros)" %}</div>
+<p class="mx-intro">
+    {% blocktranslate %}De los Ingresos de arriba, cuánto ya se cobró y cuánto sigue pendiente,
+    según el estado de cobro y el método de pago cargados en el Panel de ventas.{% endblocktranslate %}
+</p>
+<div class="mx-kpis mx-kpis--ventaspanel">
+    <div class="kpi"><span class="n">{{ total_cobrado }}</span><span class="l">{% translate "Cobrado" %}</span></div>
+    <div class="kpi"><span class="n">{{ total_pendiente_cobro }}</span><span class="l">{% translate "Pendiente de cobro" %}</span></div>
+</div>
+
+<div class="mx-grid">
+    <div class="mx-card">
+        <h3>{% translate "Por estado de cobro" %}</h3>
+        <table class="mx">
+            <thead><tr><th>{% translate "Estado" %}</th><th class="num">{% translate "Pedidos" %}</th><th class="num">{% translate "Total" %}</th></tr></thead>
+            <tbody>
+                {% for r in por_estado_venta %}
+                <tr><td>{{ r.label }}</td><td class="num">{{ r.count }}</td><td class="num">{{ r.total }}</td></tr>
+                {% empty %}<tr><td colspan="3" class="empty">{% translate "Sin ventas en el período." %}</td></tr>{% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="mx-card">
+        <h3>{% translate "Por método de pago" %}</h3>
+        <canvas id="chartMedioPago" height="150"></canvas>
+    </div>
+</div>
+
 <script src="{% static 'budgets/chart.umd.min.js' %}"></script>
 <script>
 (function () {
@@ -224,6 +255,7 @@
     var embudo = {{ embudo_chart_json|safe }};
     var maq = {{ maq_chart_json|safe }};
     var costos = {{ costos_chart_json|safe }};
+    var medioPago = {{ medio_pago_chart_json|safe }};
 
     new Chart(document.getElementById("chartFact"), {
         type: "bar",
@@ -246,6 +278,12 @@
     new Chart(document.getElementById("chartCostos"), {
         type: "doughnut",
         data: { labels: costos.labels, datasets: [{ data: costos.data, backgroundColor: PALETTE, borderWidth: 0 }] },
+        options: { plugins: { legend: { position: "right" } } }
+    });
+
+    new Chart(document.getElementById("chartMedioPago"), {
+        type: "doughnut",
+        data: { labels: medioPago.labels, datasets: [{ data: medioPago.data, backgroundColor: PALETTE, borderWidth: 0 }] },
         options: { plugins: { legend: { position: "right" } } }
     });
 })();

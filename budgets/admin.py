@@ -16,6 +16,7 @@ from .metrics import PERIODS, build_metrics, export_xlsx, template_context
 from .models import (
     DisenoNoListoError,
     Metricas,
+    PanelVentas,
     Pieza,
     PiezaFilamentLine,
     Presupuesto,
@@ -295,6 +296,66 @@ class StockProductosAdmin(admin.ModelAdmin):
     @admin.display(description=_("Faltan para el mínimo"))
     def a_reponer(self, obj):
         return obj.stock_to_make or "—"
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(PanelVentas)
+class PanelVentasAdmin(admin.ModelAdmin):
+    """
+    Panel de ventas: todos los presupuestos ya aprobados (no cancelados ni
+    pedidos para reponer stock interno), con su estado de cobro y método de
+    pago. Es de solo consulta salvo esos dos campos, que se pueden editar acá
+    mismo desde el listado. El resto del pedido (ítems, producción, etc.) se
+    sigue editando desde Presupuestos.
+    """
+
+    list_display = (
+        "id",
+        "client_name",
+        "status",
+        "approved_at",
+        "total_display",
+        "estado_venta",
+        "medio_pago",
+    )
+    list_filter = ("estado_venta", "medio_pago", "status")
+    search_fields = ("client_name", "description")
+    list_editable = ("estado_venta", "medio_pago")
+    ordering = ("-approved_at",)
+    fields = (
+        "client_name",
+        "para_stock",
+        "status",
+        "approved_at",
+        "total_display",
+        "estado_venta",
+        "medio_pago",
+    )
+    readonly_fields = (
+        "client_name",
+        "para_stock",
+        "status",
+        "approved_at",
+        "total_display",
+    )
+
+    def get_queryset(self, request):
+        return (
+            super()
+            .get_queryset(request)
+            .filter(approved_at__isnull=False)
+            .exclude(status=Presupuesto.Status.CANCELLED)
+            .exclude(para_stock=True)
+        )
+
+    @admin.display(description=_("Total pedido"))
+    def total_display(self, obj):
+        return f"${obj.total}"
 
     def has_add_permission(self, request):
         return False

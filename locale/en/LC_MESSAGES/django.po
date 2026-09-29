@@ -1478,6 +1478,60 @@ msgstr "Income − production"
 msgid "− gastos operativos"
 msgstr "− operating expenses"
 
+msgid "Estado de venta"
+msgstr "Sale status"
+
+msgid "Si el cliente ya pagó este pedido. Es independiente del estado de producción (un pedido puede estar Aprobado o Completado y seguir Pendiente de pago)."
+msgstr "Whether the client has already paid for this order. It is independent from the production status (an order can be Approved or Completed and still be Payment pending)."
+
+msgid "Pendiente de pago"
+msgstr "Payment pending"
+
+msgid "Pago parcial"
+msgstr "Partial payment"
+
+msgid "Pagado"
+msgstr "Paid"
+
+msgid "Método de pago"
+msgstr "Payment method"
+
+msgid "Cómo pagó (o va a pagar) el cliente. Se puede dejar vacío."
+msgstr "How the client paid (or will pay). It can be left empty."
+
+msgid "Tarjeta"
+msgstr "Card"
+
+msgid "Venta"
+msgstr "Sale"
+
+msgid "Panel de ventas"
+msgstr "Sales panel"
+
+msgid "Panel de ventas (cobros)"
+msgstr "Sales panel (payments)"
+
+msgid "Cobrado"
+msgstr "Collected"
+
+msgid "Pendiente de cobro"
+msgstr "Pending collection"
+
+msgid "Por estado de cobro"
+msgstr "By payment status"
+
+msgid "Por método de pago"
+msgstr "By payment method"
+
+msgid "PANEL DE VENTAS (cobros)"
+msgstr "SALES PANEL (payments)"
+
+msgid "Pedidos"
+msgstr "Orders"
+
+msgid "Sin especificar"
+msgstr "Not specified"
+
 msgid "de"
 msgstr "from"
 
@@ -1941,6 +1995,11 @@ msgid "Ingresos (facturación real del período, sin cancelados ni pedidos para
 msgstr "Income (real billing for the period, excluding cancelled orders and stock
     orders) minus production costs minus operating expenses (from the Expenses panel, by expense
     date)."
+
+msgid "De los Ingresos de arriba, cuánto ya se cobró y cuánto sigue pendiente,
+    según el estado de cobro y el método de pago cargados en el Panel de ventas."
+msgstr "Of the Income above, how much has already been collected and how much is still
+    pending, based on the payment status and payment method loaded in the Sales panel."
 
 msgid "Presupuesto"
 msgstr "Budget"

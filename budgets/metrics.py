@@ -297,6 +297,34 @@ def build_metrics(period: str, now: datetime = None) -> dict:
     beneficio_bruto = facturacion - costo_produccion
     beneficio_neto = beneficio_bruto - gastos_operativos
 
+    # =====================  E) PANEL DE VENTAS (cobros)  =====================
+    # Mismo universo que A) Ventas (cur_approved: ventas reales del período, ya
+    # sin cancelados ni pedidos para stock) desglosado por estado de cobro y
+    # por método de pago. "Cobrado" es la porción de la Facturación (misma cifra
+    # que alimenta el Resultado) que ya entró en caja; el resto es lo pendiente
+    # de cobro, aunque ya se haya facturado/producido.
+    por_estado_venta = []
+    for value, label in Presupuesto.EstadoVenta.choices:
+        ps = [p for p in cur_approved if p.estado_venta == value]
+        por_estado_venta.append(
+            {"value": value, "label": label, "count": len(ps), "total": sum((p.total for p in ps), ZERO)}
+        )
+
+    por_medio_pago = []
+    for value, label in list(Presupuesto.MedioPago.choices) + [("", _("Sin especificar"))]:
+        ps = [p for p in cur_approved if p.medio_pago == value]
+        if not ps:
+            continue
+        por_medio_pago.append(
+            {"value": value, "label": label, "count": len(ps), "total": sum((p.total for p in ps), ZERO)}
+        )
+
+    total_cobrado = sum(
+        (p.total for p in cur_approved if p.estado_venta == Presupuesto.EstadoVenta.PAGADO),
+        ZERO,
+    )
+    total_pendiente_cobro = facturacion - total_cobrado
+
     return {
         "period": period,
         "period_label": PERIODS[period]["label"],
@@ -341,6 +369,11 @@ def build_metrics(period: str, now: datetime = None) -> dict:
         "gastos_operativos": gastos_operativos,
         "beneficio_bruto": beneficio_bruto,
         "beneficio_neto": beneficio_neto,
+        # Panel de ventas (cobros)
+        "por_estado_venta": por_estado_venta,
+        "por_medio_pago": por_medio_pago,
+        "total_cobrado": total_cobrado,
+        "total_pendiente_cobro": total_pendiente_cobro,
     }
 
 
@@ -445,7 +478,17 @@ def export_xlsx(m: dict):
         (gettext("Gastos operativos"), _money(m["gastos_operativos"])),
         (gettext("Beneficio bruto (ingresos − producción)"), _money(m["beneficio_bruto"])),
         (gettext("Beneficio neto (− gastos operativos)"), _money(m["beneficio_neto"])),
+        ("", ""),
+        (gettext("PANEL DE VENTAS (cobros)"), ""),
+        (gettext("Cobrado"), _money(m["total_cobrado"])),
+        (gettext("Pendiente de cobro"), _money(m["total_pendiente_cobro"])),
     ]
+    for row in m["por_estado_venta"]:
+        rows.append((f'  {row["label"]} ({row["count"]})', _money(row["total"])))
+    rows.append(("", ""))
+    rows.append((gettext("Por método de pago"), ""))
+    for row in m["por_medio_pago"]:
+        rows.append((f'  {row["label"]} ({row["count"]})', _money(row["total"])))
     r = 3
     for label, value in rows:
         ws.cell(row=r, column=1, value=label)
@@ -547,6 +590,10 @@ def template_context(m: dict) -> dict:
             float(m["cost_aggregates"]),
         ],
     }
+    medio_pago_chart = {
+        "labels": [str(row["label"]) for row in m["por_medio_pago"]],
+        "data": [float(row["total"]) for row in m["por_medio_pago"]],
+    }
 
     return {
         "period": m["period"],
@@ -586,6 +633,17 @@ def template_context(m: dict) -> dict:
         "beneficio_bruto_positivo": m["beneficio_bruto"] >= 0,
         "beneficio_neto": _money(m["beneficio_neto"]),
         "beneficio_neto_positivo": m["beneficio_neto"] >= 0,
+        # Panel de ventas (cobros)
+        "total_cobrado": _money(m["total_cobrado"]),
+        "total_pendiente_cobro": _money(m["total_pendiente_cobro"]),
+        "por_estado_venta": [
+            {"label": row["label"], "count": row["count"], "total": _money(row["total"])}
+            for row in m["por_estado_venta"]
+        ],
+        "por_medio_pago": [
+            {"label": row["label"], "count": row["count"], "total": _money(row["total"])}
+            for row in m["por_medio_pago"]
+        ],
         # Tablas
         "embudo": m["embudo"],
         "top_productos_qty": [{"name": n, "qty": q} for n, q in m["top_productos_qty"]],
@@ -607,4 +665,5 @@ def template_context(m: dict) -> dict:
         "embudo_chart_json": json.dumps(embudo_chart),
         "maq_chart_json": json.dumps(maq_chart),
         "costos_chart_json": json.dumps(costos_chart),
+        "medio_pago_chart_json": json.dumps(medio_pago_chart),
     }

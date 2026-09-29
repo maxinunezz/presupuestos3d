@@ -985,3 +985,132 @@ class MetricasResultadoTests(TestCase):
         m = build_metrics("month", now=now)
         self.assertEqual(m["gastos_operativos"], Decimal("200"))
         self.assertEqual(m["beneficio_bruto"] - Decimal("200"), m["beneficio_neto"])
+
+
+class PresupuestoCobroDefaultsTests(TestCase):
+    """Los campos nuevos de cobro tienen los defaults esperados y no rompen
+    el flujo de aprobación existente."""
+
+    def test_defaults(self):
+        p = Presupuesto.objects.create(client_name="Cliente")
+        self.assertEqual(p.estado_venta, Presupuesto.EstadoVenta.PENDIENTE)
+        self.assertEqual(p.medio_pago, "")
+
+
+class PanelVentasAdminTests(TestCase):
+    """Panel de ventas: solo lista presupuestos ya aprobados (no cancelados ni
+    para stock), y estado_venta/medio_pago se pueden editar desde el listado."""
+
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+        from django.urls import reverse
+
+        self.reverse = reverse
+        User = get_user_model()
+        User.objects.create_superuser("admin", password="x")
+        self.client.login(username="admin", password="x")
+
+        self.borrador = Presupuesto.objects.create(client_name="Sin aprobar")
+
+        self.aprobado = Presupuesto.objects.create(client_name="Cliente aprobado")
+        Presupuesto.objects.filter(pk=self.aprobado.pk).update(
+            status=Presupuesto.Status.APPROVED, approved_at=timezone.now()
+        )
+
+        self.cancelado = Presupuesto.objects.create(client_name="Cliente cancelado")
+        Presupuesto.objects.filter(pk=self.cancelado.pk).update(
+            status=Presupuesto.Status.CANCELLED, approved_at=timezone.now()
+        )
+
+        self.para_stock = Presupuesto.objects.create(client_name="", para_stock=True)
+        Presupuesto.objects.filter(pk=self.para_stock.pk).update(
+            status=Presupuesto.Status.APPROVED, approved_at=timezone.now()
+        )
+
+    def test_changelist_muestra_solo_aprobados(self):
+        url = self.reverse("admin:budgets_panelventas_changelist")
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        ids = {obj.pk for obj in response.context["cl"].result_list}
+        self.assertEqual(ids, {self.aprobado.pk})
+
+    def test_list_editable_estado_venta_y_medio_pago(self):
+        url = self.reverse("admin:budgets_panelventas_changelist")
+        response = self.client.post(
+            url,
+            {
+                "form-TOTAL_FORMS": "1",
+                "form-INITIAL_FORMS": "1",
+                "form-MIN_NUM_FORMS": "0",
+                "form-MAX_NUM_FORMS": "1000",
+                "form-0-id": str(self.aprobado.pk),
+                "form-0-estado_venta": Presupuesto.EstadoVenta.PAGADO,
+                "form-0-medio_pago": Presupuesto.MedioPago.TRANSFERENCIA,
+                "_save": "Guardar",
+            },
+        )
+        self.aprobado.refresh_from_db()
+        self.assertEqual(self.aprobado.estado_venta, Presupuesto.EstadoVenta.PAGADO)
+        self.assertEqual(self.aprobado.medio_pago, Presupuesto.MedioPago.TRANSFERENCIA)
+
+    def test_no_permite_alta_ni_borrado(self):
+        add_url = self.reverse("admin:budgets_panelventas_add")
+        self.assertEqual(self.client.get(add_url).status_code, 403)
+        delete_url = self.reverse(
+            "admin:budgets_panelventas_delete", args=[self.aprobado.pk]
+        )
+        self.assertEqual(self.client.get(delete_url).status_code, 403)
+
+
+class MetricasPanelVentasTests(TestCase):
+    """Resumen del panel de ventas dentro de Métricas: desglose por estado de
+    cobro y por método de pago, sobre el mismo universo de venta real."""
+
+    def setUp(self):
+        self.fil = Filament.objects.create(
+            brand="M",
+            material_type=Filament.MaterialType.PLA,
+            color="C",
+            cost_per_kg=Decimal("10000"),
+            stock_grams=Decimal("1000000"),
+        )
+
+    def _aprobado(self, sale_price, estado_venta, medio_pago, when):
+        p = make_producto(sale_price=sale_price, machine_cost_per_hour=Decimal("10"))
+        add_pieza(p, self.fil, Decimal("10"), print_hours=Decimal("1"))
+        pres = Presupuesto.objects.create(client_name="Cliente")
+        PresupuestoItem.objects.create(presupuesto=pres, producto=p, quantity=1)
+        Presupuesto.objects.filter(pk=pres.pk).update(
+            status=Presupuesto.Status.APPROVED,
+            approved_at=when,
+            estado_venta=estado_venta,
+            medio_pago=medio_pago,
+        )
+        return pres
+
+    def test_desglose_por_estado_y_medio_de_pago(self):
+        now = timezone.now()
+        self._aprobado(
+            Decimal("1000"), Presupuesto.EstadoVenta.PAGADO,
+            Presupuesto.MedioPago.EFECTIVO, now,
+        )
+        self._aprobado(
+            Decimal("500"), Presupuesto.EstadoVenta.PENDIENTE,
+            Presupuesto.MedioPago.TRANSFERENCIA, now,
+        )
+        m = build_metrics("month", now=now)
+        self.assertEqual(m["total_cobrado"], Decimal("1000.00"))
+        self.assertEqual(m["total_pendiente_cobro"], Decimal("500.00"))
+
+        por_estado = {row["value"]: row for row in m["por_estado_venta"]}
+        self.assertEqual(por_estado[Presupuesto.EstadoVenta.PAGADO]["count"], 1)
+        self.assertEqual(
+            por_estado[Presupuesto.EstadoVenta.PAGADO]["total"], Decimal("1000.00")
+        )
+        self.assertEqual(por_estado[Presupuesto.EstadoVenta.PENDIENTE]["count"], 1)
+        self.assertEqual(por_estado[Presupuesto.EstadoVenta.PARCIAL]["count"], 0)
+
+        por_medio = {row["value"]: row for row in m["por_medio_pago"]}
+        self.assertEqual(por_medio[Presupuesto.MedioPago.EFECTIVO]["count"], 1)
+        self.assertEqual(por_medio[Presupuesto.MedioPago.TRANSFERENCIA]["count"], 1)
+        self.assertNotIn(Presupuesto.MedioPago.TARJETA, por_medio)

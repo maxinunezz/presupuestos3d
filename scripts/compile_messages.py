@@ -619,6 +619,27 @@ BUDGETS = {
     'Beneficio neto': 'Net profit',
     'Ingresos − producción': 'Income − production',
     '− gastos operativos': '− operating expenses',
+    # Panel de ventas (cobros)
+    'Estado de venta': 'Sale status',
+    "Si el cliente ya pagó este pedido. Es independiente del estado de producción (un pedido puede estar Aprobado o Completado y seguir Pendiente de pago).":
+        "Whether the client has already paid for this order. It is independent from the production status (an order can be Approved or Completed and still be Payment pending).",
+    'Pendiente de pago': 'Payment pending',
+    'Pago parcial': 'Partial payment',
+    'Pagado': 'Paid',
+    'Método de pago': 'Payment method',
+    'Cómo pagó (o va a pagar) el cliente. Se puede dejar vacío.':
+        'How the client paid (or will pay). It can be left empty.',
+    'Tarjeta': 'Card',
+    'Venta': 'Sale',
+    'Panel de ventas': 'Sales panel',
+    'Panel de ventas (cobros)': 'Sales panel (payments)',
+    'Cobrado': 'Collected',
+    'Pendiente de cobro': 'Pending collection',
+    'Por estado de cobro': 'By payment status',
+    'Por método de pago': 'By payment method',
+    'PANEL DE VENTAS (cobros)': 'SALES PANEL (payments)',
+    'Pedidos': 'Orders',
+    'Sin especificar': 'Not specified',
 }
 
 PRODUCTION = {
@@ -903,6 +924,13 @@ BLOCKTRANS = {
         'Income (real billing for the period, excluding cancelled orders and stock\n'
         '    orders) minus production costs minus operating expenses (from the Expenses panel, by expense\n'
         '    date).'
+    ),
+    (
+        'De los Ingresos de arriba, cuánto ya se cobró y cuánto sigue pendiente,\n'
+        '    según el estado de cobro y el método de pago cargados en el Panel de ventas.'
+    ): (
+        'Of the Income above, how much has already been collected and how much is still\n'
+        '    pending, based on the payment status and payment method loaded in the Sales panel.'
     ),
 }
 

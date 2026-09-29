@@ -679,6 +679,18 @@ class Presupuesto(models.Model):
         COMPLETED = "COMPLETED", _("Completado")
         CANCELLED = "CANCELLED", _("Cancelado")
 
+    class EstadoVenta(models.TextChoices):
+        PENDIENTE = "PENDIENTE", _("Pendiente de pago")
+        PARCIAL = "PARCIAL", _("Pago parcial")
+        PAGADO = "PAGADO", _("Pagado")
+
+    class MedioPago(models.TextChoices):
+        EFECTIVO = "EFECTIVO", _("Efectivo")
+        TRANSFERENCIA = "TRANSFERENCIA", _("Transferencia")
+        MERCADOPAGO = "MERCADOPAGO", _("Mercado Pago")
+        TARJETA = "TARJETA", _("Tarjeta")
+        OTRO = "OTRO", _("Otro")
+
     client_name = models.CharField(_("Cliente"), max_length=150)
     description = models.TextField(_("Notas / descripción"), blank=True)
 
@@ -710,6 +722,27 @@ class Presupuesto(models.Model):
 
     status = models.CharField(
         _("Estado"), max_length=20, choices=Status.choices, default=Status.DRAFT
+    )
+
+    # --- Cobro (independiente del estado de producción de arriba) ---
+    estado_venta = models.CharField(
+        _("Estado de venta"),
+        max_length=20,
+        choices=EstadoVenta.choices,
+        default=EstadoVenta.PENDIENTE,
+        help_text=_(
+            "Si el cliente ya pagó este pedido. Es independiente del estado de "
+            "producción (un pedido puede estar Aprobado o Completado y seguir "
+            "Pendiente de pago)."
+        ),
+    )
+    medio_pago = models.CharField(
+        _("Método de pago"),
+        max_length=20,
+        choices=MedioPago.choices,
+        blank=True,
+        default="",
+        help_text=_("Cómo pagó (o va a pagar) el cliente. Se puede dejar vacío."),
     )
 
     # --- Fechas por estado (reloj de producción) ---
@@ -1603,6 +1636,20 @@ class Metricas(Presupuesto):
         proxy = True
         verbose_name = _("Métrica")
         verbose_name_plural = _("Métricas")
+
+
+class PanelVentas(Presupuesto):
+    """
+    Proxy de Presupuesto para tener en el admin una página propia de 'Panel de
+    ventas': todos los presupuestos ya aprobados (Aprobado en adelante), con su
+    estado de venta (cobro) y método de pago editables desde el listado. No crea
+    tabla nueva: comparte los mismos campos y datos que Presupuesto.
+    """
+
+    class Meta:
+        proxy = True
+        verbose_name = _("Venta")
+        verbose_name_plural = _("Panel de ventas")
 
 
 class PresupuestoItem(models.Model):
