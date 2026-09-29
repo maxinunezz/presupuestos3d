@@ -5,6 +5,42 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 
+class CategoriaGasto(models.Model):
+    """
+    Categoría de gasto (Administración, Comercialización, Suscripciones, IT,
+    Herramientas, etc.). Antes era un choice fijo en el código (`Gasto.Categoria`);
+    ahora es un modelo editable desde el admin para poder sumar categorías
+    nuevas sin programar ni migrar nada — el dueño del negocio las da de alta
+    él mismo en "Categorías de gasto". Borrar una categoría en uso está
+    bloqueado (`on_delete=PROTECT` en `Gasto`/`TopeGasto`) para no perder el
+    historial de gastos ya cargados con ella.
+    """
+
+    nombre = models.CharField(_("Nombre"), max_length=50, unique=True)
+
+    class Meta:
+        verbose_name = _("Categoría de gasto")
+        verbose_name_plural = _("Categorías de gasto")
+        ordering = ["nombre"]
+
+    def __str__(self):
+        return self.nombre
+
+
+def _default_categoria_gasto():
+    """
+    Categoría que se preselecciona al cargar un Gasto nuevo: "Administración"
+    si existe (la que era default antes de este modelo), si no la primera que
+    haya. Devuelve None si todavía no hay ninguna categoría cargada.
+    """
+    return (
+        CategoriaGasto.objects.filter(nombre="Administración")
+        .values_list("id", flat=True)
+        .first()
+        or CategoriaGasto.objects.order_by("id").values_list("id", flat=True).first()
+    )
+
+
 class Gasto(models.Model):
     """
     Un gasto operativo / de estructura del negocio: NO es un costo directo de
@@ -23,13 +59,6 @@ class Gasto(models.Model):
     ser único (ej: honorarios de un trámite) y no por eso es extraordinario.
     """
 
-    class Categoria(models.TextChoices):
-        ADMIN = "ADMIN", _("Administración")
-        COMMERCIAL = "COMMERCIAL", _("Comercialización")
-        SUBSCRIPTION = "SUBSCRIPTION", _("Suscripciones")
-        IT = "IT", _("IT")
-        OTHER = "OTHER", _("Otro")
-
     class Tipo(models.TextChoices):
         OPERATIVO = "OPERATIVO", _("Operativo (estructura del negocio)")
         EXTRAORDINARIO = "EXTRAORDINARIO", _("Extraordinario (puntual, no representativo)")
@@ -46,8 +75,12 @@ class Gasto(models.Model):
         DEBITO = "DEBITO", _("Débito automático")
         OTRO = "OTRO", _("Otro")
 
-    categoria = models.CharField(
-        _("Categoría"), max_length=20, choices=Categoria.choices, default=Categoria.ADMIN
+    categoria = models.ForeignKey(
+        CategoriaGasto,
+        verbose_name=_("Categoría"),
+        on_delete=models.PROTECT,
+        related_name="gastos",
+        default=_default_categoria_gasto,
     )
     tipo = models.CharField(
         _("Tipo"),
@@ -104,7 +137,7 @@ class Gasto(models.Model):
         ordering = ["-fecha", "-id"]
 
     def __str__(self):
-        return f"{self.get_categoria_display()} · {self.concepto} (${self.monto})"
+        return f"{self.categoria} · {self.concepto} (${self.monto})"
 
     @property
     def monthly_equivalent(self) -> Decimal:
@@ -124,10 +157,11 @@ class TopeGasto(models.Model):
     gasto real del período contra este tope y se avisa si se excede.
     """
 
-    categoria = models.CharField(
-        _("Categoría"),
-        max_length=20,
-        choices=Gasto.Categoria.choices,
+    categoria = models.ForeignKey(
+        CategoriaGasto,
+        verbose_name=_("Categoría"),
+        on_delete=models.PROTECT,
+        related_name="topes",
         unique=True,
     )
     monto_mensual = models.DecimalField(
@@ -143,12 +177,12 @@ class TopeGasto(models.Model):
     class Meta:
         verbose_name = _("Tope de gasto (presupuesto)")
         verbose_name_plural = _("Topes de gasto (presupuestos)")
-        ordering = ["categoria"]
+        ordering = ["categoria__nombre"]
 
     def __str__(self):
         from django.utils.translation import gettext
         return gettext("Tope %(categoria)s: $%(monto)s/mes") % {
-            "categoria": self.get_categoria_display(),
+            "categoria": self.categoria,
             "monto": self.monto_mensual,
         }
 

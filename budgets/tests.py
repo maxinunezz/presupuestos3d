@@ -5,7 +5,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from gastos.models import Gasto
+from gastos.models import CategoriaGasto, Gasto
 from inventory.models import Aggregate, Filament
 from production.models import Maquina
 
@@ -980,7 +980,7 @@ class MetricasResultadoTests(TestCase):
         )
         Gasto.objects.create(
             fecha=timezone.localdate(now),
-            categoria=Gasto.Categoria.IT,
+            categoria=CategoriaGasto.objects.get_or_create(nombre="IT")[0],
             concepto="Hosting",
             monto=Decimal("200"),
         )
@@ -999,13 +999,13 @@ class MetricasResultadoTests(TestCase):
         )
         Gasto.objects.create(
             fecha=timezone.localdate(now),
-            categoria=Gasto.Categoria.IT,
+            categoria=CategoriaGasto.objects.get_or_create(nombre="IT")[0],
             concepto="Hosting",
             monto=Decimal("200"),
         )
         Gasto.objects.create(
             fecha=timezone.localdate(now),
-            categoria=Gasto.Categoria.OTHER,
+            categoria=CategoriaGasto.objects.get_or_create(nombre="Otro")[0],
             tipo=Gasto.Tipo.EXTRAORDINARIO,
             concepto="Viaje BSAS",
             monto=Decimal("5000"),

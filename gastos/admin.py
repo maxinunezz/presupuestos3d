@@ -12,11 +12,25 @@ from .metrics import (
     export_xlsx,
     template_context,
 )
-from .models import Gasto, PanelGastos, TopeGasto
+from .models import CategoriaGasto, Gasto, PanelGastos, TopeGasto
 
 # Los campos de cantidad/precio (DecimalField) aceptan tanto coma como punto
 # para los decimales (ej: 8500,50 u 8500.50).
 DECIMAL_LOCALIZE = {DecimalField: {"localize": True}}
+
+
+@admin.register(CategoriaGasto)
+class CategoriaGastoAdmin(admin.ModelAdmin):
+    """
+    Categorías de gasto (Administración, Suscripciones, Herramientas, etc.).
+    Antes eran opciones fijas en el código; ahora se agregan/editan acá mismo,
+    sin tocar nada de programación. Borrar una categoría que ya tenga Gastos o
+    Topes cargados está bloqueado para no perder ese historial: hay que
+    reasignarlos primero a otra categoría.
+    """
+
+    list_display = ("nombre",)
+    search_fields = ("nombre",)
 
 
 @admin.register(Gasto)
@@ -34,6 +48,7 @@ class GastoAdmin(admin.ModelAdmin):
     )
     list_filter = ("tipo", "categoria", "es_recurrente", "periodicidad", "medio_pago")
     search_fields = ("concepto", "proveedor", "notas")
+    autocomplete_fields = ("categoria",)
     date_hierarchy = "fecha"
     formfield_overrides = DECIMAL_LOCALIZE
     fieldsets = (
@@ -63,6 +78,7 @@ class GastoAdmin(admin.ModelAdmin):
 class TopeGastoAdmin(admin.ModelAdmin):
     list_display = ("categoria", "monto_mensual")
     list_editable = ("monto_mensual",)
+    autocomplete_fields = ("categoria",)
     formfield_overrides = DECIMAL_LOCALIZE
 
 

@@ -10,7 +10,11 @@ from django.utils import timezone
 from budgets.models import Presupuesto, PresupuestoItem, Producto
 
 from .metrics import build_gastos_metrics
-from .models import Gasto, TopeGasto
+from .models import CategoriaGasto, Gasto, TopeGasto
+
+
+def categoria(nombre):
+    return CategoriaGasto.objects.get_or_create(nombre=nombre)[0]
 
 
 def gasto(cat, monto, dia, mes=6, anio=2026, recurrente=False, periodicidad=None, tipo=None):
@@ -28,33 +32,33 @@ def gasto(cat, monto, dia, mes=6, anio=2026, recurrente=False, periodicidad=None
 class GastoModelTests(TestCase):
     def test_monthly_equivalent_mensual(self):
         g = gasto(
-            Gasto.Categoria.SUBSCRIPTION, 1000, 5,
+            categoria("Suscripciones"), 1000, 5,
             recurrente=True, periodicidad=Gasto.Periodicidad.MENSUAL,
         )
         self.assertEqual(g.monthly_equivalent, Decimal("1000.00"))
 
     def test_monthly_equivalent_anual_se_divide(self):
         g = gasto(
-            Gasto.Categoria.IT, 1200, 5,
+            categoria("IT"), 1200, 5,
             recurrente=True, periodicidad=Gasto.Periodicidad.ANUAL,
         )
         self.assertEqual(g.monthly_equivalent, Decimal("100.00"))
 
     def test_monthly_equivalent_no_recurrente_es_cero(self):
-        g = gasto(Gasto.Categoria.ADMIN, 500, 5)
+        g = gasto(categoria("Administración"), 500, 5)
         self.assertEqual(g.monthly_equivalent, Decimal("0"))
 
 
 class GastosMetricsTests(TestCase):
     def setUp(self):
-        gasto(Gasto.Categoria.ADMIN, 1000, 3)
-        gasto(Gasto.Categoria.COMMERCIAL, 500, 10)
+        gasto(categoria("Administración"), 1000, 3)
+        gasto(categoria("Comercialización"), 500, 10)
         gasto(
-            Gasto.Categoria.SUBSCRIPTION, 300, 15,
+            categoria("Suscripciones"), 300, 15,
             recurrente=True, periodicidad=Gasto.Periodicidad.MENSUAL,
         )
         # Mes anterior (mayo).
-        gasto(Gasto.Categoria.ADMIN, 800, 5, mes=5)
+        gasto(categoria("Administración"), 800, 5, mes=5)
 
     def test_total_y_n_gastos_del_mes(self):
         m = build_gastos_metrics(2026, 6)
@@ -63,7 +67,7 @@ class GastosMetricsTests(TestCase):
 
     def test_desglose_por_categoria(self):
         m = build_gastos_metrics(2026, 6)
-        admin = next(c for c in m["categorias"] if c["value"] == "ADMIN")
+        admin = next(c for c in m["categorias"] if c["label"] == "Administración")
         self.assertEqual(admin["total"], Decimal("1000"))
 
     def test_run_rate_mensual_de_recurrentes(self):
@@ -92,7 +96,7 @@ class GastosMetricsTests(TestCase):
         Gasto.objects.all().delete()
         for mes in range(1, 7):  # ene..jun
             gasto(
-                Gasto.Categoria.SUBSCRIPTION, 1000, 5, mes=mes,
+                categoria("Suscripciones"), 1000, 5, mes=mes,
                 recurrente=True, periodicidad=Gasto.Periodicidad.MENSUAL,
             )
         with patch("gastos.metrics.timezone.localdate", return_value=date(2026, 6, 30)):
@@ -140,7 +144,7 @@ class GastosMetricsTests(TestCase):
         # Gasto puntual grande (ej: viaje) marcado como EXTRAORDINARIO: no debe
         # entrar en el resultado operativo vs ventas, solo en el total general.
         gasto(
-            Gasto.Categoria.OTHER, 10000, 20, tipo=Gasto.Tipo.EXTRAORDINARIO,
+            categoria("Otro"), 10000, 20, tipo=Gasto.Tipo.EXTRAORDINARIO,
         )
         prod = Producto.objects.create(name="P")
         pres = Presupuesto.objects.create(client_name="Cliente")
@@ -168,7 +172,7 @@ class GastosMetricsTests(TestCase):
 
     def test_topes_detecta_exceso(self):
         TopeGasto.objects.create(
-            categoria=Gasto.Categoria.ADMIN, monto_mensual=Decimal("700")
+            categoria=categoria("Administración"), monto_mensual=Decimal("700")
         )
         m = build_gastos_metrics(2026, 6)
         admin_tope = next(t for t in m["topes_rows"] if t["label"] == "Administración")
@@ -180,7 +184,7 @@ class PanelGastosViewTests(TestCase):
         User = get_user_model()
         User.objects.create_superuser("admin", password="x")
         self.client.login(username="admin", password="x")
-        gasto(Gasto.Categoria.ADMIN, 1000, 3)
+        gasto(categoria("Administración"), 1000, 3)
 
     def test_panel_carga(self):
         url = reverse("admin:gastos_panelgastos_changelist")

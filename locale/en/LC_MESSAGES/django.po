@@ -379,6 +379,12 @@ msgstr "Subscriptions"
 msgid "IT"
 msgstr "IT"
 
+msgid "Categoría de gasto"
+msgstr "Expense category"
+
+msgid "Categorías de gasto"
+msgstr "Expense categories"
+
 msgid "Tipo"
 msgstr "Type"
 

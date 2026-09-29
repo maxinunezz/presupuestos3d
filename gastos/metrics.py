@@ -16,7 +16,7 @@ from decimal import Decimal
 from django.utils import timezone
 from django.utils.translation import gettext
 
-from .models import Gasto, TopeGasto
+from .models import CategoriaGasto, Gasto, TopeGasto
 
 ZERO = Decimal("0")
 
@@ -139,25 +139,31 @@ def build_gastos_metrics(year: int, month) -> dict:
         prev_start, prev_end = _year_range(year - 1)
         prev_label = gettext("Año %(year)s") % {"year": year - 1}
 
-    gastos = list(Gasto.objects.filter(fecha__gte=start, fecha__lt=end))
+    gastos = list(
+        Gasto.objects.filter(fecha__gte=start, fecha__lt=end).select_related("categoria")
+    )
 
     # --- Total y desglose por categoría ---
     total_gastos = sum((Decimal(g.monto) for g in gastos), ZERO)
     n_gastos = len(gastos)
 
-    por_cat = {value: {"total": ZERO, "count": 0} for value, _ in Gasto.Categoria.choices}
+    # Las categorías son un modelo editable (CategoriaGasto), no un choice fijo:
+    # se listan TODAS las que existan (aunque tengan $0 en el período), igual
+    # que antes con el enum completo.
+    todas_categorias = list(CategoriaGasto.objects.all())
+    por_cat = {cat.pk: {"total": ZERO, "count": 0} for cat in todas_categorias}
     for g in gastos:
-        por_cat[g.categoria]["total"] += Decimal(g.monto)
-        por_cat[g.categoria]["count"] += 1
+        por_cat[g.categoria_id]["total"] += Decimal(g.monto)
+        por_cat[g.categoria_id]["count"] += 1
     categorias = [
         {
-            "value": value,
-            "label": label,
-            "total": por_cat[value]["total"],
-            "count": por_cat[value]["count"],
-            "pct": (por_cat[value]["total"] / total_gastos * 100) if total_gastos else ZERO,
+            "value": cat.pk,
+            "label": cat.nombre,
+            "total": por_cat[cat.pk]["total"],
+            "count": por_cat[cat.pk]["count"],
+            "pct": (por_cat[cat.pk]["total"] / total_gastos * 100) if total_gastos else ZERO,
         }
-        for value, label in Gasto.Categoria.choices
+        for cat in todas_categorias
     ]
     categorias.sort(key=lambda c: c["total"], reverse=True)
 
@@ -179,9 +185,9 @@ def build_gastos_metrics(year: int, month) -> dict:
 
     # Variación por categoría.
     prev_gastos = list(Gasto.objects.filter(fecha__gte=prev_start, fecha__lt=prev_end))
-    prev_por_cat = {value: ZERO for value, _ in Gasto.Categoria.choices}
+    prev_por_cat = {cat.pk: ZERO for cat in todas_categorias}
     for g in prev_gastos:
-        prev_por_cat[g.categoria] += Decimal(g.monto)
+        prev_por_cat[g.categoria_id] += Decimal(g.monto)
     for c in categorias:
         pv = prev_por_cat.get(c["value"], ZERO)
         c["prev"] = pv
@@ -210,7 +216,7 @@ def build_gastos_metrics(year: int, month) -> dict:
         (
             {
                 "concepto": g.concepto,
-                "categoria": g.get_categoria_display(),
+                "categoria": g.categoria.nombre,
                 "periodicidad": g.get_periodicidad_display(),
                 "monthly": g.monthly_equivalent,
             }
@@ -233,7 +239,7 @@ def build_gastos_metrics(year: int, month) -> dict:
         (
             {
                 "concepto": g.concepto,
-                "categoria": g.get_categoria_display(),
+                "categoria": g.categoria.nombre,
                 "fecha": g.fecha,
                 "monto": Decimal(g.monto),
             }
@@ -254,7 +260,7 @@ def build_gastos_metrics(year: int, month) -> dict:
     resultado_final = ventas - total_gastos
 
     # --- Topes por categoría (#4) ---
-    topes = {t.categoria: Decimal(t.monto_mensual) for t in TopeGasto.objects.all()}
+    topes = {t.categoria_id: Decimal(t.monto_mensual) for t in TopeGasto.objects.all()}
     topes_rows = []
     for c in categorias:
         tope_mensual = topes.get(c["value"], ZERO)

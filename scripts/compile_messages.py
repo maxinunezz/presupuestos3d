@@ -238,6 +238,8 @@ GASTOS = {
     'Comercialización': 'Marketing',
     'Suscripciones': 'Subscriptions',
     'IT': 'IT',
+    'Categoría de gasto': 'Expense category',
+    'Categorías de gasto': 'Expense categories',
     'Tipo': 'Type',
     'Operativo (estructura del negocio)': 'Operating (business structure)',
     'Extraordinario (puntual, no representativo)': 'Extraordinary (one-off, not representative)',
