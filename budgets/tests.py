@@ -1094,6 +1094,92 @@ class PanelVentasAdminTests(TestCase):
         self.assertEqual(self.client.get(delete_url).status_code, 403)
 
 
+class PanelVentasColumnasTests(TestCase):
+    """Columnas de detalle (producto/cantidad/precio/beneficio/costos) del
+    Panel de ventas: pensadas para reemplazar la planilla de ventas en Excel
+    fila por pedido."""
+
+    def setUp(self):
+        from django.contrib import admin as django_admin
+
+        from budgets.admin import PanelVentasAdmin
+        from budgets.models import PanelVentas
+
+        self.fil = Filament.objects.create(
+            brand="M",
+            material_type=Filament.MaterialType.PLA,
+            color="C",
+            cost_per_kg=Decimal("10000"),  # $10/g
+            stock_grams=Decimal("1000000"),
+        )
+        self.agg = Aggregate.objects.create(
+            name="Argolla", cost_per_unit=Decimal("50"), stock_quantity=Decimal("1000")
+        )
+        # Producto: 100g de filamento ($1000), 1h de máquina ($100/h),
+        # 30min de mano de obra ($60/h → $30), 2 argollas ($50 c/u → $100).
+        self.p = make_producto(
+            name="Llavero personalizado",
+            sale_price=Decimal("1000"),
+            machine_cost_per_hour=Decimal("100"),
+            labor_cost_per_hour=Decimal("60"),
+        )
+        add_pieza(self.p, self.fil, Decimal("100"), print_hours=Decimal("1"))
+        ProductoAggregateLine.objects.create(
+            producto=self.p, aggregate=self.agg, quantity=Decimal("2")
+        )
+        self.p.post_processing_minutes = 30
+        self.p.save()
+
+        self.admin = PanelVentasAdmin(PanelVentas, django_admin.site)
+
+    def _pedido(self, items):
+        """items: lista de (producto, cantidad, unit_price)."""
+        pres = Presupuesto.objects.create(client_name="Cliente")
+        for producto, cantidad, unit_price in items:
+            PresupuestoItem.objects.create(
+                presupuesto=pres, producto=producto, quantity=cantidad,
+                unit_price=unit_price,
+            )
+        Presupuesto.objects.filter(pk=pres.pk).update(
+            status=Presupuesto.Status.APPROVED, approved_at=timezone.now(),
+        )
+        pres.refresh_from_db()
+        return pres
+
+    def test_pedido_de_un_solo_producto_muestra_el_detalle_puntual(self):
+        pres = self._pedido([(self.p, 3, Decimal("1000"))])
+
+        self.assertEqual(self.admin.producto_display(pres), "Llavero personalizado")
+        self.assertEqual(self.admin.cantidad_display(pres), 3)
+        self.assertEqual(self.admin.precio_unitario_display(pres), "$ 1.000,00")
+        # Costo unitario: material $1000 + máquina $100 + mano de obra $30 +
+        # agregados $100 = $1230/u. Beneficio = (1000-1230)*3 = -$690,00.
+        self.assertEqual(self.admin.material_display(pres), "$ 3.000,00")
+        self.assertEqual(self.admin.machine_display(pres), "$ 300,00")
+        self.assertEqual(self.admin.labor_display(pres), "$ 90,00")
+        self.assertEqual(self.admin.extras_display(pres), "$ 300,00")
+        self.assertEqual(self.admin.beneficio_display(pres), "$ -690,00")
+        self.assertEqual(
+            self.admin.mes_display(pres),
+            timezone.localtime(pres.approved_at).strftime("%m/%Y"),
+        )
+
+    def test_pedido_con_varios_productos_se_resume(self):
+        otro = make_producto(name="Otro producto", sale_price=Decimal("500"))
+        add_pieza(otro, self.fil, Decimal("10"), print_hours=Decimal("0.1"))
+        pres = self._pedido(
+            [(self.p, 1, Decimal("1000")), (otro, 2, Decimal("500"))]
+        )
+
+        self.assertEqual(self.admin.producto_display(pres), "2 productos")
+        self.assertEqual(self.admin.cantidad_display(pres), 3)
+        self.assertEqual(self.admin.precio_unitario_display(pres), "—")
+        # Costo del segundo producto se suma también (no queda afuera): 100g
+        # del primero (qty 1) + 10g×2 del segundo, a $10/g = $1000 + $200.
+        total_material = self.admin._costo_componente(pres, "material")
+        self.assertEqual(total_material, Decimal("1200.00"))
+
+
 class MetricasPanelVentasTests(TestCase):
     """Resumen del panel de ventas dentro de Métricas: desglose por estado de
     cobro y por método de pago, sobre el mismo universo de venta real."""

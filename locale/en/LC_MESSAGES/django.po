@@ -1598,6 +1598,21 @@ msgstr "Orders"
 msgid "Sin especificar"
 msgstr "Not specified"
 
+msgid "$ / U"
+msgstr "$ / U"
+
+msgid "Extras (agregados)"
+msgstr "Extras (add-ons)"
+
+msgid "Observaciones"
+msgstr "Notes"
+
+msgid "%(n)d productos"
+msgstr "%(n)d products"
+
+msgid "Beneficio"
+msgstr "Profit"
+
 msgid "de"
 msgstr "from"
 

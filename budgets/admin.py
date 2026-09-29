@@ -1,4 +1,5 @@
 from datetime import datetime
+from decimal import Decimal
 
 from django.contrib import admin, messages
 from django.core.exceptions import ValidationError
@@ -30,6 +31,7 @@ from .models import (
     StockProductos,
 )
 from .pdf import (
+    format_money,
     presupuesto_pdf_filename,
     render_presupuesto_pdf,
 )
@@ -311,22 +313,39 @@ class PanelVentasAdmin(admin.ModelAdmin):
     """
     Panel de ventas: todos los presupuestos ya aprobados (no cancelados ni
     pedidos para reponer stock interno), con su estado de cobro y método de
-    pago. Es de solo consulta salvo esos dos campos, que se pueden editar acá
-    mismo desde el listado. El resto del pedido (ítems, producción, etc.) se
-    sigue editando desde Presupuestos.
+    pago, más el detalle de producto/costos/beneficio de cada pedido (pensado
+    para reemplazar la planilla de ventas en Excel). Es de solo consulta salvo
+    estado de cobro y método de pago, que se pueden editar acá mismo desde el
+    listado. El resto del pedido (ítems, producción, etc.) se sigue editando
+    desde Presupuestos.
+
+    Cuando el pedido tiene un solo producto (el caso más común), "Producto",
+    "Cant." y "$ / U" muestran ese ítem puntual, igual que una fila de la
+    planilla vieja. Con varios productos en el mismo pedido se resumen (ver
+    `producto_display`) y el resto de las columnas de costo/beneficio suman
+    todos los ítems del pedido.
     """
 
     list_display = (
         "id",
         "client_name",
-        "status",
-        "approved_at",
+        "producto_display",
+        "cantidad_display",
+        "precio_unitario_display",
         "total_display",
+        "approved_at",
+        "mes_display",
+        "status",
         "estado_venta",
         "medio_pago",
+        "beneficio_display",
+        "material_display",
+        "labor_display",
+        "machine_display",
+        "extras_display",
     )
     list_filter = ("estado_venta", "medio_pago", "status")
-    search_fields = ("client_name", "description")
+    search_fields = ("client_name", "description", "items__producto__name")
     list_editable = ("estado_venta", "medio_pago")
     ordering = ("-approved_at",)
     fields = (
@@ -334,16 +353,36 @@ class PanelVentasAdmin(admin.ModelAdmin):
         "para_stock",
         "status",
         "approved_at",
+        "mes_display",
+        "producto_display",
+        "cantidad_display",
+        "precio_unitario_display",
         "total_display",
+        "beneficio_display",
+        "material_display",
+        "labor_display",
+        "machine_display",
+        "extras_display",
         "estado_venta",
         "medio_pago",
+        "observaciones_display",
     )
     readonly_fields = (
         "client_name",
         "para_stock",
         "status",
         "approved_at",
+        "mes_display",
+        "producto_display",
+        "cantidad_display",
+        "precio_unitario_display",
         "total_display",
+        "beneficio_display",
+        "material_display",
+        "labor_display",
+        "machine_display",
+        "extras_display",
+        "observaciones_display",
     )
 
     def get_queryset(self, request):
@@ -353,11 +392,83 @@ class PanelVentasAdmin(admin.ModelAdmin):
             .filter(approved_at__isnull=False)
             .exclude(status=Presupuesto.Status.CANCELLED)
             .exclude(para_stock=True)
+            .prefetch_related(
+                "items__producto__piezas__filament_lines__filament",
+                "items__producto__aggregate_lines__aggregate",
+            )
         )
 
     @admin.display(description=_("Total pedido"))
     def total_display(self, obj):
         return f"${obj.total}"
+
+    @admin.display(description=_("Producto"))
+    def producto_display(self, obj):
+        items = list(obj.items.all())
+        if not items:
+            return "—"
+        if len(items) == 1:
+            return str(items[0].producto)
+        return gettext("%(n)d productos") % {"n": len(items)}
+
+    @admin.display(description=_("Cant."))
+    def cantidad_display(self, obj):
+        items = list(obj.items.all())
+        return sum(item.quantity for item in items) if items else "—"
+
+    @admin.display(description=_("$ / U"))
+    def precio_unitario_display(self, obj):
+        items = list(obj.items.all())
+        if len(items) == 1:
+            return f"$ {format_money(items[0].effective_unit_price)}"
+        return "—"
+
+    @admin.display(description=_("Mes"))
+    def mes_display(self, obj):
+        if not obj.approved_at:
+            return "—"
+        return timezone.localtime(obj.approved_at).strftime("%m/%Y")
+
+    @admin.display(description=_("Beneficio"))
+    def beneficio_display(self, obj):
+        return f"$ {format_money(obj.profit_total)}"
+
+    def _costo_componente(self, obj, campo):
+        """Suma, sobre todos los ítems del pedido, un componente del costo
+        promedio de producción (mismo costo que usa `line_profit`)."""
+        total = Decimal("0")
+        for item in obj.items.all():
+            p = item.producto
+            if campo == "material":
+                unit = p.material_cost_avg + p.material_waste_cost_avg
+            elif campo == "labor":
+                unit = p.labor_cost
+            elif campo == "machine":
+                unit = p.machine_cost_avg
+            else:  # extras (agregados)
+                unit = p.aggregate_cost
+            total += unit * item.quantity
+        return total
+
+    @admin.display(description=_("Material"))
+    def material_display(self, obj):
+        return f"$ {format_money(self._costo_componente(obj, 'material'))}"
+
+    @admin.display(description=_("Mano de obra"))
+    def labor_display(self, obj):
+        return f"$ {format_money(self._costo_componente(obj, 'labor'))}"
+
+    @admin.display(description=_("Máquina"))
+    def machine_display(self, obj):
+        return f"$ {format_money(self._costo_componente(obj, 'machine'))}"
+
+    @admin.display(description=_("Extras (agregados)"))
+    def extras_display(self, obj):
+        return f"$ {format_money(self._costo_componente(obj, 'extras'))}"
+
+    @admin.display(description=_("Observaciones"))
+    def observaciones_display(self, obj):
+        return obj.description or "—"
 
     def has_add_permission(self, request):
         return False

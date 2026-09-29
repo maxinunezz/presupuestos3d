@@ -688,6 +688,7 @@ class Presupuesto(models.Model):
         EFECTIVO = "EFECTIVO", _("Efectivo")
         TRANSFERENCIA = "TRANSFERENCIA", _("Transferencia")
         MERCADOPAGO = "MERCADOPAGO", _("Mercado Pago")
+        UALA = "UALA", _("Ualá")
         TARJETA = "TARJETA", _("Tarjeta")
         OTRO = "OTRO", _("Otro")
 

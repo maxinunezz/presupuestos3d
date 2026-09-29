@@ -670,6 +670,11 @@ BUDGETS = {
     'PANEL DE VENTAS (cobros)': 'SALES PANEL (payments)',
     'Pedidos': 'Orders',
     'Sin especificar': 'Not specified',
+    '$ / U': '$ / U',
+    'Extras (agregados)': 'Extras (add-ons)',
+    'Observaciones': 'Notes',
+    '%(n)d productos': '%(n)d products',
+    'Beneficio': 'Profit',
 }
 
 PRODUCTION = {

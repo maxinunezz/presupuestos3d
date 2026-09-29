@@ -105,7 +105,22 @@ media/           # uploads locales (.3mf/gcode) — efímero en prod
     Devuelve `{"from_stock": [...], "shortages": [...]}`. Idempotente vía
     `stock_provisioned`.
 - **PresupuestoItem**: línea de presupuesto. `quantity`, `unit_price` (congelado
-  al guardar). Props: `effective_unit_price`, `line_total`.
+  al guardar). Props: `effective_unit_price`, `line_total`, `line_cost` (costo
+  promedio de la línea), `line_profit` (beneficio de la línea).
+  `Presupuesto.profit_total` suma el `line_profit` de todas las líneas + el
+  `fixed_cost` del pedido (ganancia pura, sin costo de producción asociado).
+- `Presupuesto.medio_pago` incluye **Ualá** (fintech/billetera usada seguido
+  por el negocio) como choice propio, además de Efectivo/Transferencia/Mercado
+  Pago/Tarjeta/Otro.
+- Proxy de admin: **PanelVentas** ("Panel de ventas"), pensado para reemplazar
+  la planilla de ventas en Excel: un pedido aprobado por fila con producto,
+  cantidad, precio unitario y fecha/mes (si el pedido tiene un solo producto,
+  que es el caso más común, muestra ese ítem puntual; con varios productos los
+  resume como "N productos" y suma cantidades/costos de todos). Beneficio y
+  desglose de costos (Material, Mano de obra, Máquina, Extras/agregados) salen
+  de las properties de `Producto`/`PresupuestoItem` ya existentes, sumadas por
+  todos los ítems del pedido — no hay campos nuevos, es solo presentación.
+  Estado de cobro y método de pago siguen editables desde el listado.
 - Proxy de admin: **Metricas** (panel de KPIs, ver abajo).
 
 ### production
