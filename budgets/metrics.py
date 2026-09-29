@@ -91,11 +91,18 @@ def make_buckets(period: str, now: datetime):
 #  Cálculo de métricas
 # ---------------------------------------------------------------------------
 def _approved_in_range(start, end):
-    """Presupuestos aprobados en [start, end) con todo prefetch para no hacer N+1."""
+    """Presupuestos aprobados en [start, end) con todo prefetch para no hacer N+1.
+
+    Excluye cancelados (ya no son una venta real, aunque quede `approved_at`
+    seteado) y pedidos para stock interno (reposición, no facturación a un
+    cliente) — así "Facturación"/"Ingresos" coincide con la definición de
+    venta real que ya usa el panel de Gastos (`gastos.metrics._ventas_total`).
+    """
     return list(
-        Presupuesto.objects.filter(
-            approved_at__gte=start, approved_at__lt=end
-        ).prefetch_related(
+        Presupuesto.objects.filter(approved_at__gte=start, approved_at__lt=end)
+        .exclude(status=Presupuesto.Status.CANCELLED)
+        .exclude(para_stock=True)
+        .prefetch_related(
             "items__producto__piezas__filament_lines__filament",
             "items__producto__aggregate_lines__aggregate",
         )
@@ -157,15 +164,32 @@ def build_metrics(period: str, now: datetime = None) -> dict:
     cli_money = defaultdict(lambda: ZERO)
     revenue = ZERO
     cost = ZERO
+    # Desglose del costo de producción (todos con el costo PROMEDIO, el mismo
+    # que ya usa `margen_pct`: prorratea material/máquina asumiendo que las
+    # sobrantes de cada corrida se terminan usando/vendiendo).
+    cost_material = ZERO
+    cost_labor = ZERO
+    cost_machine = ZERO
+    cost_machine_hours = ZERO
+    cost_aggregates = ZERO
     for p in cur_approved:
         cli_money[p.client_name] += p.total
         for it in p.items.all():
-            name = it.producto.name
+            producto = it.producto
+            name = producto.name
+            qty = Decimal(it.quantity)
             by_qty[name] += it.quantity
             line = it.line_total
             by_money[name] += line
             revenue += line
-            cost += Decimal(it.quantity) * it.producto.unit_cost_avg
+            cost += qty * producto.unit_cost_avg
+            cost_material += qty * (
+                producto.material_cost_avg + producto.material_waste_cost_avg
+            )
+            cost_labor += qty * producto.labor_cost
+            cost_machine += qty * producto.machine_cost_avg
+            cost_machine_hours += qty * producto.total_machine_hours_avg
+            cost_aggregates += qty * producto.aggregate_cost
 
     top_productos_qty = by_qty.most_common(10)
     top_productos_money = sorted(by_money.items(), key=lambda kv: kv[1], reverse=True)[:10]
@@ -260,6 +284,19 @@ def build_metrics(period: str, now: datetime = None) -> dict:
     low_stock = sum(1 for f in Filament.objects.filter(is_active=True) if f.is_low_stock)
     low_stock += sum(1 for a in Aggregate.objects.filter(is_active=True) if a.is_low_stock)
 
+    # =====================  D) RESULTADO (Ingresos/Costos/Gastos/Beneficio)  =====================
+    # Ingresos: la misma facturación de A) Ventas (ya excluye cancelados y
+    # pedidos para stock). Costos de producción: el desglose de arriba
+    # (material+merma, mano de obra, máquina, agregados = mismo total que
+    # `cost`, el que ya alimenta `margen_pct`). Gastos operativos: se traen
+    # del panel de Gastos para no duplicar esa lógica.
+    from gastos.metrics import gastos_operativos_total
+
+    costo_produccion = cost
+    gastos_operativos = gastos_operativos_total(cur["start"].date(), cur["end"].date())
+    beneficio_bruto = facturacion - costo_produccion
+    beneficio_neto = beneficio_bruto - gastos_operativos
+
     return {
         "period": period,
         "period_label": PERIODS[period]["label"],
@@ -294,6 +331,16 @@ def build_metrics(period: str, now: datetime = None) -> dict:
         "consumo_valor": consumo_valor,
         "margen_pct": margen_pct,
         "low_stock": low_stock,
+        # Resultado (Ingresos/Costos/Gastos/Beneficio)
+        "cost_material": cost_material,
+        "cost_labor": cost_labor,
+        "cost_machine": cost_machine,
+        "cost_machine_hours": cost_machine_hours,
+        "cost_aggregates": cost_aggregates,
+        "costo_produccion": costo_produccion,
+        "gastos_operativos": gastos_operativos,
+        "beneficio_bruto": beneficio_bruto,
+        "beneficio_neto": beneficio_neto,
     }
 
 
@@ -383,6 +430,21 @@ def export_xlsx(m: dict):
         (gettext("Consumo de material ($)"), _money(m["consumo_valor"])),
         (gettext("Filamento consumido (g)"), f'{m["fil_grams"]:.0f}'),
         (gettext("Insumos bajo stock mínimo"), m["low_stock"]),
+        ("", ""),
+        (gettext("COSTOS DE PRODUCCIÓN (período actual)"), ""),
+        (gettext("Material (con merma)"), _money(m["cost_material"])),
+        (gettext("Mano de obra"), _money(m["cost_labor"])),
+        (gettext("Horas de máquina"), _hours(m["cost_machine_hours"])),
+        (gettext("Costo de máquina"), _money(m["cost_machine"])),
+        (gettext("Agregados"), _money(m["cost_aggregates"])),
+        (gettext("Total costo de producción"), _money(m["costo_produccion"])),
+        ("", ""),
+        (gettext("RESULTADO (período actual)"), ""),
+        (gettext("Ingresos (facturación real)"), _money(m["facturacion"])),
+        (gettext("Costos de producción"), _money(m["costo_produccion"])),
+        (gettext("Gastos operativos"), _money(m["gastos_operativos"])),
+        (gettext("Beneficio bruto (ingresos − producción)"), _money(m["beneficio_bruto"])),
+        (gettext("Beneficio neto (− gastos operativos)"), _money(m["beneficio_neto"])),
     ]
     r = 3
     for label, value in rows:
@@ -471,6 +533,20 @@ def template_context(m: dict) -> dict:
         "labels": [r["name"] for r in m["uso_maquinas"]],
         "data": [float(r["horas"]) for r in m["uso_maquinas"]],
     }
+    costos_chart = {
+        "labels": [
+            str(gettext("Material")),
+            str(gettext("Mano de obra")),
+            str(gettext("Máquina")),
+            str(gettext("Agregados")),
+        ],
+        "data": [
+            float(m["cost_material"]),
+            float(m["cost_labor"]),
+            float(m["cost_machine"]),
+            float(m["cost_aggregates"]),
+        ],
+    }
 
     return {
         "period": m["period"],
@@ -498,6 +574,18 @@ def template_context(m: dict) -> dict:
         "consumo_valor": _money(m["consumo_valor"]),
         "fil_grams": f'{m["fil_grams"]:.0f} g',
         "low_stock": m["low_stock"],
+        # KPIs costos de producción / resultado
+        "cost_material": _money(m["cost_material"]),
+        "cost_labor": _money(m["cost_labor"]),
+        "cost_machine_hours": _hours(m["cost_machine_hours"]),
+        "cost_machine": _money(m["cost_machine"]),
+        "cost_aggregates": _money(m["cost_aggregates"]),
+        "costo_produccion": _money(m["costo_produccion"]),
+        "gastos_operativos": _money(m["gastos_operativos"]),
+        "beneficio_bruto": _money(m["beneficio_bruto"]),
+        "beneficio_bruto_positivo": m["beneficio_bruto"] >= 0,
+        "beneficio_neto": _money(m["beneficio_neto"]),
+        "beneficio_neto_positivo": m["beneficio_neto"] >= 0,
         # Tablas
         "embudo": m["embudo"],
         "top_productos_qty": [{"name": n, "qty": q} for n, q in m["top_productos_qty"]],
@@ -518,4 +606,5 @@ def template_context(m: dict) -> dict:
         "fact_chart_json": json.dumps(fact_chart),
         "embudo_chart_json": json.dumps(embudo_chart),
         "maq_chart_json": json.dumps(maq_chart),
+        "costos_chart_json": json.dumps(costos_chart),
     }

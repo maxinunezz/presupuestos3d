@@ -597,6 +597,28 @@ BUDGETS = {
     'No se imprimió nada en el período.': 'Nothing was printed in the period.',
     'Inventario y costos': 'Inventory and costs',
     'Filamento consumido': 'Filament consumed',
+    'Material': 'Material',
+    'Mano de obra': 'Labor',
+    'Máquina': 'Machine',
+    'Agregados': 'Add-ons',
+    'Material (con merma)': 'Material (with waste)',
+    'Horas de máquina': 'Machine hours',
+    'Costo de máquina': 'Machine cost',
+    'Total costo de producción': 'Total production cost',
+    'COSTOS DE PRODUCCIÓN (período actual)': 'PRODUCTION COSTS (current period)',
+    'RESULTADO (período actual)': 'RESULT (current period)',
+    'Ingresos (facturación real)': 'Income (real billing)',
+    'Costos de producción': 'Production costs',
+    'Gastos operativos': 'Operating expenses',
+    'Beneficio bruto (ingresos − producción)': 'Gross profit (income − production)',
+    'Beneficio neto (− gastos operativos)': 'Net profit (− operating expenses)',
+    'Composición del costo de producción': 'Production cost breakdown',
+    'Resultado': 'Result',
+    'Ingresos': 'Income',
+    'Beneficio bruto': 'Gross profit',
+    'Beneficio neto': 'Net profit',
+    'Ingresos − producción': 'Income − production',
+    '− gastos operativos': '− operating expenses',
 }
 
 PRODUCTION = {
@@ -860,6 +882,28 @@ BLOCKTRANS = {
     '%(reprints)s por falla': '%(reprints)s due to failure',
     '%(total_ent)s con fecha': '%(total_ent)s with a date',
     '%(n_compras)s compra/s': '%(n_compras)s purchase/s',
+    (
+        'Del período actual, sobre lo aprobado. Es el costo PROMEDIO de cada\n'
+        '    producto (el mismo que usa el margen bruto): prorratea material y máquina asumiendo que\n'
+        '    las sobrantes de cada corrida se terminan usando o vendiendo. No queda "congelado": si\n'
+        '    después cambia el costeo de un producto, este número recalcula con el costo actual, aunque\n'
+        '    el período ya haya pasado.'
+    ): (
+        'For the current period, over what was approved. This is the AVERAGE cost of each\n'
+        '    product (the same one used by the gross margin): it prorates material and machine time assuming\n'
+        '    the leftovers from each run end up being used or sold. It is not "frozen": if\n'
+        '    a product\'s costing changes later, this number recalculates with the current cost, even if\n'
+        '    the period has already passed.'
+    ),
+    (
+        'Ingresos (facturación real del período, sin cancelados ni pedidos para\n'
+        '    stock) menos costos de producción menos gastos operativos (del Panel de gastos, por fecha\n'
+        '    del gasto).'
+    ): (
+        'Income (real billing for the period, excluding cancelled orders and stock\n'
+        '    orders) minus production costs minus operating expenses (from the Expenses panel, by expense\n'
+        '    date).'
+    ),
 }
 
 # OVERRIDES: resuelven choques de la misma cadena entre apps (un msgid =

@@ -104,7 +104,7 @@ msgid "Agregado"
 msgstr "Aggregate"
 
 msgid "Agregados"
-msgstr "Aggregates"
+msgstr "Add-ons"
 
 msgid "Totales de inventario"
 msgstr "Inventory totals"
@@ -1418,6 +1418,66 @@ msgstr "Inventory and costs"
 msgid "Filamento consumido"
 msgstr "Filament consumed"
 
+msgid "Material"
+msgstr "Material"
+
+msgid "Mano de obra"
+msgstr "Labor"
+
+msgid "Material (con merma)"
+msgstr "Material (with waste)"
+
+msgid "Horas de máquina"
+msgstr "Machine hours"
+
+msgid "Costo de máquina"
+msgstr "Machine cost"
+
+msgid "Total costo de producción"
+msgstr "Total production cost"
+
+msgid "COSTOS DE PRODUCCIÓN (período actual)"
+msgstr "PRODUCTION COSTS (current period)"
+
+msgid "RESULTADO (período actual)"
+msgstr "RESULT (current period)"
+
+msgid "Ingresos (facturación real)"
+msgstr "Income (real billing)"
+
+msgid "Costos de producción"
+msgstr "Production costs"
+
+msgid "Gastos operativos"
+msgstr "Operating expenses"
+
+msgid "Beneficio bruto (ingresos − producción)"
+msgstr "Gross profit (income − production)"
+
+msgid "Beneficio neto (− gastos operativos)"
+msgstr "Net profit (− operating expenses)"
+
+msgid "Composición del costo de producción"
+msgstr "Production cost breakdown"
+
+msgid "Resultado"
+msgstr "Result"
+
+msgid "Ingresos"
+msgstr "Income"
+
+msgid "Beneficio bruto"
+msgstr "Gross profit"
+
+msgid "Beneficio neto"
+msgstr "Net profit"
+
+msgid "Ingresos − producción"
+msgstr "Income − production"
+
+msgid "− gastos operativos"
+msgstr "− operating expenses"
+
 msgid "de"
 msgstr "from"
 
@@ -1863,6 +1923,24 @@ msgstr "%(total_ent)s with a date"
 
 msgid "%(n_compras)s compra/s"
 msgstr "%(n_compras)s purchase/s"
+
+msgid "Del período actual, sobre lo aprobado. Es el costo PROMEDIO de cada
+    producto (el mismo que usa el margen bruto): prorratea material y máquina asumiendo que
+    las sobrantes de cada corrida se terminan usando o vendiendo. No queda \"congelado\": si
+    después cambia el costeo de un producto, este número recalcula con el costo actual, aunque
+    el período ya haya pasado."
+msgstr "For the current period, over what was approved. This is the AVERAGE cost of each
+    product (the same one used by the gross margin): it prorates material and machine time assuming
+    the leftovers from each run end up being used or sold. It is not \"frozen\": if
+    a product's costing changes later, this number recalculates with the current cost, even if
+    the period has already passed."
+
+msgid "Ingresos (facturación real del período, sin cancelados ni pedidos para
+    stock) menos costos de producción menos gastos operativos (del Panel de gastos, por fecha
+    del gasto)."
+msgstr "Income (real billing for the period, excluding cancelled orders and stock
+    orders) minus production costs minus operating expenses (from the Expenses panel, by expense
+    date)."
 
 msgid "Presupuesto"
 msgstr "Budget"

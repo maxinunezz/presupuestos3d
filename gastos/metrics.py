@@ -72,6 +72,13 @@ def _gastos_total(start: date, end: date) -> Decimal:
     return sum((Decimal(m) for m in montos), ZERO)
 
 
+def gastos_operativos_total(start: date, end: date) -> Decimal:
+    """Total de gastos operativos en [start, end). Punto de entrada público
+    para otros módulos (lo usa budgets.metrics para armar el resultado
+    Ingresos/Costos/Gastos/Beneficio del panel de Métricas)."""
+    return _gastos_total(start, end)
+
+
 def _ventas_total(start: date, end: date) -> Decimal:
     """Facturación aprobada (Presupuesto.total) en el rango de fechas."""
     from budgets.models import Presupuesto

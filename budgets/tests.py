@@ -1,10 +1,13 @@
 from decimal import Decimal
 
 from django.test import TestCase
+from django.utils import timezone
 
+from gastos.models import Gasto
 from inventory.models import Aggregate, Filament
 from production.models import Maquina
 
+from .metrics import build_metrics
 from .models import (
     Pieza,
     PiezaFilamentLine,
@@ -848,3 +851,137 @@ class MarcarEntregadoAdminTests(TestCase):
         self.pres.refresh_from_db()
         self.assertEqual(self.pres.status, Presupuesto.Status.COMPLETED)
         self.assertIsNotNone(self.pres.completed_at)
+
+
+class MetricasResultadoTests(TestCase):
+    """Panel de Métricas: desglose de costos de producción (material, mano de
+    obra, máquina, agregados) e Ingresos/Costos/Gastos/Beneficio."""
+
+    def setUp(self):
+        self.fil = Filament.objects.create(
+            brand="M",
+            material_type=Filament.MaterialType.PLA,
+            color="C",
+            cost_per_kg=Decimal("10000"),  # $10/g
+            stock_grams=Decimal("1000000"),
+        )
+        self.agg = Aggregate.objects.create(
+            name="Bolsa ziploc",
+            cost_per_unit=Decimal("5"),
+            stock_quantity=Decimal("100000"),
+        )
+
+    def _aprobado(
+        self,
+        sale_price,
+        grams,
+        hours,
+        machine_rate,
+        labor_minutes=0,
+        labor_rate=Decimal("0"),
+        agg_qty=0,
+        quantity=1,
+        when=None,
+        status=None,
+        para_stock=False,
+    ):
+        """Crea un Presupuesto ya aprobado, sin pasar por approve() (así no
+        toca stock/producción, que no le interesa a estos tests de métricas)."""
+        p = make_producto(
+            sale_price=sale_price,
+            machine_cost_per_hour=machine_rate,
+            labor_cost_per_hour=labor_rate,
+            post_processing_minutes=labor_minutes,
+        )
+        add_pieza(p, self.fil, grams, print_hours=hours)
+        if agg_qty:
+            ProductoAggregateLine.objects.create(
+                producto=p, aggregate=self.agg, quantity=agg_qty
+            )
+        pres = Presupuesto.objects.create(
+            client_name="" if para_stock else "Cliente", para_stock=para_stock
+        )
+        PresupuestoItem.objects.create(presupuesto=pres, producto=p, quantity=quantity)
+        when = when or timezone.now()
+        Presupuesto.objects.filter(pk=pres.pk).update(
+            status=status or Presupuesto.Status.APPROVED, approved_at=when
+        )
+        return pres
+
+    def test_desglose_de_costos_de_produccion(self):
+        now = timezone.now()
+        self._aprobado(
+            sale_price=Decimal("2000"),
+            grams=Decimal("100"),
+            hours=Decimal("2"),
+            machine_rate=Decimal("100"),
+            labor_minutes=Decimal("30"),
+            labor_rate=Decimal("60"),
+            agg_qty=2,
+            quantity=1,
+            when=now,
+        )
+        m = build_metrics("month", now=now)
+        # material: 100g * $10/g = 1000 ; mano de obra: 0.5h * $60 = 30 ;
+        # máquina: 2h * $100 = 200 ; agregados: 2 * $5 = 10.
+        self.assertEqual(m["cost_material"], Decimal("1000.00"))
+        self.assertEqual(m["cost_labor"], Decimal("30.00"))
+        self.assertEqual(m["cost_machine"], Decimal("200.00"))
+        self.assertEqual(m["cost_machine_hours"], Decimal("2.00"))
+        self.assertEqual(m["cost_aggregates"], Decimal("10.00"))
+        self.assertEqual(m["costo_produccion"], Decimal("1240.00"))
+        self.assertEqual(m["facturacion"], Decimal("2000.00"))
+        self.assertEqual(m["beneficio_bruto"], Decimal("760.00"))
+        # sin gastos operativos cargados, el neto coincide con el bruto.
+        self.assertEqual(m["gastos_operativos"], Decimal("0"))
+        self.assertEqual(m["beneficio_neto"], Decimal("760.00"))
+
+    def test_facturacion_excluye_cancelados_y_para_stock(self):
+        now = timezone.now()
+        self._aprobado(
+            sale_price=Decimal("500"),
+            grams=Decimal("10"),
+            hours=Decimal("1"),
+            machine_rate=Decimal("10"),
+            when=now,
+        )
+        self._aprobado(
+            sale_price=Decimal("999"),
+            grams=Decimal("10"),
+            hours=Decimal("1"),
+            machine_rate=Decimal("10"),
+            when=now,
+            status=Presupuesto.Status.CANCELLED,
+        )
+        self._aprobado(
+            sale_price=Decimal("999"),
+            grams=Decimal("10"),
+            hours=Decimal("1"),
+            machine_rate=Decimal("10"),
+            when=now,
+            para_stock=True,
+        )
+        m = build_metrics("month", now=now)
+        # Solo cuenta el primero: cancelado y para_stock quedan afuera de
+        # "Facturación"/"Ingresos" (no son venta real), igual que en Gastos.
+        self.assertEqual(m["facturacion"], Decimal("500.00"))
+        self.assertEqual(m["n_aprobados"], 1)
+
+    def test_gastos_operativos_descuentan_el_beneficio_neto(self):
+        now = timezone.now()
+        self._aprobado(
+            sale_price=Decimal("1000"),
+            grams=Decimal("10"),
+            hours=Decimal("1"),
+            machine_rate=Decimal("10"),
+            when=now,
+        )
+        Gasto.objects.create(
+            fecha=timezone.localdate(now),
+            categoria=Gasto.Categoria.IT,
+            concepto="Hosting",
+            monto=Decimal("200"),
+        )
+        m = build_metrics("month", now=now)
+        self.assertEqual(m["gastos_operativos"], Decimal("200"))
+        self.assertEqual(m["beneficio_bruto"] - Decimal("200"), m["beneficio_neto"])
