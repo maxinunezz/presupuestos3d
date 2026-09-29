@@ -14,10 +14,27 @@
     }
     .mx-tab.active { background: #111; color: #fff; }
     .mx-range { color: var(--body-quiet-color, #555); font-size: 13px; font-weight: 600; }
+    /* Dropdown de mes: es un <select> nativo mostraba los 24 meses de un
+       tirón (lista larguísima). Lo reemplazamos por un botón + menú propio
+       para poder limitar la altura visible a ~6 opciones y scrollear el
+       resto, sin depender de jQuery/select2 (no están cargados en esta
+       página). */
+    .mx-month-dropdown { position: relative; }
     .mx-month-select {
         padding: 6px 10px; border: 1px solid #111; border-radius: 6px; font-size: 13px;
-        font-weight: 600; background: #fff; color: #111;
+        font-weight: 600; background: #fff; color: #111; cursor: pointer;
     }
+    .mx-month-menu {
+        display: none; position: absolute; top: calc(100% + 4px); left: 0; z-index: 20;
+        min-width: 160px; max-height: 216px; overflow-y: auto; background: #fff;
+        border: 1px solid #111; border-radius: 6px; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25);
+    }
+    .mx-month-menu.open { display: block; }
+    .mx-month-option {
+        display: block; padding: 7px 14px; font-size: 13px; color: #111; text-decoration: none;
+    }
+    .mx-month-option:hover { background: #f0f0f0; }
+    .mx-month-option.active { background: #111; color: #fff; }
     .mx-excel {
         margin-left: auto; padding: 8px 18px; background: #16a34a; color: #fff; border-radius: 6px;
         text-decoration: none; font-size: 13px; font-weight: 600;
@@ -90,11 +107,29 @@
         {% endfor %}
     </div>
     {% if period == "month" %}
-    <select class="mx-month-select" onchange="if(this.value){window.location.href='?period=month&date=' + this.value;}">
-        {% for opt in month_options %}
-        <option value="{{ opt.value }}" {% if opt.value == selected_date_value %}selected{% endif %}>{{ opt.date|date:"F Y" }}</option>
-        {% endfor %}
-    </select>
+    <div class="mx-month-dropdown" id="mxMonthDropdown">
+        <button type="button" class="mx-month-select" id="mxMonthToggle" onclick="mxToggleMonthMenu()">
+            {{ selected_date|date:"F Y" }} ▾
+        </button>
+        <div class="mx-month-menu" id="mxMonthMenu">
+            {% for opt in month_options %}
+            <a class="mx-month-option {% if opt.value == selected_date_value %}active{% endif %}"
+               href="?period=month&date={{ opt.value }}">{{ opt.date|date:"F Y" }}</a>
+            {% endfor %}
+        </div>
+    </div>
+    <script>
+        function mxToggleMonthMenu() {
+            document.getElementById("mxMonthMenu").classList.toggle("open");
+        }
+        document.addEventListener("click", function (event) {
+            var dropdown = document.getElementById("mxMonthDropdown");
+            var menu = document.getElementById("mxMonthMenu");
+            if (dropdown && menu && !dropdown.contains(event.target)) {
+                menu.classList.remove("open");
+            }
+        });
+    </script>
     {% endif %}
     <span class="mx-range">{{ range_str }}</span>
     <a class="mx-excel" href="?period={{ period }}{% if period == "month" %}&date={{ selected_date_value }}{% endif %}&export=xlsx">⬇ {% translate "Descargar Excel" %}</a>

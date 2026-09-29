@@ -1315,6 +1315,7 @@ class MetricasAdmin(admin.ModelAdmin):
             ],
             "month_options": month_options,
             "selected_date_value": selected_date_value,
+            "selected_date": selected_month or real_now,
             **template_context(metrics),
             **(extra_context or {}),
         }
