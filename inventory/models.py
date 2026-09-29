@@ -38,7 +38,13 @@ class Filament(models.Model):
         help_text=_("Ej: #FF0000. Opcional, para mostrar una muestra de color en el front."),
     )
     cost_per_kg = models.DecimalField(
-        _("Costo por kg"), max_digits=10, decimal_places=2
+        _("Costo por kg"),
+        max_digits=10,
+        decimal_places=2,
+        help_text=_(
+            "Precio en pesos por KILOGRAMO (no por gramo ni por bobina). Los "
+            "decimales van con PUNTO, no con coma (ej: 8500.50, no 8500,50)."
+        ),
     )
     stock_grams = models.DecimalField(
         _("Stock disponible (g)"), max_digits=10, decimal_places=2, default=0
@@ -50,8 +56,8 @@ class Filament(models.Model):
         default=Decimal("1000"),
         help_text=_(
             "Si el stock baja de este valor, salta la alerta de bajo stock "
-            "(la campanita). En gramos. Ej: 1000 = 1 kg. Poné 0 para no avisar "
-            "de este filamento."
+            "(la campanita). En GRAMOS. Ej: 1000 = 1 kg. Poné 0 para no avisar "
+            "de este filamento. Los decimales van con punto, no con coma."
         ),
     )
     is_active = models.BooleanField(_("Activo"), default=True)
@@ -144,10 +150,23 @@ class Aggregate(models.Model):
     )
     unit = models.CharField(_("Unidad"), max_length=10, choices=Unit.choices, default=Unit.UNIT)
     cost_per_unit = models.DecimalField(
-        _("Costo por unidad"), max_digits=10, decimal_places=2
+        _("Costo por unidad"),
+        max_digits=10,
+        decimal_places=2,
+        help_text=_(
+            "Precio en pesos por la unidad que tenga cargada este agregado "
+            "(el campo Unidad de más arriba: Unidad, Par, Metro o Gramo). Los "
+            "decimales van con PUNTO, no con coma (ej: 12.50, no 12,50)."
+        ),
     )
     stock_quantity = models.DecimalField(
-        _("Stock disponible"), max_digits=10, decimal_places=2, default=0
+        _("Stock disponible"),
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        help_text=_(
+            "En la unidad que tenga cargada este agregado (ver el campo Unidad)."
+        ),
     )
     min_stock = models.DecimalField(
         _("Stock mínimo"),
@@ -158,7 +177,8 @@ class Aggregate(models.Model):
             "Si el stock baja de este valor, salta la alerta de bajo stock "
             "(la campanita). Va en la MISMA unidad del agregado: si se mide en "
             "unidades, poné unidades (ej: pelotas → 20); si se mide en gramos, "
-            "poné gramos (ej: argollas → 200). Poné 0 para no avisar de este agregado."
+            "poné gramos (ej: argollas → 200). Poné 0 para no avisar de este "
+            "agregado. Los decimales van con punto, no con coma."
         ),
     )
     is_active = models.BooleanField(_("Activo"), default=True)
@@ -260,7 +280,11 @@ class StockMovement(models.Model):
         _("Cantidad"),
         max_digits=10,
         decimal_places=2,
-        help_text=_("Negativo = salida de stock. Positivo = entrada de stock."),
+        help_text=_(
+            "Negativo = salida de stock. Positivo = entrada de stock. Filamento: "
+            "en gramos. Agregado: en la unidad que tenga cargada (ver su campo "
+            "Unidad). Los decimales van con punto, no con coma."
+        ),
     )
     reason = models.CharField(_("Motivo"), max_length=20, choices=Reason.choices)
     related_presupuesto = models.ForeignKey(
@@ -422,7 +446,11 @@ class CompraLine(models.Model):
         _("Cantidad comprada"),
         max_digits=10,
         decimal_places=2,
-        help_text=_("Filamento: en gramos. Agregado: en unidades."),
+        help_text=_(
+            "Filamento: en GRAMOS (ej: una bobina de 1 kg = 1000). Agregado: en "
+            "la unidad que tenga cargada (ver su campo Unidad: Unidad, Par, "
+            "Metro o Gramo). Los decimales van con punto, no con coma."
+        ),
     )
     unit_price = models.DecimalField(
         _("Precio pagado"),
@@ -431,8 +459,10 @@ class CompraLine(models.Model):
         null=True,
         blank=True,
         help_text=_(
-            "Filamento: costo por kg. Agregado: costo por unidad. Si se deja "
-            "vacío, se mantiene el precio actual del artículo."
+            "Filamento: costo por KILOGRAMO (no por gramo ni por bobina). "
+            "Agregado: costo por la unidad que tenga cargada. Si se deja vacío, "
+            "se mantiene el precio actual del artículo. Los decimales van con "
+            "punto, no con coma."
         ),
     )
 

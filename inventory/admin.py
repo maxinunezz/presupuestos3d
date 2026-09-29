@@ -394,7 +394,10 @@ class AjusteStockForm(forms.ModelForm):
             "aggregate": _("Elegí el agregado a ajustar (o un filamento, no ambos)."),
             "quantity": _(
                 "Cantidad a ajustar. POSITIVO suma al stock, NEGATIVO resta. "
-                "Filamento en gramos, agregado en unidades. "
+                "Filamento: SIEMPRE en GRAMOS (no en kg; ej: 500 = medio kilo). "
+                "Agregado: en la unidad que tenga cargada (ver su campo Unidad: "
+                "Unidad, Par, Metro o Gramo). "
+                "Los decimales van con PUNTO, no con coma (ej: 12.5, no 12,5). "
                 "Ej: 500 agrega 500 g; -200 quita 200 g. "
                 "Si querés dejar el stock en un valor exacto, fijate cuánto hay "
                 "hoy y poné la diferencia."
