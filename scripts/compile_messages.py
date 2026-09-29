@@ -223,6 +223,14 @@ INVENTORY = {
         'User \'%(user)s\' created with admin access ("Staff status" checked '
         'automatically). If they need the same permissions as you, open it '
         'again and check "Superuser status" too.',
+    'Esto es solo un historial: se completa solo (compras, '
+    'producción, ajustes, cancelaciones). No se puede cargar ni '
+    'editar nada acá porque no cambiaría el stock real. Para '
+    'corregir el stock a mano, usá "Ajustes manuales de stock".':
+        'This is just a history log: it fills in on its own (purchases, '
+        'production, adjustments, cancellations). Nothing can be added or '
+        'edited here because it would not change the real stock. To fix '
+        'stock by hand, use "Manual stock adjustments".',
 }
 
 GASTOS = {

@@ -170,3 +170,57 @@ class UsuarioAdminTests(TestCase):
         # comportamiento automático que crear.
         empleado.refresh_from_db()
         self.assertFalse(empleado.is_staff)
+
+
+class StockMovementAdminReadOnlyTests(TestCase):
+    """'Movimientos de stock' es un historial: no se puede cargar nada a mano
+    ahí (no cambiaría el stock real). Para eso está 'Ajustes manuales de
+    stock', que sí aplica el cambio."""
+
+    def setUp(self):
+        User = get_user_model()
+        User.objects.create_superuser("dueño", password="x")
+        self.client.login(username="dueño", password="x")
+        self.agg = Aggregate.objects.create(
+            name="Bolsas ziploc",
+            category=Aggregate.Category.PACKAGING,
+            unit=Aggregate.Unit.UNIT,
+            cost_per_unit=Decimal("10"),
+            stock_quantity=Decimal("100"),
+        )
+
+    def test_no_se_puede_agregar_desde_movimientos_de_stock(self):
+        from django.urls import reverse
+
+        response = self.client.get(reverse("admin:inventory_stockmovement_add"))
+        self.assertEqual(response.status_code, 403)
+
+    def test_cargar_por_movimientos_no_cambia_stock(self):
+        # Aunque se fuerce el POST (ej. bypaseando el botón), no debe aplicar
+        # nada: has_add_permission ya lo bloquea con 403 y no llega a guardar.
+        from django.urls import reverse
+
+        response = self.client.post(
+            reverse("admin:inventory_stockmovement_add"),
+            {
+                "aggregate": self.agg.pk,
+                "quantity": "-20",
+                "reason": StockMovement.Reason.MANUAL_ADJUSTMENT,
+                "note": "intento directo",
+            },
+        )
+        self.assertEqual(response.status_code, 403)
+        self.agg.refresh_from_db()
+        self.assertEqual(self.agg.stock_quantity, Decimal("100"))
+        self.assertEqual(StockMovement.objects.filter(aggregate=self.agg).count(), 0)
+
+    def test_ajuste_manual_si_descuenta_el_stock_del_agregado(self):
+        from django.urls import reverse
+
+        response = self.client.post(
+            reverse("admin:inventory_ajustestock_add"),
+            {"aggregate": self.agg.pk, "quantity": "-20", "note": "conteo físico"},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.agg.refresh_from_db()
+        self.assertEqual(self.agg.stock_quantity, Decimal("80"))

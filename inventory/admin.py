@@ -375,6 +375,16 @@ class CompraAdmin(admin.ModelAdmin):
 
 @admin.register(StockMovement)
 class StockMovementAdmin(admin.ModelAdmin):
+    """
+    Historial de auditoría de stock: se completa SOLO desde otros flujos
+    (compras, producción, ajustes manuales, reversas de cancelación). Por eso
+    es de solo lectura acá: si se pudiera cargar un movimiento a mano desde
+    esta pantalla, quedaría en la lista pero NO cambiaría el stock real del
+    filamento/agregado (nada acá toca `stock_grams`/`stock_quantity`), y el
+    historial quedaría desincronizado sin que se note. Para corregir stock a
+    mano hay que usar "Ajustes manuales de stock", que sí aplica el cambio.
+    """
+
     list_display = (
         "created_at",
         "item",
@@ -386,6 +396,27 @@ class StockMovementAdmin(admin.ModelAdmin):
     list_filter = ("reason",)
     readonly_fields = ("created_at",)
     formfield_overrides = DECIMAL_LOCALIZE
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def changelist_view(self, request, extra_context=None):
+        messages.info(
+            request,
+            gettext(
+                'Esto es solo un historial: se completa solo (compras, '
+                'producción, ajustes, cancelaciones). No se puede cargar ni '
+                'editar nada acá porque no cambiaría el stock real. Para '
+                'corregir el stock a mano, usá "Ajustes manuales de stock".'
+            ),
+        )
+        return super().changelist_view(request, extra_context)
 
     @admin.display(description=_("Ítem"))
     def item(self, obj):
