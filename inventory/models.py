@@ -60,6 +60,14 @@ class Filament(models.Model):
             "de este filamento. Los decimales pueden ir con coma o con punto."
         ),
     )
+    notes = models.TextField(
+        _("Notas"),
+        blank=True,
+        help_text=_(
+            "Cosas propias de este filamento: cómo imprime, temperaturas que "
+            "funcionan bien, si es frágil, proveedor, lote, etc."
+        ),
+    )
     is_active = models.BooleanField(_("Activo"), default=True)
     created_at = models.DateTimeField(_("Creado"), auto_now_add=True)
     updated_at = models.DateTimeField(_("Actualizado"), auto_now=True)

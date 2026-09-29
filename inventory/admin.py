@@ -112,7 +112,7 @@ class FilamentAdmin(admin.ModelAdmin):
         "is_active",
     )
     list_filter = (FilamentLowStockFilter, "material_type", "brand", "is_active")
-    search_fields = ("brand", "color")
+    search_fields = ("brand", "color", "notes")
     list_editable = ("cost_per_kg", "min_stock", "is_active")
     formfield_overrides = DECIMAL_LOCALIZE
     # El stock NO se edita a mano: solo cambia al confirmar una Compra. Así un
