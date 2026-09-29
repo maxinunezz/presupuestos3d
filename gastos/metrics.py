@@ -65,18 +65,28 @@ def _prev_month(year: int, month: int):
 # ---------------------------------------------------------------------------
 #  Sumas base
 # ---------------------------------------------------------------------------
-def _gastos_total(start: date, end: date) -> Decimal:
-    montos = Gasto.objects.filter(
-        fecha__gte=start, fecha__lt=end
-    ).values_list("monto", flat=True)
+def _gastos_total(start: date, end: date, tipo: str | None = None) -> Decimal:
+    qs = Gasto.objects.filter(fecha__gte=start, fecha__lt=end)
+    if tipo:
+        qs = qs.filter(tipo=tipo)
+    montos = qs.values_list("monto", flat=True)
     return sum((Decimal(m) for m in montos), ZERO)
 
 
 def gastos_operativos_total(start: date, end: date) -> Decimal:
-    """Total de gastos operativos en [start, end). Punto de entrada público
-    para otros módulos (lo usa budgets.metrics para armar el resultado
-    Ingresos/Costos/Gastos/Beneficio del panel de Métricas)."""
-    return _gastos_total(start, end)
+    """Total de gastos de tipo OPERATIVO (estructura del negocio) en
+    [start, end). Excluye los EXTRAORDINARIOS (puntuales, no representativos:
+    viajes, imprevistos) para que no distorsionen el resultado. Punto de
+    entrada público para otros módulos (lo usa budgets.metrics para armar el
+    resultado Ingresos/Costos/Gastos/Beneficio del panel de Métricas)."""
+    return _gastos_total(start, end, tipo=Gasto.Tipo.OPERATIVO)
+
+
+def gastos_extraordinarios_total(start: date, end: date) -> Decimal:
+    """Total de gastos de tipo EXTRAORDINARIO (puntuales, no representativos)
+    en [start, end). Se muestra por separado, informativo: no entra en el
+    resultado operativo vs ventas."""
+    return _gastos_total(start, end, tipo=Gasto.Tipo.EXTRAORDINARIO)
 
 
 def _ventas_total(start: date, end: date) -> Decimal:
@@ -210,10 +220,38 @@ def build_gastos_metrics(year: int, month) -> dict:
         reverse=True,
     )
 
+    # --- Operativo vs extraordinario ---
+    # Los EXTRAORDINARIOS son gastos puntuales y no representativos (viajes,
+    # imprevistos): se muestran aparte para no distorsionar el resultado
+    # operativo. `total_gastos` arriba sigue siendo la salida real de caja
+    # (todos los tipos); estos dos son el desglose.
+    gastos_operativos = sum(
+        (Decimal(g.monto) for g in gastos if g.tipo == Gasto.Tipo.OPERATIVO), ZERO
+    )
+    gastos_extraordinarios = total_gastos - gastos_operativos
+    extraordinarios_detalle = sorted(
+        (
+            {
+                "concepto": g.concepto,
+                "categoria": g.get_categoria_display(),
+                "fecha": g.fecha,
+                "monto": Decimal(g.monto),
+            }
+            for g in gastos
+            if g.tipo == Gasto.Tipo.EXTRAORDINARIO
+        ),
+        key=lambda r: r["monto"],
+        reverse=True,
+    )
+
     # --- Resultado operativo vs ventas (#1) ---
+    # Usa solo gastos OPERATIVOS: un gasto extraordinario (viaje, imprevisto)
+    # no debe hundir la lectura de salud operativa del negocio.
     ventas = _ventas_total(start, end)
-    resultado = ventas - total_gastos
-    gastos_sobre_ventas = (total_gastos / ventas * 100) if ventas else None
+    resultado = ventas - gastos_operativos
+    gastos_sobre_ventas = (gastos_operativos / ventas * 100) if ventas else None
+    # Resultado final: transparencia total, incluye los extraordinarios.
+    resultado_final = ventas - total_gastos
 
     # --- Topes por categoría (#4) ---
     topes = {t.categoria: Decimal(t.monto_mensual) for t in TopeGasto.objects.all()}
@@ -258,8 +296,12 @@ def build_gastos_metrics(year: int, month) -> dict:
         "run_rate_mensual": run_rate_mensual,
         "run_rate_anual": run_rate_anual,
         "recurrentes_detalle": recurrentes_detalle,
+        "gastos_operativos": gastos_operativos,
+        "gastos_extraordinarios": gastos_extraordinarios,
+        "extraordinarios_detalle": extraordinarios_detalle,
         "ventas": ventas,
         "resultado": resultado,
+        "resultado_final": resultado_final,
         "gastos_sobre_ventas": gastos_sobre_ventas,
         "topes_rows": topes_rows,
         "acumulado_anual": acumulado_anual,
@@ -321,6 +363,15 @@ def template_context(m: dict) -> dict:
         }
         for r in m["recurrentes_detalle"]
     ]
+    extraordinarios = [
+        {
+            "concepto": e["concepto"],
+            "categoria": e["categoria"],
+            "fecha": e["fecha"].strftime("%d/%m/%Y"),
+            "monto": _money(e["monto"]),
+        }
+        for e in m["extraordinarios_detalle"]
+    ]
     topes = [
         {
             "label": t["label"],
@@ -346,9 +397,15 @@ def template_context(m: dict) -> dict:
         "run_rate_mensual": _money(m["run_rate_mensual"]),
         "run_rate_anual": _money(m["run_rate_anual"]),
         "recurrentes": recurrentes,
+        "gastos_operativos": _money(m["gastos_operativos"]),
+        "gastos_extraordinarios": _money(m["gastos_extraordinarios"]),
+        "hay_extraordinarios": m["gastos_extraordinarios"] > 0,
+        "extraordinarios": extraordinarios,
         "ventas": _money(m["ventas"]),
         "resultado": _money(m["resultado"]),
         "resultado_positivo": m["resultado"] >= 0,
+        "resultado_final": _money(m["resultado_final"]),
+        "resultado_final_positivo": m["resultado_final"] >= 0,
         "gastos_sobre_ventas": _pct_plain(m["gastos_sobre_ventas"]),
         "topes": topes,
         "acumulado_anual": _money(m["acumulado_anual"]),
@@ -411,15 +468,22 @@ def export_xlsx(m: dict):
         (gettext("Compromiso mensual recurrente"), float(m["run_rate_mensual"])),
         (gettext("Proyección anual recurrente"), float(m["run_rate_anual"])),
         ("", ""),
+        (gettext("Gastos operativos del período"), float(m["gastos_operativos"])),
+        (gettext("Gastos extraordinarios del período"), float(m["gastos_extraordinarios"])),
+        ("", ""),
         (gettext("Ventas del período"), float(m["ventas"])),
-        (gettext("Resultado operativo (ventas − gastos)"), float(m["resultado"])),
+        (gettext("Resultado operativo (ventas − gastos operativos)"), float(m["resultado"])),
         (
-            gettext("Gastos sobre ventas"),
+            gettext("Gastos operativos sobre ventas"),
             (
                 f"{m['gastos_sobre_ventas']:.1f}%"
                 if m["gastos_sobre_ventas"] is not None
                 else "—"
             ),
+        ),
+        (
+            gettext("Resultado final (ventas − todos los gastos)"),
+            float(m["resultado_final"]),
         ),
         ("", ""),
         (gettext("Acumulado año %(year)s") % {"year": m["year"]}, float(m["acumulado_anual"])),
@@ -488,7 +552,22 @@ def export_xlsx(m: dict):
         )
     autosize(ws4)
 
-    # --- Hoja 5: Topes ---
+    # --- Hoja 5: Extraordinarios ---
+    ws4b = wb.create_sheet(gettext("Extraordinarios"))
+    ws4b.append([
+        gettext("Concepto"),
+        gettext("Categoría"),
+        gettext("Fecha"),
+        gettext("Monto"),
+    ])
+    style_header(ws4b, 1, 4)
+    for e in m["extraordinarios_detalle"]:
+        ws4b.append(
+            [e["concepto"], str(e["categoria"]), e["fecha"].strftime("%d/%m/%Y"), float(e["monto"])]
+        )
+    autosize(ws4b)
+
+    # --- Hoja 6: Topes ---
     ws5 = wb.create_sheet(gettext("Topes"))
     ws5.append([
         gettext("Categoría"),

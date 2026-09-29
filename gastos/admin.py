@@ -24,6 +24,7 @@ class GastoAdmin(admin.ModelAdmin):
     list_display = (
         "fecha",
         "categoria",
+        "tipo",
         "concepto",
         "monto_display",
         "es_recurrente",
@@ -31,12 +32,12 @@ class GastoAdmin(admin.ModelAdmin):
         "proveedor",
         "medio_pago",
     )
-    list_filter = ("categoria", "es_recurrente", "periodicidad", "medio_pago")
+    list_filter = ("tipo", "categoria", "es_recurrente", "periodicidad", "medio_pago")
     search_fields = ("concepto", "proveedor", "notas")
     date_hierarchy = "fecha"
     formfield_overrides = DECIMAL_LOCALIZE
     fieldsets = (
-        (None, {"fields": ("categoria", "concepto", "monto", "fecha")}),
+        (None, {"fields": ("categoria", "tipo", "concepto", "monto", "fecha")}),
         (_("Pago"), {"fields": ("proveedor", "medio_pago")}),
         (
             _("Recurrencia"),

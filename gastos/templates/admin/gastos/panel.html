@@ -22,7 +22,9 @@
     }
     .gx-section--res { border-bottom-color: #2563eb; }
     .gx-section--rec { border-bottom-color: #7c3aed; }
+    .gx-section--ext { border-bottom-color: #b91c1c; }
     .gx-section--top { border-bottom-color: #d97706; }
+    .gx-kpis--ext .kpi { background: #7f1d1d; }
 
     .gx-kpis { display: flex; gap: 14px; flex-wrap: wrap; }
     .kpi { background: #111; color: #fff; border-radius: 8px; padding: 14px 18px; min-width: 160px; flex: 1 1 170px; }
@@ -53,10 +55,11 @@
 </style>
 
 <p class="gx-intro">
-    {% blocktranslate %}Gastos operativos del negocio (administración, comercialización, suscripciones, IT)
+    {% blocktranslate %}Gastos del negocio (administración, comercialización, suscripciones, IT)
     por <b>fecha del gasto</b>. No incluye los <b>costos</b> de producción ni las compras de
-    insumos (eso va por Inventario y Métricas). El resultado operativo cruza estos gastos
-    con las ventas aprobadas del mismo período.{% endblocktranslate %}
+    insumos (eso va por Inventario y Métricas). Los totales, la evolución y el desglose por
+    categoría de esta sección incluyen <b>todos</b> los gastos; el resultado operativo vs ventas
+    usa solo los <b>operativos</b> (los extraordinarios se muestran aparte, más abajo).{% endblocktranslate %}
 </p>
 
 <div class="gx-bar">
@@ -120,14 +123,25 @@
 
 <!-- ===================== Resultado operativo ===================== -->
 <div class="gx-section gx-section--res">📊 {% translate "Resultado operativo (vs ventas)" %}</div>
+<p class="gx-intro">
+    {% blocktranslate %}Solo gastos <b>operativos</b> (estructura del negocio). Los
+    <b>extraordinarios</b> (viajes, imprevistos) se muestran aparte, más abajo, para
+    no distorsionar esta lectura.{% endblocktranslate %}
+</p>
 <div class="gx-kpis">
     <div class="kpi"><span class="n">{{ ventas }}</span><span class="l">{% translate "Ventas aprobadas" %}</span></div>
-    <div class="kpi"><span class="n">{{ total_gastos }}</span><span class="l">{% translate "Gastos del período" %}</span></div>
+    <div class="kpi"><span class="n">{{ gastos_operativos }}</span><span class="l">{% translate "Gastos operativos" %}</span></div>
     <div class="kpi {% if resultado_positivo %}pos{% else %}neg{% endif %}">
-        <span class="n">{{ resultado }}</span><span class="l">{% translate "Ventas − Gastos" %}</span>
+        <span class="n">{{ resultado }}</span><span class="l">{% translate "Ventas − Gastos operativos" %}</span>
     </div>
-    <div class="kpi"><span class="n">{{ gastos_sobre_ventas }}</span><span class="l">{% translate "Gastos sobre ventas" %}</span></div>
+    <div class="kpi"><span class="n">{{ gastos_sobre_ventas }}</span><span class="l">{% translate "Gastos operativos sobre ventas" %}</span></div>
 </div>
+{% if hay_extraordinarios %}
+<p class="gx-intro">
+    {% blocktranslate %}Incluyendo los {{ gastos_extraordinarios }} de gastos extraordinarios del
+    período, el resultado final es {{ resultado_final }}.{% endblocktranslate %}
+</p>
+{% endif %}
 
 <!-- ===================== Recurrentes (run-rate) ===================== -->
 <div class="gx-section gx-section--rec">🔁 {% translate "Compromiso mensual recurrente" %}</div>
@@ -145,6 +159,30 @@
                 <tr><td>{{ r.concepto }}</td><td>{{ r.categoria }}</td><td>{{ r.periodicidad }}</td><td class="num">{{ r.monthly }}</td></tr>
                 {% empty %}
                 <tr><td colspan="4" class="empty">{% translate "No hay gastos recurrentes en este período." %}</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- ===================== Extraordinarios (informativo) ===================== -->
+<div class="gx-section gx-section--ext">🎒 {% translate "Gastos extraordinarios (informativo)" %}</div>
+<p class="gx-intro">
+    {% blocktranslate %}Gastos puntuales y no representativos del período (viajes, imprevistos).
+    No entran en el resultado operativo de arriba.{% endblocktranslate %}
+</p>
+<div class="gx-kpis gx-kpis--ext">
+    <div class="kpi"><span class="n">{{ gastos_extraordinarios }}</span><span class="l">{% translate "Total extraordinario" %}</span></div>
+</div>
+<div class="gx-grid">
+    <div class="gx-card">
+        <table class="gx">
+            <thead><tr><th>{% translate "Concepto" %}</th><th>{% translate "Categoría" %}</th><th>{% translate "Fecha" %}</th><th class="num">{% translate "Monto" %}</th></tr></thead>
+            <tbody>
+                {% for e in extraordinarios %}
+                <tr><td>{{ e.concepto }}</td><td>{{ e.categoria }}</td><td>{{ e.fecha }}</td><td class="num">{{ e.monto }}</td></tr>
+                {% empty %}
+                <tr><td colspan="4" class="empty">{% translate "No hay gastos extraordinarios en este período." %}</td></tr>
                 {% endfor %}
             </tbody>
         </table>

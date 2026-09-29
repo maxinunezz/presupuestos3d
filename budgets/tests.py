@@ -986,6 +986,36 @@ class MetricasResultadoTests(TestCase):
         self.assertEqual(m["gastos_operativos"], Decimal("200"))
         self.assertEqual(m["beneficio_bruto"] - Decimal("200"), m["beneficio_neto"])
 
+    def test_gasto_extraordinario_no_afecta_beneficio_neto(self):
+        now = timezone.now()
+        self._aprobado(
+            sale_price=Decimal("1000"),
+            grams=Decimal("10"),
+            hours=Decimal("1"),
+            machine_rate=Decimal("10"),
+            when=now,
+        )
+        Gasto.objects.create(
+            fecha=timezone.localdate(now),
+            categoria=Gasto.Categoria.IT,
+            concepto="Hosting",
+            monto=Decimal("200"),
+        )
+        Gasto.objects.create(
+            fecha=timezone.localdate(now),
+            categoria=Gasto.Categoria.OTHER,
+            tipo=Gasto.Tipo.EXTRAORDINARIO,
+            concepto="Viaje BSAS",
+            monto=Decimal("5000"),
+        )
+        m = build_metrics("month", now=now)
+        # El extraordinario no entra en gastos_operativos ni en beneficio_neto...
+        self.assertEqual(m["gastos_operativos"], Decimal("200"))
+        self.assertEqual(m["gastos_extraordinarios"], Decimal("5000"))
+        self.assertEqual(m["beneficio_bruto"] - Decimal("200"), m["beneficio_neto"])
+        # ...pero sí se refleja en el beneficio neto final, informativo.
+        self.assertEqual(m["beneficio_neto"] - Decimal("5000"), m["beneficio_neto_final"])
+
 
 class PresupuestoCobroDefaultsTests(TestCase):
     """Los campos nuevos de cobro tienen los defaults esperados y no rompen

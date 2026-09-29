@@ -15,6 +15,12 @@ class Gasto(models.Model):
     qué mes/año cae en el panel. Los gastos recurrentes (suscripciones, IT) se
     marcan con `es_recurrente` + `periodicidad` para calcular el compromiso
     mensual (run-rate).
+
+    `tipo` distingue OPERATIVO (estructura del negocio, entra en el resultado
+    operativo vs ventas) de EXTRAORDINARIO (puntual y no representativo: viajes,
+    imprevistos; se muestra aparte, informativo, para no distorsionar el
+    resultado). Es independiente de `es_recurrente`: un gasto operativo puede
+    ser único (ej: honorarios de un trámite) y no por eso es extraordinario.
     """
 
     class Categoria(models.TextChoices):
@@ -23,6 +29,10 @@ class Gasto(models.Model):
         SUBSCRIPTION = "SUBSCRIPTION", _("Suscripciones")
         IT = "IT", _("IT")
         OTHER = "OTHER", _("Otro")
+
+    class Tipo(models.TextChoices):
+        OPERATIVO = "OPERATIVO", _("Operativo (estructura del negocio)")
+        EXTRAORDINARIO = "EXTRAORDINARIO", _("Extraordinario (puntual, no representativo)")
 
     class Periodicidad(models.TextChoices):
         UNICA = "UNICA", _("Único (no se repite)")
@@ -38,6 +48,18 @@ class Gasto(models.Model):
 
     categoria = models.CharField(
         _("Categoría"), max_length=20, choices=Categoria.choices, default=Categoria.ADMIN
+    )
+    tipo = models.CharField(
+        _("Tipo"),
+        max_length=20,
+        choices=Tipo.choices,
+        default=Tipo.OPERATIVO,
+        help_text=_(
+            "Operativo: gasto de estructura del negocio (entra en el resultado "
+            "operativo vs ventas). Extraordinario: gasto puntual y no "
+            "representativo (viajes, imprevistos) que se muestra aparte para no "
+            "distorsionar el resultado."
+        ),
     )
     concepto = models.CharField(
         _("Concepto"),

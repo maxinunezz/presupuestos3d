@@ -145,19 +145,33 @@ media/           # uploads locales (.3mf/gcode) — efímero en prod
 Gastos **operativos / de estructura** del negocio (NO costos de producción ni
 compras de insumos, que van por inventory). Sirve para el resultado operativo.
 - **Gasto**: una erogación real con `fecha`. `categoria` (Administración /
-  Comercialización / Suscripciones / IT / Otro), `concepto`, `monto`, `proveedor`,
+  Comercialización / Suscripciones / IT / Otro), `tipo` (Operativo/Extraordinario,
+  default Operativo — ver abajo), `concepto`, `monto`, `proveedor`,
   `medio_pago`, `es_recurrente` + `periodicidad` (Único/Mensual/Anual), `notas`.
   Prop `monthly_equivalent` (Mensual→monto, Anual→monto/12, no recurrente→0) para
   el run-rate. Se carga un Gasto por cada pago real (modelo basado en eventos).
 - **TopeGasto**: tope (presupuesto) mensual por categoría (única por categoría).
 - Proxy de admin: **PanelGastos** ("Panel de gastos"), página de solo lectura con
   **filtro por mes y año** (selector; mes 0 = todo el año). Muestra: total y
-  desglose por categoría (tabla + torta), evolución mensual (barras), comparativo
-  vs período anterior (variación %), compromiso mensual recurrente (run-rate +
-  proyección anual), **resultado operativo** (ventas aprobadas del período −
-  gastos, y gastos/ventas %), control de **topes** por categoría, y acumulado
-  anual + promedio mensual. Export a Excel (openpyxl, 5 hojas). Lógica en
-  `gastos/metrics.py`; ventas vienen de `Presupuesto.total` por `approved_at`.
+  desglose por categoría (tabla + torta, todos los tipos), evolución mensual
+  (barras), comparativo vs período anterior (variación %), compromiso mensual
+  recurrente (run-rate + proyección anual), **resultado operativo** (ventas
+  aprobadas del período − gastos **operativos**, y gastos operativos/ventas %,
+  con el resultado final informativo si hay extraordinarios), **gastos
+  extraordinarios** (tabla aparte, informativo), control de **topes** por
+  categoría, y acumulado anual + promedio mensual. Export a Excel (openpyxl, 6
+  hojas). Lógica en `gastos/metrics.py`; ventas vienen de `Presupuesto.total`
+  por `approved_at`.
+- **Operativo vs. extraordinario** (`Gasto.tipo`): un gasto EXTRAORDINARIO es
+  puntual y no representativo del negocio (viaje, imprevisto) — se carga igual
+  como Gasto pero queda afuera del "resultado operativo vs ventas" del Panel de
+  gastos y del `beneficio_neto` de Métricas, para que no distorsione la lectura
+  de salud operativa. `gastos_operativos_total()`/`gastos_extraordinarios_total()`
+  en `gastos/metrics.py` son los puntos de entrada; `budgets/metrics.py` los usa
+  para `beneficio_neto` (solo operativos) y `beneficio_neto_final` (todos, para
+  transparencia). Es independiente de `es_recurrente`. El total general
+  (`total_gastos`, evolución, categorías, acumulado anual) sigue sumando TODOS
+  los tipos: es la salida de caja real.
 
 ## Conceptos clave / reglas de negocio
 

@@ -199,7 +199,8 @@
 <p class="mx-intro">
     {% blocktranslate %}Ingresos (facturación real del período, sin cancelados ni pedidos para
     stock) menos costos de producción menos gastos operativos (del Panel de gastos, por fecha
-    del gasto).{% endblocktranslate %}
+    del gasto). Los gastos <b>extraordinarios</b> (viajes, imprevistos) quedan afuera del
+    beneficio neto para no distorsionarlo; se muestran aparte, informativos.{% endblocktranslate %}
 </p>
 <div class="mx-kpis mx-kpis--resultado">
     <div class="kpi"><span class="n">{{ facturacion }}</span><span class="l">{% translate "Ingresos" %}</span></div>
@@ -207,6 +208,10 @@
     <div class="kpi"><span class="n">{{ gastos_operativos }}</span><span class="l">{% translate "Gastos operativos" %}</span></div>
     <div class="kpi {% if beneficio_bruto_positivo %}mx-positivo{% else %}mx-negativo{% endif %}"><span class="n">{{ beneficio_bruto }}</span><span class="l">{% translate "Beneficio bruto" %}</span><span class="s">{% translate "Ingresos − producción" %}</span></div>
     <div class="kpi {% if beneficio_neto_positivo %}mx-positivo{% else %}mx-negativo{% endif %}"><span class="n">{{ beneficio_neto }}</span><span class="l">{% translate "Beneficio neto" %}</span><span class="s">{% translate "− gastos operativos" %}</span></div>
+    {% if hay_extraordinarios %}
+    <div class="kpi"><span class="n">{{ gastos_extraordinarios }}</span><span class="l">{% translate "Gastos extraordinarios" %}</span><span class="s">{% translate "Informativo, no afecta el beneficio neto" %}</span></div>
+    <div class="kpi {% if beneficio_neto_final_positivo %}mx-positivo{% else %}mx-negativo{% endif %}"><span class="n">{{ beneficio_neto_final }}</span><span class="l">{% translate "Beneficio neto final" %}</span><span class="s">{% translate "− gastos operativos y extraordinarios" %}</span></div>
+    {% endif %}
 </div>
 
 <!-- ===================== F) PANEL DE VENTAS (cobros) ===================== -->

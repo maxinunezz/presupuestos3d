@@ -290,12 +290,14 @@ def build_metrics(period: str, now: datetime = None) -> dict:
     # (material+merma, mano de obra, máquina, agregados = mismo total que
     # `cost`, el que ya alimenta `margen_pct`). Gastos operativos: se traen
     # del panel de Gastos para no duplicar esa lógica.
-    from gastos.metrics import gastos_operativos_total
+    from gastos.metrics import gastos_extraordinarios_total, gastos_operativos_total
 
     costo_produccion = cost
     gastos_operativos = gastos_operativos_total(cur["start"].date(), cur["end"].date())
+    gastos_extraordinarios = gastos_extraordinarios_total(cur["start"].date(), cur["end"].date())
     beneficio_bruto = facturacion - costo_produccion
     beneficio_neto = beneficio_bruto - gastos_operativos
+    beneficio_neto_final = beneficio_neto - gastos_extraordinarios
 
     # =====================  E) PANEL DE VENTAS (cobros)  =====================
     # Mismo universo que A) Ventas (cur_approved: ventas reales del período, ya
@@ -367,8 +369,10 @@ def build_metrics(period: str, now: datetime = None) -> dict:
         "cost_aggregates": cost_aggregates,
         "costo_produccion": costo_produccion,
         "gastos_operativos": gastos_operativos,
+        "gastos_extraordinarios": gastos_extraordinarios,
         "beneficio_bruto": beneficio_bruto,
         "beneficio_neto": beneficio_neto,
+        "beneficio_neto_final": beneficio_neto_final,
         # Panel de ventas (cobros)
         "por_estado_venta": por_estado_venta,
         "por_medio_pago": por_medio_pago,
@@ -476,8 +480,13 @@ def export_xlsx(m: dict):
         (gettext("Ingresos (facturación real)"), _money(m["facturacion"])),
         (gettext("Costos de producción"), _money(m["costo_produccion"])),
         (gettext("Gastos operativos"), _money(m["gastos_operativos"])),
+        (gettext("Gastos extraordinarios (informativo)"), _money(m["gastos_extraordinarios"])),
         (gettext("Beneficio bruto (ingresos − producción)"), _money(m["beneficio_bruto"])),
         (gettext("Beneficio neto (− gastos operativos)"), _money(m["beneficio_neto"])),
+        (
+            gettext("Beneficio neto final (− gastos operativos y extraordinarios)"),
+            _money(m["beneficio_neto_final"]),
+        ),
         ("", ""),
         (gettext("PANEL DE VENTAS (cobros)"), ""),
         (gettext("Cobrado"), _money(m["total_cobrado"])),
@@ -629,10 +638,14 @@ def template_context(m: dict) -> dict:
         "cost_aggregates": _money(m["cost_aggregates"]),
         "costo_produccion": _money(m["costo_produccion"]),
         "gastos_operativos": _money(m["gastos_operativos"]),
+        "gastos_extraordinarios": _money(m["gastos_extraordinarios"]),
+        "hay_extraordinarios": m["gastos_extraordinarios"] > 0,
         "beneficio_bruto": _money(m["beneficio_bruto"]),
         "beneficio_bruto_positivo": m["beneficio_bruto"] >= 0,
         "beneficio_neto": _money(m["beneficio_neto"]),
         "beneficio_neto_positivo": m["beneficio_neto"] >= 0,
+        "beneficio_neto_final": _money(m["beneficio_neto_final"]),
+        "beneficio_neto_final_positivo": m["beneficio_neto_final"] >= 0,
         # Panel de ventas (cobros)
         "total_cobrado": _money(m["total_cobrado"]),
         "total_pendiente_cobro": _money(m["total_pendiente_cobro"]),

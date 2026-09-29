@@ -13,9 +13,10 @@ from .metrics import build_gastos_metrics
 from .models import Gasto, TopeGasto
 
 
-def gasto(cat, monto, dia, mes=6, anio=2026, recurrente=False, periodicidad=None):
+def gasto(cat, monto, dia, mes=6, anio=2026, recurrente=False, periodicidad=None, tipo=None):
     return Gasto.objects.create(
         categoria=cat,
+        tipo=tipo or Gasto.Tipo.OPERATIVO,
         concepto=f"{cat}-{monto}",
         monto=Decimal(str(monto)),
         fecha=date(anio, mes, dia),
@@ -134,6 +135,36 @@ class GastosMetricsTests(TestCase):
         m = build_gastos_metrics(2026, 6)
         self.assertEqual(m["ventas"], Decimal("5000"))
         self.assertEqual(m["resultado"], Decimal("3200"))  # 5000 - 1800
+
+    def test_extraordinario_no_distorsiona_resultado_operativo(self):
+        # Gasto puntual grande (ej: viaje) marcado como EXTRAORDINARIO: no debe
+        # entrar en el resultado operativo vs ventas, solo en el total general.
+        gasto(
+            Gasto.Categoria.OTHER, 10000, 20, tipo=Gasto.Tipo.EXTRAORDINARIO,
+        )
+        prod = Producto.objects.create(name="P")
+        pres = Presupuesto.objects.create(client_name="Cliente")
+        PresupuestoItem.objects.create(
+            presupuesto=pres, producto=prod, quantity=1, unit_price=Decimal("5000")
+        )
+        pres.status = Presupuesto.Status.APPROVED
+        pres.approved_at = timezone.make_aware(
+            timezone.datetime(2026, 6, 12, 10, 0)
+        )
+        pres.save()
+
+        m = build_gastos_metrics(2026, 6)
+        # total_gastos: sigue siendo la salida de caja real (todo tipo).
+        self.assertEqual(m["total_gastos"], Decimal("11800"))  # 1800 + 10000
+        # gastos_operativos excluye el extraordinario.
+        self.assertEqual(m["gastos_operativos"], Decimal("1800"))
+        self.assertEqual(m["gastos_extraordinarios"], Decimal("10000"))
+        # El resultado operativo usa solo gastos operativos.
+        self.assertEqual(m["resultado"], Decimal("3200"))  # 5000 - 1800
+        # El resultado final incluye todo.
+        self.assertEqual(m["resultado_final"], Decimal("-6800"))  # 5000 - 11800
+        self.assertEqual(len(m["extraordinarios_detalle"]), 1)
+        self.assertEqual(m["extraordinarios_detalle"][0]["monto"], Decimal("10000"))
 
     def test_topes_detecta_exceso(self):
         TopeGasto.objects.create(

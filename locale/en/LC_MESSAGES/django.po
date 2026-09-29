@@ -379,6 +379,18 @@ msgstr "Subscriptions"
 msgid "IT"
 msgstr "IT"
 
+msgid "Tipo"
+msgstr "Type"
+
+msgid "Operativo (estructura del negocio)"
+msgstr "Operating (business structure)"
+
+msgid "Extraordinario (puntual, no representativo)"
+msgstr "Extraordinary (one-off, not representative)"
+
+msgid "Operativo: gasto de estructura del negocio (entra en el resultado operativo vs ventas). Extraordinario: gasto puntual y no representativo (viajes, imprevistos) que se muestra aparte para no distorsionar el resultado."
+msgstr "Operating: business-structure expense (counts toward the operating result vs sales). Extraordinary: one-off, not representative expense (trips, unforeseen costs) shown separately so it doesn't distort the result."
+
 msgid "Único (no se repite)"
 msgstr "One-time (does not repeat)"
 
@@ -529,8 +541,26 @@ msgstr "Sales for the period"
 msgid "Resultado operativo (ventas − gastos)"
 msgstr "Operating result (sales − expenses)"
 
+msgid "Resultado operativo (ventas − gastos operativos)"
+msgstr "Operating result (sales − operating expenses)"
+
 msgid "Gastos sobre ventas"
 msgstr "Expenses over sales"
+
+msgid "Gastos operativos sobre ventas"
+msgstr "Operating expenses over sales"
+
+msgid "Gastos operativos del período"
+msgstr "Operating expenses for the period"
+
+msgid "Gastos extraordinarios del período"
+msgstr "Extraordinary expenses for the period"
+
+msgid "Resultado final (ventas − todos los gastos)"
+msgstr "Final result (sales − all expenses)"
+
+msgid "Extraordinarios"
+msgstr "Extraordinary"
 
 msgid "Acumulado año %(year)s"
 msgstr "Year %(year)s cumulative"
@@ -616,8 +646,14 @@ msgstr "Approved sales"
 msgid "Gastos del período"
 msgstr "Expenses for the period"
 
+msgid "Gastos operativos"
+msgstr "Operating expenses"
+
 msgid "Ventas − Gastos"
 msgstr "Sales − Expenses"
+
+msgid "Ventas − Gastos operativos"
+msgstr "Sales − Operating expenses"
 
 msgid "Compromiso por mes"
 msgstr "Commitment per month"
@@ -633,6 +669,15 @@ msgstr "Monthly equiv."
 
 msgid "No hay gastos recurrentes en este período."
 msgstr "There are no recurring expenses in this period."
+
+msgid "Gastos extraordinarios (informativo)"
+msgstr "Extraordinary expenses (informational)"
+
+msgid "Total extraordinario"
+msgstr "Extraordinary total"
+
+msgid "No hay gastos extraordinarios en este período."
+msgstr "There are no extraordinary expenses in this period."
 
 msgid "Control de topes por categoría"
 msgstr "Cap control by category"
@@ -1448,9 +1493,6 @@ msgstr "Income (real billing)"
 msgid "Costos de producción"
 msgstr "Production costs"
 
-msgid "Gastos operativos"
-msgstr "Operating expenses"
-
 msgid "Beneficio bruto (ingresos − producción)"
 msgstr "Gross profit (income − production)"
 
@@ -1477,6 +1519,21 @@ msgstr "Income − production"
 
 msgid "− gastos operativos"
 msgstr "− operating expenses"
+
+msgid "Gastos extraordinarios"
+msgstr "Extraordinary expenses"
+
+msgid "Informativo, no afecta el beneficio neto"
+msgstr "Informational, does not affect net profit"
+
+msgid "Beneficio neto final"
+msgstr "Final net profit"
+
+msgid "− gastos operativos y extraordinarios"
+msgstr "− operating and extraordinary expenses"
+
+msgid "Beneficio neto final (− gastos operativos y extraordinarios)"
+msgstr "Final net profit (− operating and extraordinary expenses)"
 
 msgid "Estado de venta"
 msgstr "Sale status"
@@ -1966,6 +2023,34 @@ msgstr "Monthly trend (%(sel_year)s)"
 msgid "%% usado"
 msgstr "%% used"
 
+msgid "Gastos del negocio (administración, comercialización, suscripciones, IT)
+    por <b>fecha del gasto</b>. No incluye los <b>costos</b> de producción ni las compras de
+    insumos (eso va por Inventario y Métricas). Los totales, la evolución y el desglose por
+    categoría de esta sección incluyen <b>todos</b> los gastos; el resultado operativo vs ventas
+    usa solo los <b>operativos</b> (los extraordinarios se muestran aparte, más abajo)."
+msgstr "Business expenses (administration, marketing, subscriptions, IT) by
+    <b>expense date</b>. It does not include production <b>costs</b> or supply purchases (those
+    go through Inventory and Metrics). The totals, trend and category breakdown in this section
+    include <b>all</b> expenses; the operating result vs sales uses only the <b>operating</b>
+    ones (extraordinary expenses are shown separately, below)."
+
+msgid "Solo gastos <b>operativos</b> (estructura del negocio). Los
+    <b>extraordinarios</b> (viajes, imprevistos) se muestran aparte, más abajo, para
+    no distorsionar esta lectura."
+msgstr "Only <b>operating</b> expenses (business structure). <b>Extraordinary</b>
+    expenses (trips, unforeseen costs) are shown separately, below, so they don't
+    distort this reading."
+
+msgid "Incluyendo los %(gastos_extraordinarios)s de gastos extraordinarios del
+    período, el resultado final es %(resultado_final)s."
+msgstr "Including the %(gastos_extraordinarios)s of extraordinary expenses for the
+    period, the final result is %(resultado_final)s."
+
+msgid "Gastos puntuales y no representativos del período (viajes, imprevistos).
+    No entran en el resultado operativo de arriba."
+msgstr "One-off, not representative expenses for the period (trips, unforeseen costs).
+    They don't count toward the operating result above."
+
 msgid "Facturación por %(pl)s"
 msgstr "Billing per %(pl)s"
 
@@ -1995,6 +2080,15 @@ msgid "Ingresos (facturación real del período, sin cancelados ni pedidos para
 msgstr "Income (real billing for the period, excluding cancelled orders and stock
     orders) minus production costs minus operating expenses (from the Expenses panel, by expense
     date)."
+
+msgid "Ingresos (facturación real del período, sin cancelados ni pedidos para
+    stock) menos costos de producción menos gastos operativos (del Panel de gastos, por fecha
+    del gasto). Los gastos <b>extraordinarios</b> (viajes, imprevistos) quedan afuera del
+    beneficio neto para no distorsionarlo; se muestran aparte, informativos."
+msgstr "Income (real billing for the period, excluding cancelled orders and stock
+    orders) minus production costs minus operating expenses (from the Expenses panel, by expense
+    date). <b>Extraordinary</b> expenses (trips, unforeseen costs) are left out of net
+    profit so they don't distort it; they are shown separately, for information."
 
 msgid "De los Ingresos de arriba, cuánto ya se cobró y cuánto sigue pendiente,
     según el estado de cobro y el método de pago cargados en el Panel de ventas."

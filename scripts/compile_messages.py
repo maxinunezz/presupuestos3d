@@ -238,6 +238,15 @@ GASTOS = {
     'Comercialización': 'Marketing',
     'Suscripciones': 'Subscriptions',
     'IT': 'IT',
+    'Tipo': 'Type',
+    'Operativo (estructura del negocio)': 'Operating (business structure)',
+    'Extraordinario (puntual, no representativo)': 'Extraordinary (one-off, not representative)',
+    'Operativo: gasto de estructura del negocio (entra en el resultado operativo vs ventas). '
+    'Extraordinario: gasto puntual y no representativo (viajes, imprevistos) que se muestra '
+    'aparte para no distorsionar el resultado.':
+        "Operating: business-structure expense (counts toward the operating result vs sales). "
+        "Extraordinary: one-off, not representative expense (trips, unforeseen costs) shown "
+        "separately so it doesn't distort the result.",
     'Único (no se repite)': 'One-time (does not repeat)',
     'Mensual': 'Monthly',
     'Anual': 'Annual',
@@ -290,7 +299,13 @@ GASTOS = {
     'Proyección anual recurrente': 'Recurring annual projection',
     'Ventas del período': 'Sales for the period',
     'Resultado operativo (ventas − gastos)': 'Operating result (sales − expenses)',
+    'Resultado operativo (ventas − gastos operativos)': 'Operating result (sales − operating expenses)',
     'Gastos sobre ventas': 'Expenses over sales',
+    'Gastos operativos sobre ventas': 'Operating expenses over sales',
+    'Gastos operativos del período': 'Operating expenses for the period',
+    'Gastos extraordinarios del período': 'Extraordinary expenses for the period',
+    'Resultado final (ventas − todos los gastos)': 'Final result (sales − all expenses)',
+    'Extraordinarios': 'Extraordinary',
     'Acumulado año %(year)s': 'Year %(year)s cumulative',
     'Promedio mensual': 'Monthly average',
     'Por categoría': 'By category',
@@ -324,12 +339,17 @@ GASTOS = {
     'Resultado operativo (vs ventas)': 'Operating result (vs sales)',
     'Ventas aprobadas': 'Approved sales',
     'Gastos del período': 'Expenses for the period',
+    'Gastos operativos': 'Operating expenses',
     'Ventas − Gastos': 'Sales − Expenses',
+    'Ventas − Gastos operativos': 'Sales − Operating expenses',
     'Compromiso por mes': 'Commitment per month',
     'Proyección anual': 'Annual projection',
     'Gastos recurrentes del período': 'Recurring expenses for the period',
     'Equiv. mensual': 'Monthly equiv.',
     'No hay gastos recurrentes en este período.': 'There are no recurring expenses in this period.',
+    'Gastos extraordinarios (informativo)': 'Extraordinary expenses (informational)',
+    'Total extraordinario': 'Extraordinary total',
+    'No hay gastos extraordinarios en este período.': 'There are no extraordinary expenses in this period.',
     'Control de topes por categoría': 'Cap control by category',
     'Restante': 'Remaining',
     'No hay topes cargados. Cargá topes mensuales en «Topes de gasto».':
@@ -619,6 +639,13 @@ BUDGETS = {
     'Beneficio neto': 'Net profit',
     'Ingresos − producción': 'Income − production',
     '− gastos operativos': '− operating expenses',
+    'Gastos extraordinarios': 'Extraordinary expenses',
+    'Gastos extraordinarios (informativo)': 'Extraordinary expenses (informational)',
+    'Informativo, no afecta el beneficio neto': 'Informational, does not affect net profit',
+    'Beneficio neto final': 'Final net profit',
+    '− gastos operativos y extraordinarios': '− operating and extraordinary expenses',
+    'Beneficio neto final (− gastos operativos y extraordinarios)':
+        'Final net profit (− operating and extraordinary expenses)',
     # Panel de ventas (cobros)
     'Estado de venta': 'Sale status',
     "Si el cliente ya pagó este pedido. Es independiente del estado de producción (un pedido puede estar Aprobado o Completado y seguir Pendiente de pago).":
@@ -898,6 +925,42 @@ BLOCKTRANS = {
     '%(meses_transcurridos)s mes(es)': '%(meses_transcurridos)s month(s)',
     'Evolución mensual (%(sel_year)s)': 'Monthly trend (%(sel_year)s)',
     '%% usado': '%% used',
+    (
+        'Gastos del negocio (administración, comercialización, suscripciones, IT)\n'
+        '    por <b>fecha del gasto</b>. No incluye los <b>costos</b> de producción ni las compras de\n'
+        '    insumos (eso va por Inventario y Métricas). Los totales, la evolución y el desglose por\n'
+        '    categoría de esta sección incluyen <b>todos</b> los gastos; el resultado operativo vs ventas\n'
+        '    usa solo los <b>operativos</b> (los extraordinarios se muestran aparte, más abajo).'
+    ): (
+        'Business expenses (administration, marketing, subscriptions, IT) by\n'
+        '    <b>expense date</b>. It does not include production <b>costs</b> or supply purchases (those\n'
+        '    go through Inventory and Metrics). The totals, trend and category breakdown in this section\n'
+        '    include <b>all</b> expenses; the operating result vs sales uses only the <b>operating</b>\n'
+        '    ones (extraordinary expenses are shown separately, below).'
+    ),
+    (
+        'Solo gastos <b>operativos</b> (estructura del negocio). Los\n'
+        '    <b>extraordinarios</b> (viajes, imprevistos) se muestran aparte, más abajo, para\n'
+        '    no distorsionar esta lectura.'
+    ): (
+        'Only <b>operating</b> expenses (business structure). <b>Extraordinary</b>\n'
+        '    expenses (trips, unforeseen costs) are shown separately, below, so they don\'t\n'
+        '    distort this reading.'
+    ),
+    (
+        'Incluyendo los %(gastos_extraordinarios)s de gastos extraordinarios del\n'
+        '    período, el resultado final es %(resultado_final)s.'
+    ): (
+        'Including the %(gastos_extraordinarios)s of extraordinary expenses for the\n'
+        '    period, the final result is %(resultado_final)s.'
+    ),
+    (
+        'Gastos puntuales y no representativos del período (viajes, imprevistos).\n'
+        '    No entran en el resultado operativo de arriba.'
+    ): (
+        "One-off, not representative expenses for the period (trips, unforeseen costs).\n"
+        "    They don't count toward the operating result above."
+    ),
     # budgets/metricas.html
     'Facturación por %(pl)s': 'Billing per %(pl)s',
     '%(reprints)s por falla': '%(reprints)s due to failure',
@@ -924,6 +987,17 @@ BLOCKTRANS = {
         'Income (real billing for the period, excluding cancelled orders and stock\n'
         '    orders) minus production costs minus operating expenses (from the Expenses panel, by expense\n'
         '    date).'
+    ),
+    (
+        'Ingresos (facturación real del período, sin cancelados ni pedidos para\n'
+        '    stock) menos costos de producción menos gastos operativos (del Panel de gastos, por fecha\n'
+        '    del gasto). Los gastos <b>extraordinarios</b> (viajes, imprevistos) quedan afuera del\n'
+        '    beneficio neto para no distorsionarlo; se muestran aparte, informativos.'
+    ): (
+        'Income (real billing for the period, excluding cancelled orders and stock\n'
+        '    orders) minus production costs minus operating expenses (from the Expenses panel, by expense\n'
+        '    date). <b>Extraordinary</b> expenses (trips, unforeseen costs) are left out of net\n'
+        '    profit so they don\'t distort it; they are shown separately, for information.'
     ),
     (
         'De los Ingresos de arriba, cuánto ya se cobró y cuánto sigue pendiente,\n'
