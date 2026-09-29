@@ -41,6 +41,8 @@
     .mx-kpis--inv .kpi    { background: #b45309; }
     .mx-kpis--costos .kpi { background: #6d28d9; }
     .mx-kpis--resultado .kpi { background: #1f2937; }
+    .mx-kpis--resultado .kpi.mx-ingresos { background: #1d4ed8; }
+    .mx-kpis--resultado .kpi.mx-produccion { background: #c2410c; }
     .mx-kpis--resultado .kpi.mx-negativo { background: #b91c1c; }
     .mx-kpis--resultado .kpi.mx-positivo { background: #15803d; }
     .mx-kpis--resultado .kpi.mx-ext { background: #7f1d1d; }
@@ -204,16 +206,16 @@
     beneficio neto para no distorsionarlo; se muestran aparte, informativos.{% endblocktranslate %}
 </p>
 <div class="mx-kpis mx-kpis--resultado">
-    <div class="kpi"><span class="n">{{ facturacion }}</span><span class="l">{% translate "Ingresos" %}</span></div>
-    <div class="kpi"><span class="n">{{ costo_produccion }}</span><span class="l">{% translate "Costos de producción" %}</span></div>
-    <div class="kpi"><span class="n">{{ gastos_operativos }}</span><span class="l">{% translate "Gastos operativos" %}</span></div>
+    <div class="kpi mx-ingresos"><span class="n">{{ facturacion }}</span><span class="l">{% translate "Ingresos" %}</span></div>
+    <div class="kpi mx-produccion"><span class="n">{{ costo_produccion }}</span><span class="l">{% translate "Costos de producción" %}</span></div>
+    <div class="kpi mx-negativo"><span class="n">{{ gastos_operativos }}</span><span class="l">{% translate "Gastos operativos" %}</span></div>
     {% if hay_extraordinarios %}
     <div class="kpi mx-ext"><span class="n">{{ gastos_extraordinarios }}</span><span class="l">{% translate "Gastos extraordinarios" %}</span><span class="s">{% translate "Informativo, no afecta el beneficio neto" %}</span></div>
     {% endif %}
-    <div class="kpi {% if beneficio_bruto_positivo %}mx-positivo{% else %}mx-negativo{% endif %}"><span class="n">{{ beneficio_bruto }}</span><span class="l">{% translate "Beneficio bruto" %}</span><span class="s">{% translate "Ingresos − producción" %}</span></div>
-    <div class="kpi {% if beneficio_neto_positivo %}mx-positivo{% else %}mx-negativo{% endif %}"><span class="n">{{ beneficio_neto }}</span><span class="l">{% translate "Beneficio neto" %}</span><span class="s">{% translate "− gastos operativos" %}</span></div>
+    <div class="kpi mx-positivo"><span class="n">{{ beneficio_bruto }}</span><span class="l">{% translate "Beneficio bruto" %}</span><span class="s">{% translate "Ingresos − producción" %}</span></div>
+    <div class="kpi mx-positivo"><span class="n">{{ beneficio_neto }}</span><span class="l">{% translate "Beneficio neto" %}</span><span class="s">{% translate "− gastos operativos" %}</span></div>
     {% if hay_extraordinarios %}
-    <div class="kpi {% if beneficio_neto_final_positivo %}mx-positivo{% else %}mx-negativo{% endif %}"><span class="n">{{ beneficio_neto_final }}</span><span class="l">{% translate "Beneficio neto final" %}</span><span class="s">{% translate "− gastos operativos y extraordinarios" %}</span></div>
+    <div class="kpi mx-positivo"><span class="n">{{ beneficio_neto_final }}</span><span class="l">{% translate "Beneficio neto final" %}</span><span class="s">{% translate "− gastos operativos y extraordinarios" %}</span></div>
     {% endif %}
 </div>
 {% if hay_extraordinarios %}
