@@ -1481,6 +1481,15 @@ msgstr "Machine cost"
 msgid "Total costo de producción"
 msgstr "Total production cost"
 
+msgid "Top filamentos:"
+msgstr "Top filaments:"
+
+msgid "Top agregados:"
+msgstr "Top add-ons:"
+
+msgid "Impresoras más usadas (horas reales):"
+msgstr "Most used printers (actual hours):"
+
 msgid "COSTOS DE PRODUCCIÓN (período actual)"
 msgstr "PRODUCTION COSTS (current period)"
 

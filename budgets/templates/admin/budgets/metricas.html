@@ -280,6 +280,7 @@
     var embudo = {{ embudo_chart_json|safe }};
     var maq = {{ maq_chart_json|safe }};
     var costos = {{ costos_chart_json|safe }};
+    var costosExtra = {{ costos_extra_json|safe }};
     var medioPago = {{ medio_pago_chart_json|safe }};
 
     new Chart(document.getElementById("chartFact"), {
@@ -303,7 +304,21 @@
     new Chart(document.getElementById("chartCostos"), {
         type: "doughnut",
         data: { labels: costos.labels, datasets: [{ data: costos.data, backgroundColor: PALETTE, borderWidth: 0 }] },
-        options: { plugins: { legend: { position: "right" } } }
+        options: {
+            plugins: {
+                legend: { position: "right" },
+                tooltip: {
+                    callbacks: {
+                        // Debajo del total de la porción, agrega el detalle (top 3
+                        // filamentos / impresoras / agregados) que manda el backend.
+                        afterBody: function (items) {
+                            var extra = costosExtra[items[0].dataIndex] || [];
+                            return extra.length ? [""].concat(extra) : [];
+                        }
+                    }
+                }
+            }
+        }
     });
 
     new Chart(document.getElementById("chartMedioPago"), {

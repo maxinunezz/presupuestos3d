@@ -172,6 +172,12 @@ def build_metrics(period: str, now: datetime = None) -> dict:
     cost_machine = ZERO
     cost_machine_hours = ZERO
     cost_aggregates = ZERO
+    # Desglose de material/agregados por ítem específico (para el detalle del
+    # gráfico de "Composición del costo de producción"): mismo criterio $ que
+    # cost_material/cost_aggregates (material con el costo PROMEDIO prorrateado
+    # por corrida, agregados al costo completo), pero por filamento/agregado.
+    fil_money = defaultdict(lambda: ZERO)
+    agg_money = defaultdict(lambda: ZERO)
     for p in cur_approved:
         cli_money[p.client_name] += p.total
         for it in p.items.all():
@@ -190,8 +196,18 @@ def build_metrics(period: str, now: datetime = None) -> dict:
             cost_machine += qty * producto.machine_cost_avg
             cost_machine_hours += qty * producto.total_machine_hours_avg
             cost_aggregates += qty * producto.aggregate_cost
+            for pieza in producto.piezas.all():
+                ppg = pieza.pieces_per_gcode or 1
+                units = pieza.units_needed or 0
+                for fline in pieza.filament_lines.all():
+                    avg_cost_one = fline.line_cost / ppg * units
+                    fil_money[str(fline.filament)] += qty * avg_cost_one
+            for aline in producto.aggregate_lines.all():
+                agg_money[aline.aggregate.name] += qty * aline.line_cost
 
     top_productos_qty = by_qty.most_common(10)
+    top3_material = sorted(fil_money.items(), key=lambda kv: kv[1], reverse=True)[:3]
+    top3_aggregates = sorted(agg_money.items(), key=lambda kv: kv[1], reverse=True)[:3]
     top_productos_money = sorted(by_money.items(), key=lambda kv: kv[1], reverse=True)[:10]
     top_clientes = sorted(cli_money.items(), key=lambda kv: kv[1], reverse=True)[:10]
 
@@ -367,6 +383,8 @@ def build_metrics(period: str, now: datetime = None) -> dict:
         "cost_machine": cost_machine,
         "cost_machine_hours": cost_machine_hours,
         "cost_aggregates": cost_aggregates,
+        "top3_material": top3_material,
+        "top3_aggregates": top3_aggregates,
         "costo_produccion": costo_produccion,
         "gastos_operativos": gastos_operativos,
         "gastos_extraordinarios": gastos_extraordinarios,
@@ -599,6 +617,29 @@ def template_context(m: dict) -> dict:
             float(m["cost_aggregates"]),
         ],
     }
+    # Detalle al pasar el mouse por cada porción: top 3 filamentos/agregados
+    # (mismo $ que arma cost_material/cost_aggregates) y top 3 impresoras más
+    # usadas en el período (horas reales impresas — dato de producción, no de
+    # ventas, ya que un producto no tiene una máquina fija asignada).
+    top3_material_lines = [
+        gettext("Top filamentos:"),
+        *[f"{label}: {_money(monto)}" for label, monto in m["top3_material"]],
+    ] if m["top3_material"] else []
+    top3_aggregates_lines = [
+        gettext("Top agregados:"),
+        *[f"{label}: {_money(monto)}" for label, monto in m["top3_aggregates"]],
+    ] if m["top3_aggregates"] else []
+    top3_maquinas = m["uso_maquinas"][:3]
+    top3_maquinas_lines = [
+        gettext("Impresoras más usadas (horas reales):"),
+        *[f"{r['name']}: {_hours(r['horas'])}" for r in top3_maquinas],
+    ] if top3_maquinas else []
+    costos_extra = [
+        top3_material_lines,
+        [],
+        top3_maquinas_lines,
+        top3_aggregates_lines,
+    ]
     medio_pago_chart = {
         "labels": [str(row["label"]) for row in m["por_medio_pago"]],
         "data": [float(row["total"]) for row in m["por_medio_pago"]],
@@ -678,5 +719,6 @@ def template_context(m: dict) -> dict:
         "embudo_chart_json": json.dumps(embudo_chart),
         "maq_chart_json": json.dumps(maq_chart),
         "costos_chart_json": json.dumps(costos_chart),
+        "costos_extra_json": json.dumps(costos_extra),
         "medio_pago_chart_json": json.dumps(medio_pago_chart),
     }
