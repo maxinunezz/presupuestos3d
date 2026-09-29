@@ -98,12 +98,15 @@ class ApiPermissionTests(TestCase):
         )
         Aggregate.objects.create(name="Argolla", cost_per_unit=Decimal("5"))
 
-    def test_anonimo_forbidden(self):
+    def test_anonimo_no_autenticado(self):
+        # DRF devuelve 401 (no autenticado) cuando hay autenticadores
+        # configurados y ninguno tuvo éxito; es el código correcto para un
+        # anónimo (403 es para un usuario ya autenticado sin permisos).
         for path in ("/api/filaments/", "/api/aggregates/", "/api/stock-movements/"):
-            self.assertEqual(self.client.get(path).status_code, 403, path)
+            self.assertEqual(self.client.get(path).status_code, 401, path)
 
     def test_anonimo_no_puede_escribir(self):
-        self.assertEqual(self.client.post("/api/filaments/", {}).status_code, 403)
+        self.assertEqual(self.client.post("/api/filaments/", {}).status_code, 401)
 
     def test_staff_puede_leer(self):
         User = get_user_model()
