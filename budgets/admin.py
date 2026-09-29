@@ -666,13 +666,15 @@ class PresupuestoAdmin(admin.ModelAdmin):
             )
             rows += gettext(
                 "&nbsp;&nbsp;%(producto)s ×%(qty)s → <b>%(maquina)s</b> "
-                "(%(hours)s, fin impr. %(fin)s)<br>"
+                "(%(hours)s, fin impr. %(fin)s, %(done)s/%(total)s corridas de gcode)<br>"
             ) % {
                 "producto": job.producto,
                 "qty": job.quantity,
                 "maquina": maquina,
                 "hours": format_hours(job.print_hours),
                 "fin": fin,
+                "done": job.completed_runs,
+                "total": job.gcode_runs,
             }
         entrega = (
             timezone.localtime(obj.estimated_delivery).strftime("%d/%m/%Y %H:%M")

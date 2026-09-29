@@ -487,7 +487,7 @@ BUDGETS = {
     'Guardá el presupuesto y aprobalo para generar la cola.': 'Save the budget and approve it to generate the queue.',
     'Todavía no hay trabajos de producción. Se generan al <b>aprobar</b> el presupuesto.': 'There are no production jobs yet. They are generated when you <b>approve</b> the budget.',
     '(sin máquina)': '(no machine)',
-    '&nbsp;&nbsp;%(producto)s ×%(qty)s → <b>%(maquina)s</b> (%(hours)s, fin impr. %(fin)s)<br>': '&nbsp;&nbsp;%(producto)s ×%(qty)s → <b>%(maquina)s</b> (%(hours)s, print end %(fin)s)<br>',
+    '&nbsp;&nbsp;%(producto)s ×%(qty)s → <b>%(maquina)s</b> (%(hours)s, fin impr. %(fin)s, %(done)s/%(total)s corridas de gcode)<br>': '&nbsp;&nbsp;%(producto)s ×%(qty)s → <b>%(maquina)s</b> (%(hours)s, print end %(fin)s, %(done)s/%(total)s gcode runs)<br>',
     'Impresión total:': 'Total printing:',
     'Post-proceso total:': 'Total post-processing:',
     'ENTREGA ESTIMADA:': 'ESTIMATED DELIVERY:',

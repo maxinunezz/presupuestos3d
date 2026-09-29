@@ -1147,8 +1147,8 @@ msgstr "There are no production jobs yet. They are generated when you <b>approve
 msgid "(sin máquina)"
 msgstr "(no machine)"
 
-msgid "&nbsp;&nbsp;%(producto)s ×%(qty)s → <b>%(maquina)s</b> (%(hours)s, fin impr. %(fin)s)<br>"
-msgstr "&nbsp;&nbsp;%(producto)s ×%(qty)s → <b>%(maquina)s</b> (%(hours)s, print end %(fin)s)<br>"
+msgid "&nbsp;&nbsp;%(producto)s ×%(qty)s → <b>%(maquina)s</b> (%(hours)s, fin impr. %(fin)s, %(done)s/%(total)s corridas de gcode)<br>"
+msgstr "&nbsp;&nbsp;%(producto)s ×%(qty)s → <b>%(maquina)s</b> (%(hours)s, print end %(fin)s, %(done)s/%(total)s gcode runs)<br>"
 
 msgid "Impresión total:"
 msgstr "Total printing:"
