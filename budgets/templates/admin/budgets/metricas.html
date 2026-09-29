@@ -40,6 +40,12 @@
     .mx-kpis--prod .kpi   { background: #15803d; }
     .mx-kpis--inv .kpi    { background: #b45309; }
     .mx-kpis--costos .kpi { background: #6d28d9; }
+    /* Mismos colores que las porciones del gráfico "Composición del costo de producción". */
+    .mx-kpis--costos .kpi.mx-c-material { background: #2563eb; }
+    .mx-kpis--costos .kpi.mx-c-labor    { background: #16a34a; }
+    .mx-kpis--costos .kpi.mx-c-machine  { background: #f59e0b; }
+    .mx-kpis--costos .kpi.mx-c-agg      { background: #dc2626; }
+    .mx-card.mx-card--sm { flex: 0 1 380px; max-width: 380px; }
     .mx-kpis--resultado .kpi { background: #1f2937; }
     .mx-kpis--resultado .kpi.mx-ingresos { background: #1d4ed8; }
     .mx-kpis--resultado .kpi.mx-produccion { background: #c2410c; }
@@ -183,15 +189,15 @@
     el período ya haya pasado.{% endblocktranslate %}
 </p>
 <div class="mx-kpis mx-kpis--costos">
-    <div class="kpi"><span class="n">{{ cost_material }}</span><span class="l">{% translate "Material (con merma)" %}</span></div>
-    <div class="kpi"><span class="n">{{ cost_labor }}</span><span class="l">{% translate "Mano de obra" %}</span></div>
-    <div class="kpi"><span class="n">{{ cost_machine }}</span><span class="l">{% translate "Costo de máquina" %}</span><span class="s">{{ cost_machine_hours }}</span></div>
-    <div class="kpi"><span class="n">{{ cost_aggregates }}</span><span class="l">{% translate "Agregados" %}</span></div>
+    <div class="kpi mx-c-material"><span class="n">{{ cost_material }}</span><span class="l">{% translate "Material (con merma)" %}</span></div>
+    <div class="kpi mx-c-labor"><span class="n">{{ cost_labor }}</span><span class="l">{% translate "Mano de obra" %}</span></div>
+    <div class="kpi mx-c-machine"><span class="n">{{ cost_machine }}</span><span class="l">{% translate "Costo de máquina" %}</span><span class="s">{{ cost_machine_hours }}</span></div>
+    <div class="kpi mx-c-agg"><span class="n">{{ cost_aggregates }}</span><span class="l">{% translate "Agregados" %}</span></div>
     <div class="kpi"><span class="n">{{ costo_produccion }}</span><span class="l">{% translate "Total costo de producción" %}</span></div>
 </div>
 
 <div class="mx-grid">
-    <div class="mx-card">
+    <div class="mx-card mx-card--sm">
         <h3>{% translate "Composición del costo de producción" %}</h3>
         <canvas id="chartCostos" height="150"></canvas>
     </div>
