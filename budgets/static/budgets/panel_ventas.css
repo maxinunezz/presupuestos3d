@@ -1,0 +1,35 @@
+/* Panel de ventas: son muchas columnas (producto, costos, beneficio...) y el
+   changelist nativo de Django las renderiza anchas por default (sobre todo
+   los <select> de "Estado de venta" / "Método de pago", que ocupan todo el
+   ancho del texto más largo de sus opciones). Achicamos tipografía, padding
+   y esos selects para que entren más columnas sin scroll horizontal. */
+#result_list th,
+#result_list td {
+    font-size: 12px;
+    padding: 5px 7px;
+    white-space: nowrap;
+}
+
+#result_list td.field-producto_display {
+    white-space: normal;
+    max-width: 170px;
+}
+
+#result_list td.field-estado_venta select,
+#result_list td.field-medio_pago select {
+    width: auto;
+    max-width: 120px;
+    font-size: 12px;
+    padding: 2px 3px;
+}
+
+#result_list td.field-cantidad_display,
+#result_list td.field-precio_unitario_display,
+#result_list td.field-total_display,
+#result_list td.field-beneficio_display,
+#result_list td.field-material_display,
+#result_list td.field-labor_display,
+#result_list td.field-machine_display,
+#result_list td.field-extras_display {
+    text-align: right;
+}

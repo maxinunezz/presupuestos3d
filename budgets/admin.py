@@ -348,6 +348,13 @@ class PanelVentasAdmin(admin.ModelAdmin):
     search_fields = ("client_name", "description", "items__producto__name")
     list_editable = ("estado_venta", "medio_pago")
     ordering = ("-approved_at",)
+
+    class Media:
+        # Son muchas columnas (producto, costos, beneficio...) y el changelist
+        # nativo las renderiza anchas por default; este CSS las achica para
+        # que entren sin scroll horizontal (ver budgets/panel_ventas.css).
+        css = {"all": ("budgets/panel_ventas.css",)}
+
     fields = (
         "client_name",
         "para_stock",
