@@ -53,6 +53,34 @@ def _marcar_impreso_view(model_admin, request, job_id, redirect_url_name):
     return redirect(reverse(redirect_url_name))
 
 
+def _empezar_view(model_admin, request, job_id, redirect_url_name):
+    """Arranca manualmente un trabajo En cola (botón "▶ Empezar" de la cola/
+    tablero), pasándolo a Imprimiendo sin registrar todavía ninguna corrida.
+    Reusa save_model de ProductionJobAdmin, que ahí mismo setea started_at.
+    Compartido entre ColaProduccionAdmin y TableroAdmin."""
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+    job = get_object_or_404(
+        ProductionJob.objects.select_related("presupuesto", "producto", "pieza", "machine"),
+        pk=job_id,
+    )
+    if job.status != ProductionJob.Status.PENDING:
+        model_admin.message_user(
+            request,
+            gettext("Ese trabajo ya no está En cola."),
+            level=messages.WARNING,
+        )
+    else:
+        job.status = ProductionJob.Status.PRINTING
+        job_admin = admin.site._registry[ProductionJob]
+        job_admin.save_model(request, job, None, True)
+        model_admin.message_user(
+            request,
+            gettext("Trabajo '%(job)s' arrancado (Imprimiendo).") % {"job": job},
+        )
+    return redirect(reverse(redirect_url_name))
+
+
 def _marcar_corrida_view(model_admin, request, job_id, redirect_url_name):
     """Registra una corrida de gcode terminada (botón "Corrida terminada" de
     la cola/tablero). Si el trabajo todavía estaba En cola, la primera corrida
@@ -580,6 +608,11 @@ class ColaProduccionAdmin(admin.ModelAdmin):
                 self.admin_site.admin_view(self.marcar_corrida_view),
                 name="production_colaproduccion_marcar_corrida",
             ),
+            path(
+                "empezar/<int:job_id>/",
+                self.admin_site.admin_view(self.empezar_view),
+                name="production_colaproduccion_empezar",
+            ),
         ]
         return urls + super().get_urls()
 
@@ -590,6 +623,11 @@ class ColaProduccionAdmin(admin.ModelAdmin):
 
     def marcar_corrida_view(self, request, job_id):
         return _marcar_corrida_view(
+            self, request, job_id, "admin:production_colaproduccion_changelist"
+        )
+
+    def empezar_view(self, request, job_id):
+        return _empezar_view(
             self, request, job_id, "admin:production_colaproduccion_changelist"
         )
 
@@ -634,6 +672,7 @@ class ColaProduccionAdmin(admin.ModelAdmin):
                 "start_raw": data.get("start"),
                 "overdue": overdue,
                 "printing": job.status == ProductionJob.Status.PRINTING,
+                "pending": job.status == ProductionJob.Status.PENDING,
                 "mark_done_url": reverse(
                     "admin:production_colaproduccion_marcar_impreso", args=[job.id]
                 ),
@@ -645,6 +684,9 @@ class ColaProduccionAdmin(admin.ModelAdmin):
                 "can_mark_done": job.completed_runs >= job.gcode_runs - 1,
                 "run_url": reverse(
                     "admin:production_colaproduccion_marcar_corrida", args=[job.id]
+                ),
+                "empezar_url": reverse(
+                    "admin:production_colaproduccion_empezar", args=[job.id]
                 ),
             }
 
@@ -740,6 +782,11 @@ class TableroAdmin(admin.ModelAdmin):
                 self.admin_site.admin_view(self.marcar_corrida_view),
                 name="production_tablero_marcar_corrida",
             ),
+            path(
+                "empezar/<int:job_id>/",
+                self.admin_site.admin_view(self.empezar_view),
+                name="production_tablero_empezar",
+            ),
         ]
         return urls + super().get_urls()
 
@@ -750,6 +797,11 @@ class TableroAdmin(admin.ModelAdmin):
 
     def marcar_corrida_view(self, request, job_id):
         return _marcar_corrida_view(
+            self, request, job_id, "admin:production_tablero_changelist"
+        )
+
+    def empezar_view(self, request, job_id):
+        return _empezar_view(
             self, request, job_id, "admin:production_tablero_changelist"
         )
 
@@ -831,6 +883,9 @@ class TableroAdmin(admin.ModelAdmin):
                     "can_mark_done": current.completed_runs >= current.gcode_runs - 1,
                     "run_url": reverse(
                         "admin:production_tablero_marcar_corrida", args=[current.id]
+                    ),
+                    "empezar_url": reverse(
+                        "admin:production_tablero_empezar", args=[current.id]
                     ),
                 }
             machines.append(

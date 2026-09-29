@@ -109,10 +109,17 @@
                     <td>{{ j.start }}</td>
                     <td>{{ j.print_end }}</td>
                     <td>
+                        {% if j.printing %}
                         <form method="post" action="{{ j.run_url }}">
                             {% csrf_token %}
                             <button type="submit" class="btn-mark-run">▶ {% translate "Corrida terminada" %}</button>
                         </form>
+                        {% elif j.pending %}
+                        <form method="post" action="{{ j.empezar_url }}">
+                            {% csrf_token %}
+                            <button type="submit" class="btn-mark-run">▶ {% translate "Empezar" %}</button>
+                        </form>
+                        {% endif %}
                         {% if j.printing and j.can_mark_done %}
                         <form method="post" action="{{ j.mark_done_url }}" onsubmit="return confirm('{% translate "¿Marcar este trabajo como Impreso?" %}');">
                             {% csrf_token %}
@@ -159,10 +166,17 @@
             <td>{{ j.start }}</td>
             <td>{{ j.print_end }}</td>
             <td>
+                {% if j.printing %}
                 <form method="post" action="{{ j.run_url }}">
                     {% csrf_token %}
                     <button type="submit" class="btn-mark-run">▶ {% translate "Corrida terminada" %}</button>
                 </form>
+                {% elif j.pending %}
+                <form method="post" action="{{ j.empezar_url }}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn-mark-run">▶ {% translate "Empezar" %}</button>
+                </form>
+                {% endif %}
                 {% if j.printing and j.can_mark_done %}
                 <form method="post" action="{{ j.mark_done_url }}" onsubmit="return confirm('{% translate "¿Marcar este trabajo como Impreso?" %}');">
                     {% csrf_token %}

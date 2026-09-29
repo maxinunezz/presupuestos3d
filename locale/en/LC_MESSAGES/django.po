@@ -1671,6 +1671,15 @@ msgstr "That job was already Printed or Cancelled."
 msgid "Trabajo '%(job)s' marcado como Impreso."
 msgstr "Job '%(job)s' marked as Printed."
 
+msgid "Empezar"
+msgstr "Start"
+
+msgid "Ese trabajo ya no está En cola."
+msgstr "That job is no longer In queue."
+
+msgid "Trabajo '%(job)s' arrancado (Imprimiendo)."
+msgstr "Job '%(job)s' started (Printing)."
+
 msgid "Últimos impresos por máquina"
 msgstr "Latest prints per machine"
 

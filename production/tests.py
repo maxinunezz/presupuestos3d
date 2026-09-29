@@ -595,3 +595,29 @@ class GcodeRunsProgressTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.job.refresh_from_db()
         self.assertEqual(self.job.completed_runs, 0)
+
+    def test_empezar_pasa_a_imprimiendo_sin_sumar_corridas(self):
+        self._login()
+        url = reverse("admin:production_colaproduccion_empezar", args=[self.job.pk])
+        self.client.post(url)
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.status, ProductionJob.Status.PRINTING)
+        self.assertEqual(self.job.completed_runs, 0)
+        self.assertIsNotNone(self.job.started_at)
+
+    def test_empezar_via_tablero_tambien_funciona(self):
+        self._login()
+        url = reverse("admin:production_tablero_empezar", args=[self.job.pk])
+        self.client.post(url)
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.status, ProductionJob.Status.PRINTING)
+
+    def test_empezar_no_hace_nada_si_ya_no_esta_en_cola(self):
+        self._login()
+        self.job.status = ProductionJob.Status.PRINTING
+        self.job.save(update_fields=["status"])
+        url = reverse("admin:production_colaproduccion_empezar", args=[self.job.pk])
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, 302)
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.status, ProductionJob.Status.PRINTING)

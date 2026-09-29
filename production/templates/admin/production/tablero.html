@@ -81,10 +81,17 @@
                 <div class="meta">{% translate "Termina:" %} <b>{{ m.current.print_end }}</b></div>
                 <div class="meta">{% blocktranslate with n=m.queue_count %}{{ n }} en cola en esta máquina{% endblocktranslate %}</div>
                 <div class="runs-progress">{% blocktranslate with n=m.current.completed_runs t=m.current.gcode_runs %}{{ n }}/{{ t }} corridas de gcode{% endblocktranslate %}</div>
+                {% if m.current.printing %}
                 <form method="post" action="{{ m.current.run_url }}" style="display:inline;">
                     {% csrf_token %}
                     <button type="submit" class="btn-mark-run">▶ {% translate "Corrida terminada" %}</button>
                 </form>
+                {% else %}
+                <form method="post" action="{{ m.current.empezar_url }}" style="display:inline;">
+                    {% csrf_token %}
+                    <button type="submit" class="btn-mark-run">▶ {% translate "Empezar" %}</button>
+                </form>
+                {% endif %}
                 {% if m.current.printing and m.current.can_mark_done %}
                 <form method="post" action="{{ m.current.mark_done_url }}" onsubmit="return confirm('{% translate "¿Marcar este trabajo como Impreso?" %}');" style="display:inline;">
                     {% csrf_token %}
