@@ -639,6 +639,10 @@ class ColaProduccionAdmin(admin.ModelAdmin):
                 ),
                 "gcode_runs": job.gcode_runs,
                 "completed_runs": job.completed_runs,
+                # "Marcar como Impreso" da por completadas TODAS las corridas
+                # (calcula sobrante y horas de máquina sobre el total), así que
+                # solo se muestra cuando falta la última corrida por terminar.
+                "can_mark_done": job.completed_runs >= job.gcode_runs - 1,
                 "run_url": reverse(
                     "admin:production_colaproduccion_marcar_corrida", args=[job.id]
                 ),
@@ -821,6 +825,10 @@ class TableroAdmin(admin.ModelAdmin):
                     ),
                     "gcode_runs": current.gcode_runs,
                     "completed_runs": current.completed_runs,
+                    # "Marcar como Impreso" da por completadas TODAS las corridas
+                    # (calcula sobrante y horas de máquina sobre el total), así
+                    # que solo se muestra cuando falta la última por terminar.
+                    "can_mark_done": current.completed_runs >= current.gcode_runs - 1,
                     "run_url": reverse(
                         "admin:production_tablero_marcar_corrida", args=[current.id]
                     ),

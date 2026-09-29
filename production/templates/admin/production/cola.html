@@ -113,7 +113,7 @@
                             {% csrf_token %}
                             <button type="submit" class="btn-mark-run">▶ {% translate "Corrida terminada" %}</button>
                         </form>
-                        {% if j.printing %}
+                        {% if j.printing and j.can_mark_done %}
                         <form method="post" action="{{ j.mark_done_url }}" onsubmit="return confirm('{% translate "¿Marcar este trabajo como Impreso?" %}');">
                             {% csrf_token %}
                             <button type="submit" class="btn-mark-done">✅ {% translate "Impreso" %}</button>
@@ -163,7 +163,7 @@
                     {% csrf_token %}
                     <button type="submit" class="btn-mark-run">▶ {% translate "Corrida terminada" %}</button>
                 </form>
-                {% if j.printing %}
+                {% if j.printing and j.can_mark_done %}
                 <form method="post" action="{{ j.mark_done_url }}" onsubmit="return confirm('{% translate "¿Marcar este trabajo como Impreso?" %}');">
                     {% csrf_token %}
                     <button type="submit" class="btn-mark-done">✅ {% translate "Impreso" %}</button>
