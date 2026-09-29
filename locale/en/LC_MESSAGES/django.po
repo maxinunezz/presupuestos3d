@@ -2090,6 +2090,17 @@ msgstr "Income (real billing for the period, excluding cancelled orders and stoc
     date). <b>Extraordinary</b> expenses (trips, unforeseen costs) are left out of net
     profit so they don't distort it; they are shown separately, for information."
 
+msgid "<b>Beneficio neto</b> es el que refleja la salud operativa del negocio funcionando
+    normal (sin los extraordinarios). <b>Beneficio neto final</b> es lo que realmente quedó en el
+    período, incluyendo lo excepcional: es informativo, no el que hay que mirar para juzgar si el
+    negocio anda bien, porque un gasto puntual grande puede hundirlo un mes sin que eso signifique
+    un problema de fondo."
+msgstr "<b>Net profit</b> is the one that reflects the operating health of the business
+    running normally (without the extraordinary expenses). <b>Final net profit</b> is what actually
+    was left in the period, including the exceptional: it is informational, not the one to look at
+    to judge whether the business is doing well, because one big one-off expense can sink it for a
+    month without that being an underlying problem."
+
 msgid "De los Ingresos de arriba, cuánto ya se cobró y cuánto sigue pendiente,
     según el estado de cobro y el método de pago cargados en el Panel de ventas."
 msgstr "Of the Income above, how much has already been collected and how much is still

@@ -1000,6 +1000,19 @@ BLOCKTRANS = {
         '    profit so they don\'t distort it; they are shown separately, for information.'
     ),
     (
+        '<b>Beneficio neto</b> es el que refleja la salud operativa del negocio funcionando\n'
+        '    normal (sin los extraordinarios). <b>Beneficio neto final</b> es lo que realmente quedó en el\n'
+        '    período, incluyendo lo excepcional: es informativo, no el que hay que mirar para juzgar si el\n'
+        '    negocio anda bien, porque un gasto puntual grande puede hundirlo un mes sin que eso signifique\n'
+        '    un problema de fondo.'
+    ): (
+        '<b>Net profit</b> is the one that reflects the operating health of the business\n'
+        '    running normally (without the extraordinary expenses). <b>Final net profit</b> is what actually\n'
+        '    was left in the period, including the exceptional: it is informational, not the one to look at\n'
+        '    to judge whether the business is doing well, because one big one-off expense can sink it for a\n'
+        '    month without that being an underlying problem.'
+    ),
+    (
         'De los Ingresos de arriba, cuánto ya se cobró y cuánto sigue pendiente,\n'
         '    según el estado de cobro y el método de pago cargados en el Panel de ventas.'
     ): (

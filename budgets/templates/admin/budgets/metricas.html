@@ -216,6 +216,15 @@
     <div class="kpi {% if beneficio_neto_final_positivo %}mx-positivo{% else %}mx-negativo{% endif %}"><span class="n">{{ beneficio_neto_final }}</span><span class="l">{% translate "Beneficio neto final" %}</span><span class="s">{% translate "− gastos operativos y extraordinarios" %}</span></div>
     {% endif %}
 </div>
+{% if hay_extraordinarios %}
+<p class="mx-intro">
+    {% blocktranslate %}<b>Beneficio neto</b> es el que refleja la salud operativa del negocio funcionando
+    normal (sin los extraordinarios). <b>Beneficio neto final</b> es lo que realmente quedó en el
+    período, incluyendo lo excepcional: es informativo, no el que hay que mirar para juzgar si el
+    negocio anda bien, porque un gasto puntual grande puede hundirlo un mes sin que eso signifique
+    un problema de fondo.{% endblocktranslate %}
+</p>
+{% endif %}
 
 <!-- ===================== F) PANEL DE VENTAS (cobros) ===================== -->
 <div class="mx-section mx-section--ventaspanel">🧾 {% translate "Panel de ventas (cobros)" %}</div>
