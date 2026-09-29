@@ -1680,6 +1680,9 @@ msgstr "That job is no longer In queue."
 msgid "Trabajo '%(job)s' arrancado (Imprimiendo)."
 msgstr "Job '%(job)s' started (Printing)."
 
+msgid "Trabajo '%(job)s' se pasó a la máquina libre '%(maquina)s' para no dejarla parada."
+msgstr "Job '%(job)s' was moved to the free machine '%(maquina)s' so it doesn't sit idle."
+
 msgid "Últimos impresos por máquina"
 msgstr "Latest prints per machine"
 

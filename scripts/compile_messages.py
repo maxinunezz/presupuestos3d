@@ -754,6 +754,8 @@ PRODUCTION = {
     'Empezar': 'Start',
     'Ese trabajo ya no está En cola.': 'That job is no longer In queue.',
     "Trabajo '%(job)s' arrancado (Imprimiendo).": "Job '%(job)s' started (Printing).",
+    "Trabajo '%(job)s' se pasó a la máquina libre '%(maquina)s' para no dejarla parada.":
+        "Job '%(job)s' was moved to the free machine '%(maquina)s' so it doesn't sit idle.",
     'Últimos impresos por máquina': 'Latest prints per machine',
     'Finalizado': 'Finished',
     'Todavía no hay impresiones terminadas.': 'No finished prints yet.',

@@ -11,7 +11,7 @@ from budgets.models import Pieza, PiezaFilamentLine, Presupuesto, Producto
 from inventory.models import Filament, StockMovement
 
 from .models import HistorialImpresion, Maquina, ProductionJob
-from .scheduler import next_loadable, recommend_machine
+from .scheduler import next_loadable, rebalance_idle_machines, recommend_machine
 
 
 def make_producto(multicolor=False):
@@ -621,3 +621,122 @@ class GcodeRunsProgressTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.job.refresh_from_db()
         self.assertEqual(self.job.status, ProductionJob.Status.PRINTING)
+
+
+class RebalanceIdleMachinesTests(TestCase):
+    """Si una máquina queda libre y otra tiene cola de sobra, le pasa trabajo."""
+
+    def setUp(self):
+        self.fil = Filament.objects.create(
+            brand="M",
+            material_type=Filament.MaterialType.PLA,
+            color="C",
+            cost_per_kg=Decimal("10000"),
+            stock_grams=Decimal("100000"),
+        )
+        self.a1n1 = Maquina.objects.create(name="A1N1 Bambu Lab", supports_multicolor=True)
+        self.a1n2 = Maquina.objects.create(name="A1N2 Bambu Lab", supports_multicolor=True)
+        self.pres = Presupuesto.objects.create(client_name="Cliente")
+
+    def _job(self, machine, status=ProductionJob.Status.PENDING, order=0, multicolor=False):
+        producto = make_producto(multicolor=multicolor)
+        pieza = add_pieza(producto, self.fil, Decimal("10"))
+        if multicolor:
+            pieza.requires_ams = True
+            pieza.save(update_fields=["requires_ams"])
+        return ProductionJob.objects.create(
+            presupuesto=self.pres,
+            producto=producto,
+            pieza=pieza,
+            quantity=1,
+            machine=machine,
+            status=status,
+            order=order,
+        )
+
+    def test_pasa_trabajo_pendiente_a_maquina_libre(self):
+        # Escenario del usuario: A1N1 libre, A1N2 con uno imprimiendo y otro
+        # en cola detrás.
+        printing = self._job(self.a1n2, status=ProductionJob.Status.PRINTING, order=0)
+        pending = self._job(self.a1n2, status=ProductionJob.Status.PENDING, order=1)
+
+        moved = rebalance_idle_machines()
+
+        self.assertEqual(moved, [pending])
+        pending.refresh_from_db()
+        printing.refresh_from_db()
+        self.assertEqual(pending.machine_id, self.a1n1.id)
+        # El que ya estaba imprimiendo no se toca.
+        self.assertEqual(printing.machine_id, self.a1n2.id)
+
+    def test_no_roba_si_la_donante_solo_tiene_un_trabajo(self):
+        # A1N2 tiene un solo trabajo: no la dejamos sin nada.
+        only = self._job(self.a1n2, status=ProductionJob.Status.PRINTING)
+
+        moved = rebalance_idle_machines()
+
+        self.assertEqual(moved, [])
+        only.refresh_from_db()
+        self.assertEqual(only.machine_id, self.a1n2.id)
+
+    def test_no_mueve_nada_si_ninguna_maquina_esta_libre(self):
+        self._job(self.a1n1, status=ProductionJob.Status.PRINTING)
+        self._job(self.a1n2, status=ProductionJob.Status.PRINTING)
+        self._job(self.a1n2, status=ProductionJob.Status.PENDING, order=1)
+
+        self.assertEqual(rebalance_idle_machines(), [])
+
+    def test_respeta_compatibilidad_multicolor(self):
+        # A1N1 (la única libre) no soporta multicolor; el único candidato
+        # a moverse en A1N2 sí lo necesita -> no se mueve nada.
+        self.a1n1.supports_multicolor = False
+        self.a1n1.save(update_fields=["supports_multicolor"])
+        printing = self._job(self.a1n2, status=ProductionJob.Status.PRINTING, order=0)
+        pending = self._job(
+            self.a1n2, status=ProductionJob.Status.PENDING, order=1, multicolor=True
+        )
+
+        moved = rebalance_idle_machines()
+
+        self.assertEqual(moved, [])
+        pending.refresh_from_db()
+        self.assertEqual(pending.machine_id, self.a1n2.id)
+
+    def _login(self):
+        User = get_user_model()
+        User.objects.create_superuser("admin", password="x")
+        self.client.login(username="admin", password="x")
+
+    def test_visitar_la_cola_dispara_el_rebalanceo(self):
+        self._login()
+        self._job(self.a1n2, status=ProductionJob.Status.PRINTING, order=0)
+        pending = self._job(self.a1n2, status=ProductionJob.Status.PENDING, order=1)
+
+        self.client.get(reverse("admin:production_colaproduccion_changelist"))
+
+        pending.refresh_from_db()
+        self.assertEqual(pending.machine_id, self.a1n1.id)
+
+    def test_visitar_el_tablero_dispara_el_rebalanceo(self):
+        self._login()
+        self._job(self.a1n2, status=ProductionJob.Status.PRINTING, order=0)
+        pending = self._job(self.a1n2, status=ProductionJob.Status.PENDING, order=1)
+
+        self.client.get(reverse("admin:production_tablero_changelist"))
+
+        pending.refresh_from_db()
+        self.assertEqual(pending.machine_id, self.a1n1.id)
+
+    def test_marcar_impreso_libera_la_maquina_y_reacomoda(self):
+        # Al marcar el trabajo de A1N1 como Impreso, A1N1 queda libre; el
+        # save_model del admin debería pasarle el pendiente de A1N2.
+        self._login()
+        done_soon = self._job(self.a1n1, status=ProductionJob.Status.PRINTING)
+        self._job(self.a1n2, status=ProductionJob.Status.PRINTING, order=0)
+        pending = self._job(self.a1n2, status=ProductionJob.Status.PENDING, order=1)
+
+        url = reverse("admin:production_colaproduccion_marcar_impreso", args=[done_soon.pk])
+        self.client.post(url)
+
+        pending.refresh_from_db()
+        self.assertEqual(pending.machine_id, self.a1n1.id)

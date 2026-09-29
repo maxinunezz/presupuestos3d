@@ -146,6 +146,70 @@ def recommend_machine(
     return Maquina.objects.get(pk=best_id), free
 
 
+def rebalance_idle_machines(now: datetime = None) -> list:
+    """
+    Si una máquina activa se queda sin ningún trabajo abierto (imprimiendo o en
+    cola) mientras otra máquina activa tiene más de uno esperando, le pasa a la
+    libre el último trabajo de esa cola (el que todavía no arrancó y menos
+    urge, según prioridad/orden), para que no quede parada mientras la otra
+    tiene trabajo de sobra. Respeta la compatibilidad multicolor/AMS. Nunca
+    deja a la máquina donante sin trabajos, ni toca uno que ya está
+    Imprimiendo o que fue asignado a mano como el único de su cola.
+
+    No reordena nada más: es un ajuste puntual, no reemplaza el armado inicial
+    de la cola (que sigue haciendo `recommend_machine` al aprobar un pedido).
+
+    Devuelve la lista de trabajos (ProductionJob) que se reasignaron.
+    """
+    from .models import Maquina, ProductionJob
+
+    now = now or timezone.now()
+    active_machines = list(Maquina.objects.filter(is_active=True))
+    moved = []
+
+    def open_jobs_of(machine):
+        return list(
+            ProductionJob.objects.filter(
+                machine=machine,
+                status__in=[
+                    ProductionJob.Status.PENDING,
+                    ProductionJob.Status.PRINTING,
+                ],
+            )
+            .select_related("producto", "pieza")
+            .order_by("producto__priority", "order", "id")
+        )
+
+    for idle_machine in active_machines:
+        if open_jobs_of(idle_machine):
+            continue  # ya tiene algo, no hace falta tocarla
+
+        donor_job = None
+        for donor in active_machines:
+            if donor.id == idle_machine.id:
+                continue
+            jobs = open_jobs_of(donor)
+            if len(jobs) <= 1:
+                continue  # sin backlog real: no la dejamos sin trabajo
+
+            for candidate in reversed(jobs):
+                if candidate.status != ProductionJob.Status.PENDING:
+                    continue  # no tocamos lo que ya está Imprimiendo
+                if candidate.requires_multicolor and not idle_machine.supports_multicolor:
+                    continue  # esta pieza necesita AMS y la libre no tiene
+                donor_job = candidate
+                break
+            if donor_job:
+                break
+
+        if donor_job:
+            donor_job.machine = idle_machine
+            donor_job.save(update_fields=["machine"])
+            moved.append(donor_job)
+
+    return moved
+
+
 def material_forecast(now: datetime = None) -> dict:
     """
     Qué materia prima hace falta comprar, calculado SOBRE EL STOCK ACTUAL.

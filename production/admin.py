@@ -12,7 +12,7 @@ from django.utils.translation import gettext_lazy as _
 from config.formatting import format_hours
 
 from .models import HistorialImpresion, Maquina, ProductionJob, Tablero
-from .scheduler import compute_schedule, material_forecast
+from .scheduler import compute_schedule, material_forecast, persist_schedule
 
 # Los campos de cantidad/precio (DecimalField) aceptan tanto coma como punto
 # para los decimales (ej: 8500,50 u 8500.50).
@@ -539,8 +539,6 @@ class ProductionJobAdmin(admin.ModelAdmin):
             )
 
         # Cualquier cambio manual (máquina, orden, estado) recalcula la cola.
-        from .scheduler import persist_schedule
-
         schedule = persist_schedule()
 
         # Avisa a Slack (canal "produccion-3darg") la primera vez que este
@@ -567,6 +565,23 @@ class ProductionJobAdmin(admin.ModelAdmin):
                     "fin": _fmt_dt(fin_estimado),
                 },
             )
+
+        # Si este cambio dejó alguna máquina sin trabajos mientras otra tiene
+        # cola de sobra, le pasa un trabajo para que no quede parada.
+        from .scheduler import rebalance_idle_machines
+
+        moved = rebalance_idle_machines()
+        if moved:
+            persist_schedule()
+            for moved_job in moved:
+                self.message_user(
+                    request,
+                    gettext(
+                        "Trabajo '%(job)s' se pasó a la máquina libre "
+                        "'%(maquina)s' para no dejarla parada."
+                    )
+                    % {"job": moved_job, "maquina": moved_job.machine},
+                )
 
 
 class ColaProduccion(ProductionJob):
@@ -632,6 +647,11 @@ class ColaProduccionAdmin(admin.ModelAdmin):
         )
 
     def changelist_view(self, request, extra_context=None):
+        from .scheduler import rebalance_idle_machines
+
+        if rebalance_idle_machines():
+            persist_schedule()
+
         now = timezone.now()
         schedule = compute_schedule(now)
 
@@ -807,6 +827,11 @@ class TableroAdmin(admin.ModelAdmin):
 
     def changelist_view(self, request, extra_context=None):
         from budgets.models import Presupuesto
+
+        from .scheduler import rebalance_idle_machines
+
+        if rebalance_idle_machines():
+            persist_schedule()
 
         now = timezone.now()
         schedule = compute_schedule(now)
