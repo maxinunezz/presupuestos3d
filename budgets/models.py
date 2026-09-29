@@ -800,6 +800,19 @@ class Presupuesto(models.Model):
         return sum(item.quantity for item in self.items.all())
 
     @property
+    def profit_total(self) -> Decimal:
+        """
+        Beneficio total del pedido: lo que se cobra por cada línea menos su
+        costo promedio de producción (mismo costo que usa el margen del
+        producto). El costo fijo se suma entero: no tiene costo de producción
+        asociado, es ganancia pura del pedido.
+        """
+        return (
+            sum((item.line_profit for item in self.items.all()), Decimal("0"))
+            + self.fixed_cost
+        ).quantize(Decimal("0.01"))
+
+    @property
     def is_ready_to_deliver(self) -> bool:
         """
         Pedido APROBADO de CLIENTE que se sirvió entero del stock (de productos
@@ -1650,3 +1663,14 @@ class PresupuestoItem(models.Model):
     @property
     def line_total(self) -> Decimal:
         return (self.quantity * self.effective_unit_price).quantize(Decimal("0.01"))
+
+    @property
+    def line_cost(self) -> Decimal:
+        """Costo (promedio) de producir esta línea: cantidad × costo promedio
+        del producto (asume que las sobrantes de corrida también se venden)."""
+        return (self.quantity * self.producto.unit_cost_avg).quantize(Decimal("0.01"))
+
+    @property
+    def line_profit(self) -> Decimal:
+        """Beneficio de esta línea: lo que se cobra menos el costo promedio."""
+        return (self.line_total - self.line_cost).quantize(Decimal("0.01"))

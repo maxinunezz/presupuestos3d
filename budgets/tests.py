@@ -103,6 +103,33 @@ class PresupuestoTotalTests(TestCase):
         self.assertEqual(pres.total, Decimal("1500.00"))
 
 
+class PresupuestoProfitTests(TestCase):
+    def setUp(self):
+        self.fil = Filament.objects.create(
+            brand="M",
+            material_type=Filament.MaterialType.PLA,
+            color="C",
+            cost_per_kg=Decimal("10000"),
+            stock_grams=Decimal("10000"),
+        )
+        # costo (material 1000 + máquina 200) = 1200, se vende a 1800.
+        self.p = make_producto(sale_price=Decimal("1800"))
+        add_pieza(self.p, self.fil, Decimal("100"))
+
+    def test_line_profit_y_profit_total_del_pedido(self):
+        pres = Presupuesto.objects.create(
+            client_name="Cliente", fixed_cost=Decimal("50")
+        )
+        item = PresupuestoItem.objects.create(
+            presupuesto=pres, producto=self.p, quantity=3
+        )
+        # 600 de beneficio por unidad (1800 - 1200) x 3 = 1800.
+        self.assertEqual(item.line_cost, Decimal("3600.00"))
+        self.assertEqual(item.line_profit, Decimal("1800.00"))
+        # + costo fijo, que es ganancia pura (no tiene costo de producción).
+        self.assertEqual(pres.profit_total, Decimal("1850.00"))
+
+
 class StatusTransitionTests(TestCase):
     """I1/I2: cambiar estado setea fechas y dispara producción."""
 

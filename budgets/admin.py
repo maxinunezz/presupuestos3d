@@ -851,7 +851,8 @@ class PresupuestoAdmin(admin.ModelAdmin):
             "&nbsp;&nbsp;" + gettext("Costo fijo:") + f" ${obj.fixed_cost}<br>"
             "&nbsp;&nbsp;" + gettext("Subtotal:") + f" ${obj.subtotal}<br>"
             "&nbsp;&nbsp;<b>" + gettext("TOTAL:") + f" ${obj.total}</b> "
-            f"({piezas})"
+            f"({piezas})<br>"
+            "&nbsp;&nbsp;<b>" + gettext("Beneficio total del pedido:") + f" ${obj.profit_total}</b>"
         )
 
     def _message_approval(self, request, obj, result):
