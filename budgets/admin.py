@@ -407,7 +407,7 @@ class PanelVentasAdmin(admin.ModelAdmin):
 
     @admin.display(description=_("Total pedido"))
     def total_display(self, obj):
-        return f"${obj.total}"
+        return f"$ {format_money(obj.total)}"
 
     @admin.display(description=_("Producto"))
     def producto_display(self, obj):
