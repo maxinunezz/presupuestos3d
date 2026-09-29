@@ -120,3 +120,53 @@ class ApiPermissionTests(TestCase):
         self.client.login(username="admin", password="x")
         # ReadOnlyModelViewSet: POST/DELETE no permitidos (405).
         self.assertEqual(self.client.post("/api/filaments/", {}).status_code, 405)
+
+
+class UsuarioAdminTests(TestCase):
+    """Crear un usuario nuevo desde 'Add user' no debe dejarlo sin poder
+    entrar al admin: el alta rápida de Django no tilda 'Es staff' por
+    default, y ese fue justo el problema real que reportó el usuario."""
+
+    def setUp(self):
+        User = get_user_model()
+        User.objects.create_superuser("dueño", password="x")
+        self.client.login(username="dueño", password="x")
+
+    def test_alta_rapida_deja_al_usuario_con_is_staff(self):
+        from django.urls import reverse
+
+        response = self.client.post(
+            reverse("admin:auth_user_add"),
+            {
+                "username": "socio",
+                "password1": "unaClaveSegura123",
+                "password2": "unaClaveSegura123",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        User = get_user_model()
+        socio = User.objects.get(username="socio")
+        self.assertTrue(socio.is_staff)
+        # No lo hacemos superusuario solo: eso lo decide el dueño a mano.
+        self.assertFalse(socio.is_superuser)
+
+    def test_editar_un_usuario_existente_no_fuerza_is_staff(self):
+        from django.urls import reverse
+
+        User = get_user_model()
+        empleado = User.objects.create_user("empleado", password="x", is_staff=False)
+        response = self.client.post(
+            reverse("admin:auth_user_change", args=[empleado.pk]),
+            {
+                "username": "empleado",
+                "date_joined_0": "2024-01-01",
+                "date_joined_1": "00:00:00",
+                # is_staff / is_active se omiten a propósito: simula que el
+                # dueño lo dejó destildado a mano al editar.
+            },
+        )
+        # No nos importa si el form es válido (puede fallar por otros campos
+        # requeridos); lo que verificamos es que editar NO tiene el mismo
+        # comportamiento automático que crear.
+        empleado.refresh_from_db()
+        self.assertFalse(empleado.is_staff)

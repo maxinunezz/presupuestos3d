@@ -207,6 +207,22 @@ INVENTORY = {
     'TOTAL agregados': 'TOTAL aggregates',
     'Valor total de inventario': 'Total inventory value',
     '(filtrado)': '(filtered)',
+    'Al guardar, este usuario ya va a poder entrar al admin '
+    '(queda con "Es staff" tildado automáticamente). Si además '
+    'necesitás que vea y pueda editar todo igual que vos, '
+    'abrilo de nuevo después de crearlo y tildá también '
+    '"Es superusuario" (en la sección "Permisos").':
+        'Once saved, this user will already be able to log into the admin '
+        '("Staff status" is checked automatically). If you also need them to '
+        'see and edit everything just like you, open it again after creating '
+        'it and check "Superuser status" too (in the "Permissions" section).',
+    'Usuario \'%(user)s\' creado con acceso al admin ("Es '
+    'staff" tildado automáticamente). Si necesita los mismos '
+    'permisos que vos, abrilo de nuevo y tildá también "Es '
+    'superusuario".':
+        'User \'%(user)s\' created with admin access ("Staff status" checked '
+        'automatically). If they need the same permissions as you, open it '
+        'again and check "Superuser status" too.',
 }
 
 GASTOS = {

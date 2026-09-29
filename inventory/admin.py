@@ -2,6 +2,8 @@ from decimal import Decimal
 
 from django import forms
 from django.contrib import admin, messages
+from django.contrib.auth import get_user_model
+from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 from django.core.exceptions import ValidationError
 from django.db.models import DecimalField, F, Q
 from django.template.response import TemplateResponse
@@ -497,3 +499,62 @@ class AjusteStockAdmin(admin.ModelAdmin):
             gettext("Stock ajustado en %(delta)s%(unidad)s. Nuevo stock: %(resultante)s %(unidad)s.")
             % {"delta": delta, "unidad": unidad, "resultante": _num(resultante)},
         )
+
+
+# ---------------------------------------------------------------------------
+# Usuarios del admin (Django auth). No es un modelo de este dominio, pero acá
+# no hay una app dedicada a "cuentas" y esto tiene que vivir en algún admin.py.
+# ---------------------------------------------------------------------------
+
+User = get_user_model()
+admin.site.unregister(User)
+
+
+@admin.register(User)
+class UsuarioAdmin(DjangoUserAdmin):
+    """
+    El admin de usuarios de Django, con un ajuste para que dar de alta a
+    alguien (ej. un socio o empleado) no falle en silencio: el formulario
+    rápido de alta solo pide usuario y contraseña, y por default el usuario
+    queda SIN "Es staff" (sin poder entrar al admin). El error que se ve en
+    ese caso es idéntico al de una contraseña mal escrita ("usuario o
+    contraseña incorrectos"), así que es casi imposible de diagnosticar para
+    alguien no técnico. Acá lo resolvemos de dos formas:
+    1. Al crear un usuario nuevo, "Es staff" queda tildado automáticamente.
+    2. El formulario de alta explica en texto plano qué falta hacer si además
+       necesita los mismos permisos que un superusuario.
+    """
+
+    add_fieldsets = (
+        (
+            None,
+            {
+                "classes": ("wide",),
+                "fields": ("username", "password1", "password2"),
+                "description": _(
+                    "Al guardar, este usuario ya va a poder entrar al admin "
+                    '(queda con "Es staff" tildado automáticamente). Si además '
+                    "necesitás que vea y pueda editar todo igual que vos, "
+                    "abrilo de nuevo después de crearlo y tildá también "
+                    '"Es superusuario" (en la sección "Permisos").'
+                ),
+            },
+        ),
+    )
+
+    def save_model(self, request, obj, form, change):
+        creating = not change
+        if creating and not obj.is_staff:
+            obj.is_staff = True
+        super().save_model(request, obj, form, change)
+        if creating:
+            self.message_user(
+                request,
+                gettext(
+                    "Usuario '%(user)s' creado con acceso al admin (\"Es "
+                    "staff\" tildado automáticamente). Si necesita los mismos "
+                    "permisos que vos, abrilo de nuevo y tildá también \"Es "
+                    "superusuario\"."
+                )
+                % {"user": obj.get_username()},
+            )
