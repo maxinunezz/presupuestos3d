@@ -1,5 +1,6 @@
 from django.contrib import admin, messages
 from django.core.exceptions import ValidationError
+from django.db.models import DecimalField
 from django.forms.models import BaseInlineFormSet
 from django.http import HttpResponse
 from django.template.response import TemplateResponse
@@ -29,6 +30,10 @@ from .pdf import (
     presupuesto_pdf_filename,
     render_presupuesto_pdf,
 )
+
+# Los campos de cantidad/precio (DecimalField) aceptan tanto coma como punto
+# para los decimales (ej: 8500,50 u 8500.50).
+DECIMAL_LOCALIZE = {DecimalField: {"localize": True}}
 
 
 # ===========================================================================
@@ -82,6 +87,7 @@ class PiezaFilamentLineInline(admin.TabularInline):
     extra = 1
     autocomplete_fields = ("filament",)
     readonly_fields = ("precio_actual_display", "line_cost_display")
+    formfield_overrides = DECIMAL_LOCALIZE
     fields = (
         "filament",
         "grams_used",
@@ -117,6 +123,7 @@ class PiezaInline(admin.TabularInline):
     model = Pieza
     extra = 0
     show_change_link = True
+    formfield_overrides = DECIMAL_LOCALIZE
     fields = (
         "name",
         "units_needed",
@@ -162,6 +169,7 @@ class PiezaAdmin(admin.ModelAdmin):
     search_fields = ("name", "producto__name")
     autocomplete_fields = ("producto",)
     inlines = (PiezaFilamentLineInline,)
+    formfield_overrides = DECIMAL_LOCALIZE
     fields = (
         "producto",
         "name",
@@ -215,6 +223,7 @@ class StockPiezasAdmin(admin.ModelAdmin):
     ordering = ("producto__name", "order", "id")
     autocomplete_fields = ("producto",)
     inlines = (PiezaFilamentLineInline,)
+    formfield_overrides = DECIMAL_LOCALIZE
     fields = (
         "producto",
         "name",
@@ -296,6 +305,7 @@ class ProductoAggregateLineInline(admin.TabularInline):
     extra = 0
     autocomplete_fields = ("aggregate",)
     readonly_fields = ("line_cost_display",)
+    formfield_overrides = DECIMAL_LOCALIZE
     fields = ("aggregate", "quantity", "unit_cost", "line_cost_display")
 
     @admin.display(description=_("Costo de línea"))
@@ -323,6 +333,7 @@ class ProductoAdmin(admin.ModelAdmin):
     search_fields = ("name", "description")
     inlines = (PiezaInline, ProductoAggregateLineInline)
     readonly_fields = ("costs_summary", "price_info", "diseno_listo_at")
+    formfield_overrides = DECIMAL_LOCALIZE
 
     def get_queryset(self, request):
         # unit_cost/unit_price (y el resumen de costos) recorren piezas,
@@ -522,6 +533,7 @@ class PresupuestoAdmin(admin.ModelAdmin):
     search_fields = ("client_name", "description")
     list_editable = ("status",)
     inlines = (PresupuestoItemInline, ProductionJobInline)
+    formfield_overrides = DECIMAL_LOCALIZE
     readonly_fields = (
         "approved_at",
         "sent_at",

@@ -43,7 +43,7 @@ class Filament(models.Model):
         decimal_places=2,
         help_text=_(
             "Precio en pesos por KILOGRAMO (no por gramo ni por bobina). Los "
-            "decimales van con PUNTO, no con coma (ej: 8500.50, no 8500,50)."
+            "decimales pueden ir con coma o con punto (8500,50 u 8500.50)."
         ),
     )
     stock_grams = models.DecimalField(
@@ -57,7 +57,7 @@ class Filament(models.Model):
         help_text=_(
             "Si el stock baja de este valor, salta la alerta de bajo stock "
             "(la campanita). En GRAMOS. Ej: 1000 = 1 kg. Poné 0 para no avisar "
-            "de este filamento. Los decimales van con punto, no con coma."
+            "de este filamento. Los decimales pueden ir con coma o con punto."
         ),
     )
     is_active = models.BooleanField(_("Activo"), default=True)
@@ -156,7 +156,7 @@ class Aggregate(models.Model):
         help_text=_(
             "Precio en pesos por la unidad que tenga cargada este agregado "
             "(el campo Unidad de más arriba: Unidad, Par, Metro o Gramo). Los "
-            "decimales van con PUNTO, no con coma (ej: 12.50, no 12,50)."
+            "decimales pueden ir con coma o con punto (12,50 o 12.50)."
         ),
     )
     stock_quantity = models.DecimalField(
@@ -178,7 +178,7 @@ class Aggregate(models.Model):
             "(la campanita). Va en la MISMA unidad del agregado: si se mide en "
             "unidades, poné unidades (ej: pelotas → 20); si se mide en gramos, "
             "poné gramos (ej: argollas → 200). Poné 0 para no avisar de este "
-            "agregado. Los decimales van con punto, no con coma."
+            "agregado. Los decimales pueden ir con coma o con punto."
         ),
     )
     is_active = models.BooleanField(_("Activo"), default=True)
@@ -283,7 +283,7 @@ class StockMovement(models.Model):
         help_text=_(
             "Negativo = salida de stock. Positivo = entrada de stock. Filamento: "
             "en gramos. Agregado: en la unidad que tenga cargada (ver su campo "
-            "Unidad). Los decimales van con punto, no con coma."
+            "Unidad). Los decimales pueden ir con coma o con punto."
         ),
     )
     reason = models.CharField(_("Motivo"), max_length=20, choices=Reason.choices)
@@ -449,7 +449,7 @@ class CompraLine(models.Model):
         help_text=_(
             "Filamento: en GRAMOS (ej: una bobina de 1 kg = 1000). Agregado: en "
             "la unidad que tenga cargada (ver su campo Unidad: Unidad, Par, "
-            "Metro o Gramo). Los decimales van con punto, no con coma."
+            "Metro o Gramo). Los decimales pueden ir con coma o con punto."
         ),
     )
     unit_price = models.DecimalField(
@@ -461,8 +461,8 @@ class CompraLine(models.Model):
         help_text=_(
             "Filamento: costo por KILOGRAMO (no por gramo ni por bobina). "
             "Agregado: costo por la unidad que tenga cargada. Si se deja vacío, "
-            "se mantiene el precio actual del artículo. Los decimales van con "
-            "punto, no con coma."
+            "se mantiene el precio actual del artículo. Los decimales pueden ir "
+            "con coma o con punto."
         ),
     )
 

@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.db.models import DecimalField
 from django.http import HttpResponse
 from django.template.response import TemplateResponse
 from django.utils import timezone
@@ -12,6 +13,10 @@ from .metrics import (
     template_context,
 )
 from .models import Gasto, PanelGastos, TopeGasto
+
+# Los campos de cantidad/precio (DecimalField) aceptan tanto coma como punto
+# para los decimales (ej: 8500,50 u 8500.50).
+DECIMAL_LOCALIZE = {DecimalField: {"localize": True}}
 
 
 @admin.register(Gasto)
@@ -29,6 +34,7 @@ class GastoAdmin(admin.ModelAdmin):
     list_filter = ("categoria", "es_recurrente", "periodicidad", "medio_pago")
     search_fields = ("concepto", "proveedor", "notas")
     date_hierarchy = "fecha"
+    formfield_overrides = DECIMAL_LOCALIZE
     fieldsets = (
         (None, {"fields": ("categoria", "concepto", "monto", "fecha")}),
         (_("Pago"), {"fields": ("proveedor", "medio_pago")}),
@@ -56,6 +62,7 @@ class GastoAdmin(admin.ModelAdmin):
 class TopeGastoAdmin(admin.ModelAdmin):
     list_display = ("categoria", "monto_mensual")
     list_editable = ("monto_mensual",)
+    formfield_overrides = DECIMAL_LOCALIZE
 
 
 @admin.register(PanelGastos)

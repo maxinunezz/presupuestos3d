@@ -3,7 +3,7 @@ from decimal import Decimal
 from django import forms
 from django.contrib import admin, messages
 from django.core.exceptions import ValidationError
-from django.db.models import F, Q
+from django.db.models import DecimalField, F, Q
 from django.template.response import TemplateResponse
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext
@@ -19,6 +19,11 @@ from .models import (
     StockMovement,
     StockTotals,
 )
+
+# Los campos de cantidad/precio (DecimalField) aceptan tanto coma como punto
+# para los decimales (ej: 8500,50 u 8500.50), en línea con el resto del admin
+# que ya muestra los números al estilo argentino (coma decimal).
+DECIMAL_LOCALIZE = {DecimalField: {"localize": True}}
 
 
 def _money(value) -> str:
@@ -109,6 +114,7 @@ class FilamentAdmin(admin.ModelAdmin):
     list_filter = (FilamentLowStockFilter, "material_type", "brand", "is_active")
     search_fields = ("brand", "color")
     list_editable = ("cost_per_kg", "min_stock", "is_active")
+    formfield_overrides = DECIMAL_LOCALIZE
     # El stock NO se edita a mano: solo cambia al confirmar una Compra. Así un
     # filamento creado desde el botón "+" de una compra arranca en 0 y recién
     # suma cuando la compra pasa a "Confirmada".
@@ -138,6 +144,7 @@ class AggregateAdmin(admin.ModelAdmin):
     list_filter = (AggregateLowStockFilter, "category", "is_active")
     search_fields = ("name",)
     list_editable = ("cost_per_unit", "min_stock", "is_active")
+    formfield_overrides = DECIMAL_LOCALIZE
     # El stock NO se edita a mano: solo cambia al confirmar una Compra.
     readonly_fields = ("stock_quantity",)
 
@@ -249,6 +256,7 @@ class CompraLineInline(admin.TabularInline):
     autocomplete_fields = ("filament", "aggregate")
     readonly_fields = ("line_cost_display",)
     fields = ("filament", "aggregate", "quantity", "unit_price", "line_cost_display")
+    formfield_overrides = DECIMAL_LOCALIZE
 
     @admin.display(description=_("Costo de línea"))
     def line_cost_display(self, obj):
@@ -375,6 +383,7 @@ class StockMovementAdmin(admin.ModelAdmin):
     )
     list_filter = ("reason",)
     readonly_fields = ("created_at",)
+    formfield_overrides = DECIMAL_LOCALIZE
 
     @admin.display(description=_("Ítem"))
     def item(self, obj):
@@ -397,7 +406,7 @@ class AjusteStockForm(forms.ModelForm):
                 "Filamento: SIEMPRE en GRAMOS (no en kg; ej: 500 = medio kilo). "
                 "Agregado: en la unidad que tenga cargada (ver su campo Unidad: "
                 "Unidad, Par, Metro o Gramo). "
-                "Los decimales van con PUNTO, no con coma (ej: 12.5, no 12,5). "
+                "Los decimales pueden ir con coma o con punto (12,5 o 12.5). "
                 "Ej: 500 agrega 500 g; -200 quita 200 g. "
                 "Si querés dejar el stock en un valor exacto, fijate cuánto hay "
                 "hoy y poné la diferencia."
@@ -437,6 +446,7 @@ class AjusteStockAdmin(admin.ModelAdmin):
     autocomplete_fields = ("filament", "aggregate")
     list_display = ("created_at", "item", "quantity", "stock_resultante", "note")
     readonly_fields = ("created_at",)
+    formfield_overrides = DECIMAL_LOCALIZE
 
     @admin.display(description=_("Ítem"))
     def item(self, obj):

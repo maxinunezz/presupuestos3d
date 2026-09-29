@@ -1,4 +1,5 @@
 from django.contrib import admin, messages
+from django.db.models import DecimalField
 from django.http import HttpResponseNotAllowed
 from django.shortcuts import get_object_or_404, redirect
 from django.template.response import TemplateResponse
@@ -12,6 +13,10 @@ from config.formatting import format_hours
 
 from .models import HistorialImpresion, Maquina, ProductionJob, Tablero
 from .scheduler import compute_schedule, material_forecast
+
+# Los campos de cantidad/precio (DecimalField) aceptan tanto coma como punto
+# para los decimales (ej: 8500,50 u 8500.50).
+DECIMAL_LOCALIZE = {DecimalField: {"localize": True}}
 
 
 def _fmt_dt(dt):
@@ -137,6 +142,7 @@ class MaquinaAdmin(admin.ModelAdmin):
     list_editable = ("is_active", "supports_multicolor", "cost_per_hour")
     search_fields = ("name",)
     inlines = [HistorialImpresionInline]
+    formfield_overrides = DECIMAL_LOCALIZE
     readonly_fields = ("total_hours_printed", "depreciacion_display", "created_at")
     fields = (
         "name",
