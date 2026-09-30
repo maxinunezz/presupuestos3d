@@ -1628,15 +1628,51 @@ class Presupuesto(models.Model):
 
 class Metricas(Presupuesto):
     """
-    Proxy de Presupuesto para tener en el admin una página propia de 'Métricas'
-    (panel de KPIs de ventas, producción e inventario). No crea tabla nueva: la
-    vista se arma en el admin con budgets.metrics.
+    Proxy de Presupuesto para tener en el admin una página propia de 'Panel de
+    métricas' (KPIs de producción, inventario, costos y resultado). No crea
+    tabla nueva: la vista se arma en el admin con budgets.metrics.
+
+    Las ventas y el estado de cobro (antes secciones de esta misma página)
+    ahora viven en su propia página, `MetricasVentas` ("Panel de ventas"),
+    para no mezclar todo en un solo dashboard larguísimo.
     """
 
     class Meta:
         proxy = True
         verbose_name = _("Métrica")
-        verbose_name_plural = _("Métricas")
+        verbose_name_plural = _("Panel de métricas")
+
+
+class MetricasVentas(Presupuesto):
+    """
+    Proxy de Presupuesto para tener en el admin una página propia de 'Panel de
+    ventas': KPIs de ventas del período (facturación, conversión, margen,
+    ranking de productos/clientes) y su estado de cobro. No crea tabla nueva:
+    reusa el mismo motor de `budgets.metrics` que `Metricas`, mostrando solo
+    el subconjunto de ventas/cobros (antes secciones "Ventas" y "Panel de
+    ventas (cobros)" de esa página).
+    """
+
+    class Meta:
+        proxy = True
+        verbose_name = _("Venta")
+        verbose_name_plural = _("Panel de ventas")
+
+
+class PanelCostos(Presupuesto):
+    """
+    Proxy de Presupuesto para tener en el admin una página propia de 'Panel de
+    costos': composición del costo de producción del período (material, mano
+    de obra, máquina, agregados). No crea tabla nueva: reusa el mismo motor de
+    `budgets.metrics` que `Metricas`/`MetricasVentas`, mostrando solo la
+    sección de costos (antes parte del Panel de métricas, separada a su
+    propia página para no amontonar todo en un único dashboard larguísimo).
+    """
+
+    class Meta:
+        proxy = True
+        verbose_name = _("Costo")
+        verbose_name_plural = _("Panel de costos")
 
 
 class PanelVentas(Presupuesto):

@@ -18,7 +18,6 @@ from collections import Counter, defaultdict
 from datetime import datetime, time, timedelta
 from decimal import Decimal
 
-from django.db.models import Count
 from django.utils import timezone
 from django.utils.translation import gettext, gettext_lazy as _
 
@@ -140,6 +139,10 @@ def build_metrics(period: str, now: datetime = None) -> dict:
     facturacion = sum((p.total for p in cur_approved), ZERO)
     n_aprobados = len(cur_approved)
     ticket = (facturacion / n_aprobados) if n_aprobados else ZERO
+    # Venta diaria promedio: facturación del período actual sobre la cantidad
+    # de días que tiene ese período (con period="month" son los días del mes).
+    dias_periodo = max((cur["end"] - cur["start"]).days, 1)
+    venta_diaria_promedio = facturacion / dias_periodo
 
     # Conversión por cohorte: de los enviados en el período, cuántos se aprobaron.
     sent_qs = Presupuesto.objects.filter(
@@ -149,19 +152,12 @@ def build_metrics(period: str, now: datetime = None) -> dict:
     n_conv = sent_qs.filter(approved_at__isnull=False).count()
     conversion = (n_conv / n_enviados * 100) if n_enviados else None
 
-    # Embudo: foto global del pipeline por estado actual.
-    status_counts = dict(
-        Presupuesto.objects.values_list("status").annotate(c=Count("id"))
-    )
-    embudo = [
-        {"label": label, "count": status_counts.get(value, 0)}
-        for value, label in Presupuesto.Status.choices
-    ]
-
     # Ranking de productos (período actual): por cantidad y por $.
+    # Ranking de clientes: por $ facturado y por cantidad de unidades compradas.
     by_qty = Counter()
     by_money = defaultdict(lambda: ZERO)
     cli_money = defaultdict(lambda: ZERO)
+    cli_qty = defaultdict(lambda: ZERO)
     revenue = ZERO
     cost = ZERO
     # Desglose del costo de producción (todos con el costo PROMEDIO, el mismo
@@ -191,6 +187,7 @@ def build_metrics(period: str, now: datetime = None) -> dict:
             name = producto.name
             qty = Decimal(it.quantity)
             by_qty[name] += it.quantity
+            cli_qty[p.client_name] += qty
             line = it.line_total
             by_money[name] += line
             revenue += line
@@ -236,7 +233,12 @@ def build_metrics(period: str, now: datetime = None) -> dict:
     ]
     top_productos_money = sorted(by_money.items(), key=lambda kv: kv[1], reverse=True)[:10]
     top_clientes = sorted(cli_money.items(), key=lambda kv: kv[1], reverse=True)[:10]
+    top_clientes_qty = sorted(cli_qty.items(), key=lambda kv: kv[1], reverse=True)[:10]
 
+    # margen_pct no se muestra en el Panel de ventas (enfoque comercial: sin
+    # rentabilidad, que depende de costos de producción); se sigue calculando
+    # porque alimenta el costeo del Resumen de Excel y es el mismo criterio
+    # que usa "Costos de producción" en el Panel de métricas.
     margen_pct = ((revenue - cost) / revenue * 100) if revenue else None
 
     # Tiempo de ciclo: días approved_at -> completed_at (completados en el período).
@@ -380,13 +382,14 @@ def build_metrics(period: str, now: datetime = None) -> dict:
         "facturacion": facturacion,
         "n_aprobados": n_aprobados,
         "ticket": ticket,
+        "venta_diaria_promedio": venta_diaria_promedio,
         "n_enviados": n_enviados,
         "n_conv": n_conv,
         "conversion": conversion,
-        "embudo": embudo,
         "top_productos_qty": top_productos_qty,
         "top_productos_money": top_productos_money,
         "top_clientes": top_clientes,
+        "top_clientes_qty": top_clientes_qty,
         "tiempo_ciclo": tiempo_ciclo,
         # Producción
         "piezas_impresas": piezas_impresas,
@@ -502,6 +505,7 @@ def export_xlsx(m: dict):
         (gettext("Facturación aprobada"), _money(m["facturacion"])),
         (gettext("Presupuestos aprobados"), m["n_aprobados"]),
         (gettext("Ticket promedio"), _money(m["ticket"])),
+        (gettext("Venta diaria promedio"), _money(m["venta_diaria_promedio"])),
         (gettext("Enviados / Aprobados"), f'{m["n_enviados"]} / {m["n_conv"]}'),
         (gettext("Tasa de conversión"), _pct(m["conversion"])),
         (gettext("Margen bruto"), _pct(m["margen_pct"])),
@@ -628,12 +632,6 @@ def template_context(m: dict) -> dict:
         "labels": [s["label"] for s in m["serie"]],
         "data": [float(s["total"]) for s in m["serie"]],
     }
-    embudo_chart = {
-        # Las etiquetas del embudo son proxies lazy (Status.choices); se
-        # serializan a str para que json.dumps no falle.
-        "labels": [str(e["label"]) for e in m["embudo"]],
-        "data": [e["count"] for e in m["embudo"]],
-    }
     maq_chart = {
         "labels": [r["name"] for r in m["uso_maquinas"]],
         "data": [float(r["horas"]) for r in m["uso_maquinas"]],
@@ -675,11 +673,6 @@ def template_context(m: dict) -> dict:
         top3_maquinas_lines,
         top3_aggregates_lines,
     ]
-    medio_pago_chart = {
-        "labels": [str(row["label"]) for row in m["por_medio_pago"]],
-        "data": [float(row["total"]) for row in m["por_medio_pago"]],
-    }
-
     return {
         "period": m["period"],
         "period_label": m["period_label"],
@@ -688,11 +681,10 @@ def template_context(m: dict) -> dict:
         "facturacion": _money(m["facturacion"]),
         "n_aprobados": m["n_aprobados"],
         "ticket": _money(m["ticket"]),
+        "venta_diaria_promedio": _money(m["venta_diaria_promedio"]),
         "conversion": _pct(m["conversion"]),
         "conversion_detail": gettext("%(conv)s/%(sent)s enviados")
         % {"conv": m["n_conv"], "sent": m["n_enviados"]},
-        "margen_pct": _pct(m["margen_pct"]),
-        "tiempo_ciclo": _days(m["tiempo_ciclo"]),
         # KPIs producción
         "piezas_impresas": m["piezas_impresas"],
         "horas_impresas": _hours(m["horas_impresas"]),
@@ -722,24 +714,13 @@ def template_context(m: dict) -> dict:
         "beneficio_neto_positivo": m["beneficio_neto"] >= 0,
         "beneficio_neto_final": _money(m["beneficio_neto_final"]),
         "beneficio_neto_final_positivo": m["beneficio_neto_final"] >= 0,
-        # Panel de ventas (cobros)
-        "total_cobrado": _money(m["total_cobrado"]),
-        "total_pendiente_cobro": _money(m["total_pendiente_cobro"]),
-        "por_estado_venta": [
-            {"label": row["label"], "count": row["count"], "total": _money(row["total"])}
-            for row in m["por_estado_venta"]
-        ],
-        "por_medio_pago": [
-            {"label": row["label"], "count": row["count"], "total": _money(row["total"])}
-            for row in m["por_medio_pago"]
-        ],
         # Tablas
-        "embudo": m["embudo"],
         "top_productos_qty": [{"name": n, "qty": q} for n, q in m["top_productos_qty"]],
         "top_productos_money": [
             {"name": n, "money": _money(v)} for n, v in m["top_productos_money"]
         ],
         "top_clientes": [{"name": n, "money": _money(v)} for n, v in m["top_clientes"]],
+        "top_clientes_qty": [{"name": n, "qty": _qty(q)} for n, q in m["top_clientes_qty"]],
         "uso_maquinas": [
             {
                 "name": r["name"],
@@ -770,9 +751,7 @@ def template_context(m: dict) -> dict:
         ],
         # Gráficos (JSON)
         "fact_chart_json": json.dumps(fact_chart),
-        "embudo_chart_json": json.dumps(embudo_chart),
         "maq_chart_json": json.dumps(maq_chart),
         "costos_chart_json": json.dumps(costos_chart),
         "costos_extra_json": json.dumps(costos_extra),
-        "medio_pago_chart_json": json.dumps(medio_pago_chart),
     }

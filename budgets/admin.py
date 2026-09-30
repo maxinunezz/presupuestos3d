@@ -19,6 +19,8 @@ from .metrics import PERIODS, build_metrics, export_xlsx, template_context
 from .models import (
     DisenoNoListoError,
     Metricas,
+    MetricasVentas,
+    PanelCostos,
     PanelVentas,
     Pieza,
     PiezaFilamentLine,
@@ -348,12 +350,67 @@ class PanelVentasAdmin(admin.ModelAdmin):
     search_fields = ("client_name", "description", "items__producto__name")
     list_editable = ("estado_venta", "medio_pago")
     ordering = ("-approved_at",)
+    change_list_template = "admin/budgets/panel_ventas_change_list.html"
 
     class Media:
         # Son muchas columnas (producto, costos, beneficio...) y el changelist
         # nativo las renderiza anchas por default; este CSS las achica para
         # que entren sin scroll horizontal (ver budgets/panel_ventas.css).
+        # El mismo archivo trae los estilos del resumen de Cobros de abajo.
         css = {"all": ("budgets/panel_ventas.css",)}
+
+    def changelist_view(self, request, extra_context=None):
+        # Resumen de Cobros (cobrado/pendiente, por estado de cobro y por
+        # método de pago) sobre el mismo listado que se ve en pantalla: vive
+        # acá (y no en el Panel de ventas de Métricas) porque el estado de
+        # cobro/método de pago se cargan y editan en este mismo listado, y
+        # porque el enfoque de Métricas es puramente comercial (sin cobros).
+        # Respeta los filtros/búsqueda aplicados: si el dueño filtra por
+        # "Pendiente de pago", el resumen también queda acotado a eso.
+        response = super().changelist_view(request, extra_context=extra_context)
+        cl = getattr(response, "context_data", {}).get("cl") if hasattr(response, "context_data") else None
+        if cl is not None:
+            response.context_data["cobros"] = self._cobros_summary(cl.queryset)
+        return response
+
+    def _cobros_summary(self, queryset):
+        presupuestos = list(queryset)
+        facturacion = sum((p.total for p in presupuestos), Decimal("0"))
+        cobrado = sum(
+            (p.total for p in presupuestos if p.estado_venta == Presupuesto.EstadoVenta.PAGADO),
+            Decimal("0"),
+        )
+        por_estado = []
+        for value, label in Presupuesto.EstadoVenta.choices:
+            ps = [p for p in presupuestos if p.estado_venta == value]
+            if not ps:
+                continue
+            por_estado.append(
+                {
+                    "label": label,
+                    "count": len(ps),
+                    "total": f"$ {format_money(sum((p.total for p in ps), Decimal('0')))}",
+                }
+            )
+        por_medio = []
+        medio_choices = list(Presupuesto.MedioPago.choices) + [("", gettext("Sin especificar"))]
+        for value, label in medio_choices:
+            ps = [p for p in presupuestos if p.medio_pago == value]
+            if not ps:
+                continue
+            por_medio.append(
+                {
+                    "label": label,
+                    "count": len(ps),
+                    "total": f"$ {format_money(sum((p.total for p in ps), Decimal('0')))}",
+                }
+            )
+        return {
+            "total_cobrado": f"$ {format_money(cobrado)}",
+            "total_pendiente": f"$ {format_money(facturacion - cobrado)}",
+            "por_estado": por_estado,
+            "por_medio": por_medio,
+        }
 
     fields = (
         "client_name",
@@ -1227,14 +1284,17 @@ class PresupuestoAdmin(admin.ModelAdmin):
 # ===========================================================================
 
 
-@admin.register(Metricas)
-class MetricasAdmin(admin.ModelAdmin):
+class _MetricsDashboardAdmin(admin.ModelAdmin):
     """
-    Panel de solo lectura con KPIs de ventas, producción e inventario por
-    período (semana / mes / año), gráficos (Chart.js) y export a Excel.
+    Base común de los paneles de solo lectura de KPIs (Métricas y Panel de
+    ventas): ambos comparten el motor de cálculo (`budgets.metrics`), la
+    navegación por período (semana/mes/año + dropdown de mes) y el export a
+    Excel; solo cambian el template (qué secciones muestran) y el título.
+
+    Las subclases definen `change_list_template` y `dashboard_title`.
     """
 
-    change_list_template = "admin/budgets/metricas.html"
+    dashboard_title = ""
 
     def has_add_permission(self, request):
         return False
@@ -1308,7 +1368,7 @@ class MetricasAdmin(admin.ModelAdmin):
 
         context = {
             **self.admin_site.each_context(request),
-            "title": gettext("Métricas"),
+            "title": self.dashboard_title,
             "periods": [
                 {"key": k, "label": v["label"], "active": k == period}
                 for k, v in PERIODS.items()
@@ -1320,3 +1380,43 @@ class MetricasAdmin(admin.ModelAdmin):
             **(extra_context or {}),
         }
         return TemplateResponse(request, self.change_list_template, context)
+
+
+@admin.register(Metricas)
+class MetricasAdmin(_MetricsDashboardAdmin):
+    """
+    Panel de solo lectura con KPIs de producción, inventario, costos y
+    resultado por período (semana / mes / año), gráficos (Chart.js) y export
+    a Excel. Las ventas y el estado de cobro viven aparte, en Panel de ventas
+    (`MetricasVentasAdmin` abajo).
+    """
+
+    change_list_template = "admin/budgets/metricas.html"
+    dashboard_title = _("Panel de métricas")
+
+
+@admin.register(MetricasVentas)
+class MetricasVentasAdmin(_MetricsDashboardAdmin):
+    """
+    Panel de solo lectura con los KPIs de ventas (facturación, conversión,
+    margen, ranking de productos/clientes) y el estado de cobro por período.
+    Antes eran las secciones "Ventas" y "Panel de ventas (cobros)" del Panel
+    de métricas; se separaron a su propia página para no mezclar todo en un
+    solo dashboard larguísimo.
+    """
+
+    change_list_template = "admin/budgets/metricas_ventas.html"
+    dashboard_title = _("Panel de ventas")
+
+
+@admin.register(PanelCostos)
+class PanelCostosAdmin(_MetricsDashboardAdmin):
+    """
+    Panel de solo lectura con la composición del costo de producción
+    (material, mano de obra, máquina, agregados) por período. Antes era la
+    sección "Costos de producción" del Panel de métricas; se separó a su
+    propia página para no mezclar todo en un solo dashboard larguísimo.
+    """
+
+    change_list_template = "admin/budgets/panel_costos.html"
+    dashboard_title = _("Panel de costos")

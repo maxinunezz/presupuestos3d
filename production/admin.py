@@ -899,9 +899,10 @@ class ColaProduccionAdmin(admin.ModelAdmin):
 @admin.register(Tablero)
 class TableroAdmin(admin.ModelAdmin):
     """
-    Tablero general de producción (solo lectura): qué se está imprimiendo y
-    cuándo termina, próximas entregas, y qué materia prima hay que comprar
-    según la cola.
+    Tablero general de producción (solo lectura): KPIs de producción del mes
+    (piezas/horas impresas, uso por máquina), qué se está imprimiendo y cuándo
+    termina, próximas entregas, y qué materia prima hay que comprar según la
+    cola.
     """
 
     change_list_template = "admin/production/tablero.html"
@@ -951,12 +952,21 @@ class TableroAdmin(admin.ModelAdmin):
         )
 
     def changelist_view(self, request, extra_context=None):
+        from budgets.metrics import build_metrics, template_context
         from budgets.models import Presupuesto
 
         from .scheduler import rebalance_idle_machines
 
         if rebalance_idle_machines():
             persist_schedule()
+
+        # KPIs de producción del mes actual (piezas/horas impresas, tasa de
+        # reimpresión, cumplimiento de entrega, uso por máquina): antes una
+        # sección del Panel de métricas, movida acá porque este es el tablero
+        # operativo del día a día de producción. Mismo motor que los paneles
+        # de KPIs (budgets.metrics), siempre mes actual (sin navegación de
+        # período: acá lo que importa es "cómo venimos este mes").
+        prod_metrics = template_context(build_metrics("month"))
 
         now = timezone.now()
         schedule = compute_schedule(now)
@@ -1127,6 +1137,14 @@ class TableroAdmin(admin.ModelAdmin):
             "pending_count": pending_count,
             "in_production_count": in_production_count,
             "window": "07:00 a 23:00",
+            "piezas_impresas": prod_metrics["piezas_impresas"],
+            "horas_impresas": prod_metrics["horas_impresas"],
+            "reprint_rate": prod_metrics["reprint_rate"],
+            "reprints": prod_metrics["reprints"],
+            "cumplimiento": prod_metrics["cumplimiento"],
+            "total_ent": prod_metrics["total_ent"],
+            "uso_maquinas": prod_metrics["uso_maquinas"],
+            "maq_chart_json": prod_metrics["maq_chart_json"],
             **(extra_context or {}),
         }
         return TemplateResponse(request, self.change_list_template, context)

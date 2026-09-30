@@ -1002,3 +1002,27 @@ class MachineChangeValidationTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.job.refresh_from_db()
         self.assertEqual(self.job.machine_id, self.a1n2.id)
+
+
+class TableroProduccionKpisTests(TestCase):
+    """El Tablero de producción muestra, arriba de todo, los KPIs de
+    producción del mes (antes una sección del Panel de métricas): piezas/
+    horas impresas, tasa de reimpresión, cumplimiento de entrega, y el
+    gráfico/tabla de uso por máquina."""
+
+    def setUp(self):
+        User = get_user_model()
+        User.objects.create_superuser("admin", password="x")
+        self.client.login(username="admin", password="x")
+        self.url = reverse("admin:production_tablero_changelist")
+
+    def test_muestra_los_kpis_de_produccion(self):
+        resp = self.client.get(self.url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Producción del mes")
+        self.assertContains(resp, "Piezas impresas")
+        self.assertContains(resp, "Horas impresas")
+        self.assertContains(resp, "Tasa de reimpresión")
+        self.assertContains(resp, "Cumplimiento de entrega")
+        self.assertContains(resp, "Horas impresas por máquina")
+        self.assertContains(resp, "Uso por máquina")

@@ -35,3 +35,103 @@
 #result_list td.field-extras_display {
     text-align: right;
 }
+
+/* Resumen de Cobros arriba del listado: mismo estilo blanco y negro que el
+   resto del admin (ver _metrics_base.html), autocontenido acá porque esta
+   página no extiende ese template base. */
+.pv-cobros {
+    margin-bottom: 22px;
+}
+.pv-cobros h2 {
+    margin: 0 0 4px;
+    font-size: 16px;
+    border-bottom: 3px solid #0891b2;
+    padding-bottom: 4px;
+}
+.pv-cobros-intro {
+    color: #555;
+    font-size: 13px;
+    margin: 6px 0 14px;
+}
+html[data-theme="dark"] .pv-cobros-intro {
+    color: #bbb;
+}
+.pv-cobros-kpis {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+}
+.pv-kpi {
+    background: #0e7490;
+    color: #fff;
+    border-radius: 8px;
+    padding: 14px 18px;
+    min-width: 150px;
+    flex: 1 1 160px;
+}
+.pv-kpi .n {
+    font-size: 24px;
+    font-weight: bold;
+    display: block;
+}
+.pv-kpi .l {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.82);
+}
+.pv-cobros-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+}
+.pv-cobros-card {
+    flex: 1 1 320px;
+    min-width: 280px;
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 14px 16px;
+}
+.pv-cobros-card h3 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: #111;
+}
+table.pv-cobros-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #fff;
+}
+table.pv-cobros-table th {
+    background: #111;
+    color: #fff;
+    text-align: left;
+    padding: 7px 9px;
+    font-size: 11px;
+    text-transform: uppercase;
+}
+table.pv-cobros-table td {
+    padding: 7px 9px;
+    border-bottom: 1px solid #e6e6e6;
+    font-size: 13px;
+    color: #1a1a1a;
+    background: #fff;
+}
+table.pv-cobros-table td.num,
+table.pv-cobros-table th.num {
+    text-align: right;
+}
+.pv-cobros-empty {
+    color: #888;
+    padding: 8px 0;
+    font-size: 13px;
+}
+
+/* Título "Ventas" arriba del buscador/listado, mismo estilo que el "Cobros" de
+   arriba, para separar visualmente el resumen de cobros del listado en sí. */
+.pv-ventas-title {
+    margin: 22px 0 10px;
+    font-size: 16px;
+    border-bottom: 3px solid #111;
+    padding-bottom: 4px;
+}

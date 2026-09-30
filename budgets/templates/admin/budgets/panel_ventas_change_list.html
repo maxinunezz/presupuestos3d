@@ -1,0 +1,48 @@
+{% extends "admin/change_list.html" %}
+{% load i18n %}
+{# Resumen de Cobros arriba del listado de Ventas: antes vivía en el Panel de #}
+{# ventas de Métricas, se movió acá porque el estado de cobro/método de pago #}
+{# se cargan justo en este listado, y porque Métricas quedó con enfoque #}
+{# puramente comercial (sin cobros ni rentabilidad). Respeta los filtros y la #}
+{# búsqueda aplicados al listado de abajo. #}
+
+{% block content %}
+{% if cobros %}
+<div class="pv-cobros">
+    <h2>🧾 {% translate "Cobros" %}</h2>
+    <p class="pv-cobros-intro">
+        {% translate "De la facturación de los pedidos listados abajo (según los filtros aplicados), cuánto ya se cobró y cuánto sigue pendiente." %}
+    </p>
+    <div class="pv-cobros-kpis">
+        <div class="pv-kpi"><span class="n">{{ cobros.total_cobrado }}</span><span class="l">{% translate "Cobrado" %}</span></div>
+        <div class="pv-kpi"><span class="n">{{ cobros.total_pendiente }}</span><span class="l">{% translate "Pendiente de cobro" %}</span></div>
+    </div>
+    <div class="pv-cobros-grid">
+        <div class="pv-cobros-card">
+            <h3>{% translate "Por estado de cobro" %}</h3>
+            <table class="pv-cobros-table">
+                <thead><tr><th>{% translate "Estado" %}</th><th class="num">{% translate "Pedidos" %}</th><th class="num">{% translate "Total" %}</th></tr></thead>
+                <tbody>
+                    {% for r in cobros.por_estado %}
+                    <tr><td>{{ r.label }}</td><td class="num">{{ r.count }}</td><td class="num">{{ r.total }}</td></tr>
+                    {% empty %}<tr><td colspan="3" class="pv-cobros-empty">{% translate "Sin ventas para mostrar." %}</td></tr>{% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="pv-cobros-card">
+            <h3>{% translate "Por método de pago" %}</h3>
+            <table class="pv-cobros-table">
+                <thead><tr><th>{% translate "Método" %}</th><th class="num">{% translate "Pedidos" %}</th><th class="num">{% translate "Total" %}</th></tr></thead>
+                <tbody>
+                    {% for r in cobros.por_medio %}
+                    <tr><td>{{ r.label }}</td><td class="num">{{ r.count }}</td><td class="num">{{ r.total }}</td></tr>
+                    {% empty %}<tr><td colspan="3" class="pv-cobros-empty">{% translate "Sin ventas para mostrar." %}</td></tr>{% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+<h2 class="pv-ventas-title">🛒 {% translate "Ventas" %}</h2>
+{{ block.super }}
+{% endblock %}

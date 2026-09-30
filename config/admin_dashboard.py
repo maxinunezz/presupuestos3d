@@ -6,14 +6,24 @@ relación con cómo se usa el negocio en el día a día. Acá se reemplaza ese
 orden por uno pensado para el flujo real de trabajo:
 
 - Primero "Métricas": los paneles de solo lectura que hoy viven repartidos
-  en cada app (Métricas, Panel de gastos, Tablero de producción, Totales de
-  inventario) — lo primero que se mira al entrar.
+  en cada app (Panel de métricas, Panel de ventas, Panel de costos, Panel de
+  gastos) — lo primero que se mira al entrar. Los tres primeros son el mismo
+  motor de KPIs (budgets.metrics), separado en varias páginas (ventas/cobros;
+  costos de producción; inventario/resultado) para no amontonar todo en un
+  único dashboard larguísimo. "Tablero de producción" (antes acá) pasó a
+  encabezar la sección "Producción", justo arriba de "Cola de producción":
+  es donde se opera el día a día de las máquinas, no un panel de KPIs.
 - Después las apps de negocio (Producción, Ventas y presupuestos, Inventario
   y compras, Gastos), y dentro de cada una: primero lo operativo (lo que se
   toca seguido), al final los catálogos/configuración (lo que se carga una
   vez y no se vuelve a tocar). Dentro de "Ventas y presupuestos", "Ventas"
   (el panel, antes "Panel de ventas") queda justo arriba de "Presupuestos",
   ya que es la vista de solo lectura de esos mismos pedidos ya aprobados.
+  Dentro de "Inventario y compras", "Totales de inventario" (antes en
+  "Métricas") pasó a encabezar la sección, seguido de "Movimientos de
+  stock" (el historial completo) y recién después lo operativo (Compras,
+  Filamentos, Agregados y sus categorías), dejando "Ajustes manuales de
+  stock" al final por ser lo que menos se toca del día a día.
 - Al final "Configuración" (usuarios, grupos, tokens de API): administración
   del sistema, no del negocio.
 
@@ -36,15 +46,16 @@ _SECTIONS = [
         _("Métricas"),
         [
             ("budgets", "Metricas"),
+            ("budgets", "MetricasVentas"),
+            ("budgets", "PanelCostos"),
             ("gastos", "PanelGastos"),
-            ("production", "Tablero"),
-            ("inventory", "StockTotals"),
         ],
     ),
     (
         "produccion",
         _("Producción"),
         [
+            ("production", "Tablero"),
             ("production", "ColaProduccion"),
             ("production", "ProductionJob"),
             ("production", "Maquina"),
@@ -65,12 +76,13 @@ _SECTIONS = [
         "inventario_compras",
         _("Inventario y compras"),
         [
+            ("inventory", "StockTotals"),
             ("inventory", "StockMovement"),
-            ("inventory", "AjusteStock"),
             ("inventory", "Compra"),
             ("inventory", "Filament"),
             ("inventory", "Aggregate"),
             ("inventory", "AggregateCategory"),
+            ("inventory", "AjusteStock"),
         ],
     ),
     (

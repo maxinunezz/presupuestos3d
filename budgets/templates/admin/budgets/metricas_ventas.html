@@ -1,0 +1,91 @@
+{% extends "admin/budgets/_metrics_base.html" %}
+{% load i18n %}
+{# Panel de ventas: enfoque puramente comercial (volumen + eficiencia del #}
+{# equipo de ventas), sin rentabilidad — eso depende de costos de producción #}
+{# y gastos operativos, que el equipo comercial no maneja y distorsionan el #}
+{# objetivo de medir el esfuerzo de ventas (ver Panel de métricas). Cobros #}
+{# vive en el listado de Ventas (Ventas y presupuestos → Ventas), no acá. #}
+
+{% block mx_intro %}
+{% translate "Ventas del negocio por período, por fecha de aprobación. Enfoque comercial: volumen y eficiencia de ventas, sin costos de producción ni rentabilidad." %}
+<a href="{% url 'admin:budgets_metricas_changelist' %}">→ {% translate "Ver Panel de métricas (producción, inventario, costos y resultado)" %}</a>
+<a href="{% url 'admin:budgets_panelventas_changelist' %}">→ {% translate "Ver Cobros en el listado de Ventas" %}</a>
+{% endblock %}
+
+{% block mx_body %}
+<!-- ===================== VENTAS ===================== -->
+<div class="mx-section mx-section--ventas">💰 {% translate "Ventas" %}</div>
+<div class="mx-kpis mx-kpis--ventas">
+    <div class="kpi"><span class="n">{{ n_aprobados }}</span><span class="l">{% translate "Presupuestos aprobados" %}</span></div>
+    <div class="kpi"><span class="n">{{ facturacion }}</span><span class="l">{% translate "Facturación aprobada" %}</span></div>
+    <div class="kpi"><span class="n">{{ ticket }}</span><span class="l">{% translate "Ticket promedio" %}</span></div>
+    <div class="kpi"><span class="n">{{ conversion }}</span><span class="l">{% translate "Conversión" %}</span><span class="s">{{ conversion_detail }}</span></div>
+    <div class="kpi"><span class="n">{{ venta_diaria_promedio }}</span><span class="l">{% translate "Venta diaria promedio" %}</span></div>
+</div>
+
+<div class="mx-grid">
+    <div class="mx-card" style="flex: 1 1 100%;">
+        <h3>{% blocktranslate with pl=period_label|lower %}Facturación por {{ pl }}{% endblocktranslate %}</h3>
+        <canvas id="chartFact" height="150"></canvas>
+    </div>
+</div>
+
+<!-- ============== PRODUCTOS Y CLIENTES (ranking del período) ============== -->
+<div class="mx-grid">
+    <div class="mx-card">
+        <h3>{% translate "Productos más vendidos ($)" %}</h3>
+        <table class="mx">
+            <thead><tr><th>{% translate "Producto" %}</th><th class="num">{% translate "Facturación" %}</th></tr></thead>
+            <tbody>
+                {% for r in top_productos_money %}
+                <tr><td>{{ r.name }}</td><td class="num">{{ r.money }}</td></tr>
+                {% empty %}<tr><td colspan="2" class="empty">{% translate "Sin ventas en el período." %}</td></tr>{% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="mx-card">
+        <h3>{% translate "Productos más vendidos (cantidad)" %}</h3>
+        <table class="mx">
+            <thead><tr><th>{% translate "Producto" %}</th><th class="num">{% translate "Cant." %}</th></tr></thead>
+            <tbody>
+                {% for r in top_productos_qty %}
+                <tr><td>{{ r.name }}</td><td class="num">{{ r.qty }}</td></tr>
+                {% empty %}<tr><td colspan="2" class="empty">{% translate "Sin ventas en el período." %}</td></tr>{% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="mx-grid">
+    <div class="mx-card">
+        <h3>{% translate "Top clientes ($)" %}</h3>
+        <table class="mx">
+            <thead><tr><th>{% translate "Cliente" %}</th><th class="num">{% translate "Facturación" %}</th></tr></thead>
+            <tbody>
+                {% for r in top_clientes %}
+                <tr><td>{{ r.name }}</td><td class="num">{{ r.money }}</td></tr>
+                {% empty %}<tr><td colspan="2" class="empty">{% translate "Sin ventas en el período." %}</td></tr>{% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="mx-card">
+        <h3>{% translate "Top clientes (cantidad)" %}</h3>
+        <table class="mx">
+            <thead><tr><th>{% translate "Cliente" %}</th><th class="num">{% translate "Cant." %}</th></tr></thead>
+            <tbody>
+                {% for r in top_clientes_qty %}
+                <tr><td>{{ r.name }}</td><td class="num">{{ r.qty }}</td></tr>
+                {% empty %}<tr><td colspan="2" class="empty">{% translate "Sin ventas en el período." %}</td></tr>{% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block mx_charts %}
+    new Chart(document.getElementById("chartFact"), {
+        type: "bar",
+        data: { labels: fact.labels, datasets: [{ label: "{% translate 'Facturación' %}", data: fact.data, backgroundColor: "#2563eb", borderRadius: 4 }] },
+        options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+    });
+{% endblock %}

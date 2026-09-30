@@ -1296,10 +1296,13 @@ class MetricasPanelMesDropdownTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.context["selected_date_value"], hoy.strftime("%Y-%m"))
         self.assertEqual(resp.context["facturacion"], "$ 1.000,00")
-        # Desglose desplegable de "Costo de producción": el filamento usado
-        # aparece con sus gramos.
-        self.assertContains(resp, "Materiales usados")
-        self.assertContains(resp, str(self.fil))
+        # Desglose desplegable de "Costo de producción" (vive en Panel de
+        # costos): el filamento usado aparece con sus gramos.
+        resp_costos = self.client.get(
+            reverse("admin:budgets_panelcostos_changelist"), {"period": "month"}
+        )
+        self.assertContains(resp_costos, "Materiales usados")
+        self.assertContains(resp_costos, str(self.fil))
 
     def test_date_valido_muestra_ese_mes(self):
         otro_mes = timezone.make_aware(timezone.datetime(2026, 3, 15, 10, 0))
@@ -1321,3 +1324,199 @@ class MetricasPanelMesDropdownTests(TestCase):
         resp = self.client.get(self.url, {"period": "week", "date": "2026-03"})
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.context["period"], "week")
+
+
+class MetricasVentasPaginaTests(TestCase):
+    """Panel de ventas (`MetricasVentas`): enfoque puramente comercial
+    (volumen + eficiencia de ventas), sin rentabilidad ni cobros — esos dos
+    últimos viven en otro lado (Resultado en Métricas, Cobros en el listado
+    de Ventas). Comparte el motor de KPIs con Panel de métricas."""
+
+    def setUp(self):
+        User = get_user_model()
+        User.objects.create_superuser("admin", password="x")
+        self.client.login(username="admin", password="x")
+        self.url_ventas = reverse("admin:budgets_metricasventas_changelist")
+        self.url_metricas = reverse("admin:budgets_metricas_changelist")
+        self.url_panel_ventas = reverse("admin:budgets_panelventas_changelist")
+
+        self.fil = Filament.objects.create(
+            brand="M",
+            material_type=Filament.MaterialType.PLA,
+            color="C",
+            cost_per_kg=Decimal("10000"),
+            stock_grams=Decimal("1000000"),
+        )
+
+    def _aprobado(self, sale_price, estado_venta=None):
+        p = make_producto(sale_price=sale_price, machine_cost_per_hour=Decimal("10"))
+        add_pieza(p, self.fil, Decimal("10"), print_hours=Decimal("1"))
+        pres = Presupuesto.objects.create(client_name="Cliente")
+        PresupuestoItem.objects.create(presupuesto=pres, producto=p, quantity=1)
+        updates = dict(status=Presupuesto.Status.APPROVED, approved_at=timezone.now())
+        if estado_venta:
+            updates["estado_venta"] = estado_venta
+        Presupuesto.objects.filter(pk=pres.pk).update(**updates)
+        return pres
+
+    def test_panel_de_ventas_muestra_kpis_comerciales(self):
+        self._aprobado(Decimal("1000"), estado_venta=Presupuesto.EstadoVenta.PAGADO)
+        resp = self.client.get(self.url_ventas, {"period": "month"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Facturación aprobada")
+        self.assertContains(resp, "Presupuestos aprobados")
+        self.assertContains(resp, "Ticket promedio")
+        self.assertContains(resp, "Conversión")
+        self.assertContains(resp, "Venta diaria promedio")
+        self.assertContains(resp, "Productos más vendidos")
+        self.assertEqual(resp.context["facturacion"], "$ 1.000,00")
+
+    def test_panel_de_ventas_orden_de_kpis(self):
+        # Presupuestos aprobados primero, luego Facturación, Ticket, Conversión
+        # y Venta diaria promedio al final (pedido puntual del dueño).
+        self._aprobado(Decimal("1000"))
+        resp = self.client.get(self.url_ventas, {"period": "month"})
+        content = resp.content.decode()
+        labels = ["Presupuestos aprobados", "Facturación aprobada", "Ticket promedio", "Conversión", "Venta diaria promedio"]
+        positions = [content.index(label) for label in labels]
+        self.assertEqual(positions, sorted(positions))
+
+    def test_panel_de_ventas_no_muestra_rentabilidad_ni_cobros(self):
+        # Enfoque comercial: sin margen/beneficio (depende de costos de
+        # producción) y sin cobros (se movió al listado de Ventas).
+        self._aprobado(Decimal("1000"))
+        resp = self.client.get(self.url_ventas, {"period": "month"})
+        self.assertNotContains(resp, "Margen bruto")
+        self.assertNotContains(resp, "Beneficio del mes")
+        self.assertNotContains(resp, "Embudo de estados")
+        self.assertNotContains(resp, "Por estado de cobro")
+        self.assertNotContains(resp, "Cobrado")
+        self.assertNotContains(resp, "Tiempo de ciclo")
+
+    def test_panel_de_ventas_linkea_a_panel_de_metricas_y_a_ventas(self):
+        resp_ventas = self.client.get(self.url_ventas, {"period": "month"})
+        self.assertContains(resp_ventas, self.url_metricas)
+        self.assertContains(resp_ventas, self.url_panel_ventas)
+        resp_metricas = self.client.get(self.url_metricas, {"period": "month"})
+        self.assertContains(resp_metricas, self.url_ventas)
+
+    def test_panel_de_metricas_ya_no_muestra_ventas_ni_cobros(self):
+        # Las secciones de ventas/cobros se movieron a MetricasVentas/Ventas;
+        # producción al Tablero y costos al Panel de costos: el panel de
+        # métricas (inventario/resultado) no debe repetir nada de eso.
+        resp = self.client.get(self.url_metricas, {"period": "month"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotContains(resp, "Facturación aprobada")
+        self.assertNotContains(resp, "Productos más vendidos")
+        self.assertNotContains(resp, "Por estado de cobro")
+        self.assertNotContains(resp, "Piezas impresas")
+        self.assertNotContains(resp, "Total costo de producción")
+        # Pero sigue teniendo lo propio de este panel.
+        self.assertContains(resp, "Gasto en compras")
+        self.assertContains(resp, "Beneficio neto")
+
+    def test_panel_de_ventas_tiene_top_clientes_por_cantidad(self):
+        self._aprobado(Decimal("1000"))
+        resp = self.client.get(self.url_ventas, {"period": "month"})
+        self.assertContains(resp, "Top clientes (cantidad)")
+        self.assertEqual(resp.context["top_clientes_qty"][0]["name"], "Cliente")
+
+
+class PanelCostosPaginaTests(TestCase):
+    """Panel de costos: composición del costo de producción por período
+    (material, mano de obra, máquina, agregados). Antes una sección del
+    Panel de métricas, separada a su propia página. Comparte el motor de
+    KPIs con Panel de métricas/Panel de ventas."""
+
+    def setUp(self):
+        User = get_user_model()
+        User.objects.create_superuser("admin", password="x")
+        self.client.login(username="admin", password="x")
+        self.url = reverse("admin:budgets_panelcostos_changelist")
+        self.fil = Filament.objects.create(
+            brand="M",
+            material_type=Filament.MaterialType.PLA,
+            color="C",
+            cost_per_kg=Decimal("10000"),
+            stock_grams=Decimal("1000000"),
+        )
+
+    def test_muestra_la_composicion_del_costo(self):
+        p = make_producto(sale_price=Decimal("1000"), machine_cost_per_hour=Decimal("10"))
+        add_pieza(p, self.fil, Decimal("10"), print_hours=Decimal("1"))
+        pres = Presupuesto.objects.create(client_name="Cliente")
+        PresupuestoItem.objects.create(presupuesto=pres, producto=p, quantity=1)
+        pres.approve()
+        resp = self.client.get(self.url, {"period": "month"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Costos de producción")
+        self.assertContains(resp, "Material (con merma)")
+        self.assertContains(resp, "Mano de obra")
+        self.assertContains(resp, "Total costo de producción")
+        self.assertContains(resp, "Materiales usados")
+        self.assertContains(resp, str(self.fil))
+
+    def test_no_muestra_ventas_ni_produccion_ni_resultado(self):
+        resp = self.client.get(self.url, {"period": "month"})
+        self.assertNotContains(resp, "Facturación aprobada")
+        self.assertNotContains(resp, "Piezas impresas")
+        self.assertNotContains(resp, "Beneficio neto")
+
+
+class PanelVentasCobrosTests(TestCase):
+    """El listado de Ventas (`PanelVentas`, dentro de "Ventas y
+    presupuestos") muestra un resumen de Cobros arriba de la tabla —
+    reemplaza al apartado de Cobros que antes vivía en el Panel de ventas de
+    Métricas, y respeta los filtros/búsqueda aplicados al listado."""
+
+    def setUp(self):
+        User = get_user_model()
+        User.objects.create_superuser("admin", password="x")
+        self.client.login(username="admin", password="x")
+        self.url = reverse("admin:budgets_panelventas_changelist")
+
+        self.fil = Filament.objects.create(
+            brand="M",
+            material_type=Filament.MaterialType.PLA,
+            color="C",
+            cost_per_kg=Decimal("10000"),
+            stock_grams=Decimal("1000000"),
+        )
+
+    def _aprobado(self, sale_price, estado_venta, medio_pago=""):
+        p = make_producto(sale_price=sale_price, machine_cost_per_hour=Decimal("10"))
+        add_pieza(p, self.fil, Decimal("10"), print_hours=Decimal("1"))
+        pres = Presupuesto.objects.create(client_name="Cliente")
+        PresupuestoItem.objects.create(presupuesto=pres, producto=p, quantity=1)
+        Presupuesto.objects.filter(pk=pres.pk).update(
+            status=Presupuesto.Status.APPROVED,
+            approved_at=timezone.now(),
+            estado_venta=estado_venta,
+            medio_pago=medio_pago,
+        )
+        return pres
+
+    def test_resumen_de_cobros_arriba_del_listado(self):
+        self._aprobado(
+            Decimal("1000"), Presupuesto.EstadoVenta.PAGADO, Presupuesto.MedioPago.EFECTIVO
+        )
+        self._aprobado(Decimal("500"), Presupuesto.EstadoVenta.PENDIENTE)
+        resp = self.client.get(self.url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Cobrado")
+        self.assertContains(resp, "Pendiente de cobro")
+        self.assertContains(resp, "Por estado de cobro")
+        self.assertContains(resp, "Por método de pago")
+        cobros = resp.context["cobros"]
+        self.assertEqual(cobros["total_cobrado"], "$ 1.000,00")
+        self.assertEqual(cobros["total_pendiente"], "$ 500,00")
+
+    def test_resumen_de_cobros_respeta_filtros(self):
+        self._aprobado(
+            Decimal("1000"), Presupuesto.EstadoVenta.PAGADO, Presupuesto.MedioPago.EFECTIVO
+        )
+        self._aprobado(Decimal("500"), Presupuesto.EstadoVenta.PENDIENTE)
+        resp = self.client.get(self.url, {"estado_venta": Presupuesto.EstadoVenta.PAGADO})
+        cobros = resp.context["cobros"]
+        self.assertEqual(cobros["total_cobrado"], "$ 1.000,00")
+        self.assertEqual(cobros["total_pendiente"], "$ 0,00")

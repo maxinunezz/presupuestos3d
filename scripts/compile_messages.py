@@ -473,7 +473,7 @@ BUDGETS = {
     'Líneas de filamento (pieza)': 'Filament lines (part)',
     'Stock de piezas': 'Parts stock',
     'Métrica': 'Metric',
-    'Métricas': 'Metrics',
+    'Panel de métricas': 'Metrics panel',
     'Enviado': 'Sent',
     'Aprobado': 'Approved',
     'En producción': 'In production',
@@ -635,6 +635,7 @@ BUDGETS = {
     'Facturación aprobada': 'Approved billing',
     'Presupuestos aprobados': 'Approved budgets',
     'Ticket promedio': 'Average ticket',
+    'Venta diaria promedio': 'Average daily sales',
     'Enviados / Aprobados': 'Sent / Approved',
     'Tasa de conversión': 'Conversion rate',
     'Margen bruto': 'Gross margin',
@@ -664,10 +665,25 @@ BUDGETS = {
     'Conversión': 'Conversion',
     'Tiempo de ciclo': 'Cycle time',
     'Embudo de estados (ahora)': 'Status funnel (now)',
+    'Beneficio del mes': 'Profit this month',
+    'Beneficio': 'Profit',
+    'Top productos por beneficio:': 'Top products by profit:',
     'Productos más vendidos (cantidad)': 'Best-selling products (quantity)',
     'Sin ventas en el período.': 'No sales in the period.',
     'Productos más vendidos ($)': 'Best-selling products ($)',
     'Top clientes ($)': 'Top clients ($)',
+    'Top clientes (cantidad)': 'Top clients (quantity)',
+    'Ventas del negocio por período, por fecha de aprobación. Enfoque comercial: volumen y eficiencia de ventas, sin costos de producción ni rentabilidad.': (
+        'Business sales by period, by approval date. Commercial focus: sales volume and '
+        'efficiency, without production costs or profitability.'
+    ),
+    'Ver Cobros en el listado de Ventas': 'See Payments in the Sales list',
+    'De la facturación de los pedidos listados abajo (según los filtros aplicados), cuánto ya se cobró y cuánto sigue pendiente.': (
+        'Of the billing of the orders listed below (per the filters applied), how much has '
+        'already been collected and how much is still pending.'
+    ),
+    'Sin ventas para mostrar.': 'No sales to show.',
+    'Método': 'Method',
     'Horas impresas por máquina': 'Printed hours per machine',
     'Uso por máquina': 'Usage per machine',
     'Horas': 'Hours',
@@ -695,6 +711,8 @@ BUDGETS = {
     'Composición del costo de producción': 'Production cost breakdown',
     'Ver desglose completo: materiales, agregados y máquinas del período':
         'View full breakdown: materials, add-ons and machines for the period',
+    'Desglose completo: materiales, agregados y máquinas del período':
+        'Full breakdown: materials, add-ons and machines for the period',
     'Materiales usados': 'Materials used',
     'Filamento': 'Filament',
     'Gramos': 'Grams',
@@ -745,6 +763,29 @@ BUDGETS = {
     'Observaciones': 'Notes',
     '%(n)d productos': '%(n)d products',
     'Beneficio': 'Profit',
+    # Split de Métricas en "Panel de métricas" (producción/inventario/costos/
+    # resultado) + "Panel de ventas" (ventas/cobros), cada uno con su intro y
+    # su link cruzado al otro.
+    'KPIs del negocio por período: producción, inventario, costos y resultado. Producción por fin de impresión, compras por fecha de confirmación; el stock bajo es una foto del estado actual (no depende del período).':
+        'Business KPIs by period: production, inventory, costs and result. Production by print end, purchases by confirmation date; low stock is a snapshot of the current state (independent of the period).',
+    'Ver Panel de ventas (facturación, conversión, cobros)': 'View Sales panel (billing, conversion, payments)',
+    'Ver Panel de métricas (producción, inventario, costos y resultado)': 'View Metrics panel (production, inventory, costs and result)',
+    # Producción/costos se separaron del Panel de métricas: Producción pasó al
+    # Tablero de producción, Costos de producción a su propio "Panel de
+    # costos".
+    'KPIs del negocio por período: inventario y resultado. Compras por fecha de confirmación; el stock bajo es una foto del estado actual (no depende del período).':
+        'Business KPIs by period: inventory and result. Purchases by confirmation date; low stock is a snapshot of the current state (independent of the period).',
+    'Ver Panel de costos (composición del costo de producción)': 'View Costs panel (production cost breakdown)',
+    'Ver Tablero de producción (piezas impresas, horas, uso por máquina)': 'View Production board (pieces printed, hours, usage per machine)',
+    'Ver Panel de métricas (producción, inventario y resultado)': 'View Metrics panel (production, inventory and result)',
+    'Panel de costos': 'Costs panel',
+    'Composición del costo de producción por período: material, mano de obra, máquina y agregados, promedio de lo aprobado. Sin ventas ni resultado.':
+        'Production cost breakdown by period: material, labor, machine and add-ons, average of what was approved. No sales or result.',
+    'Producción del mes': 'Production this month',
+    'Ventas del negocio por período, por fecha de aprobación.': 'Business sales by period, by approval date.',
+    'Cobros': 'Payments',
+    'De la Facturación de arriba, cuánto ya se cobró y cuánto sigue pendiente, según el estado de cobro y el método de pago cargados desde el listado de Ventas.':
+        'Of the Billing above, how much has already been collected and how much is still pending, based on the payment status and payment method loaded from the Sales listing.',
 }
 
 PRODUCTION = {
@@ -1080,16 +1121,14 @@ BLOCKTRANS = {
     '%(n_compras)s compra/s': '%(n_compras)s purchase/s',
     (
         'Del período actual, sobre lo aprobado. Es el costo PROMEDIO de cada\n'
-        '    producto (el mismo que usa el margen bruto): prorratea material y máquina asumiendo que\n'
-        '    las sobrantes de cada corrida se terminan usando o vendiendo. No queda "congelado": si\n'
-        '    después cambia el costeo de un producto, este número recalcula con el costo actual, aunque\n'
-        '    el período ya haya pasado.'
+        '    producto: prorratea material y máquina asumiendo que las sobrantes de cada corrida se\n'
+        '    terminan usando o vendiendo. No queda "congelado": si después cambia el costeo de un\n'
+        '    producto, este número recalcula con el costo actual, aunque el período ya haya pasado.'
     ): (
         'For the current period, over what was approved. This is the AVERAGE cost of each\n'
-        '    product (the same one used by the gross margin): it prorates material and machine time assuming\n'
-        '    the leftovers from each run end up being used or sold. It is not "frozen": if\n'
-        '    a product\'s costing changes later, this number recalculates with the current cost, even if\n'
-        '    the period has already passed.'
+        '    product: it prorates material and machine time assuming the leftovers from each run end\n'
+        '    up being used or sold. It is not "frozen": if a product\'s costing changes later, this\n'
+        '    number recalculates with the current cost, even if the period has already passed.'
     ),
     (
         'Ingresos (facturación real del período, sin cancelados ni pedidos para\n'

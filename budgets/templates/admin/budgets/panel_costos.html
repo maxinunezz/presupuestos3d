@@ -1,0 +1,98 @@
+{% extends "admin/budgets/_metrics_base.html" %}
+{% load i18n %}
+{# Panel de costos: composición del costo de producción por período (material, #}
+{# mano de obra, máquina y agregados). Antes era la sección "Costos de #}
+{# producción" del Panel de métricas; se separó a su propia página para no #}
+{# amontonar todo en un único dashboard larguísimo. Sin ventas ni resultado — #}
+{# eso vive en Panel de métricas/Panel de ventas. #}
+
+{% block mx_intro %}
+{% translate "Composición del costo de producción por período: material, mano de obra, máquina y agregados, promedio de lo aprobado. Sin ventas ni resultado." %}
+<a href="{% url 'admin:budgets_metricas_changelist' %}">→ {% translate "Ver Panel de métricas (producción, inventario y resultado)" %}</a>
+<a href="{% url 'admin:budgets_metricasventas_changelist' %}">→ {% translate "Ver Panel de ventas (facturación, conversión, cobros)" %}</a>
+{% endblock %}
+
+{% block mx_body %}
+<!-- ===================== COSTOS DE PRODUCCIÓN ===================== -->
+<div class="mx-section mx-section--costos">🏭 {% translate "Costos de producción" %}</div>
+<p class="mx-intro">
+    {% blocktranslate %}Del período actual, sobre lo aprobado. Es el costo PROMEDIO de cada
+    producto: prorratea material y máquina asumiendo que las sobrantes de cada corrida se
+    terminan usando o vendiendo. No queda "congelado": si después cambia el costeo de un
+    producto, este número recalcula con el costo actual, aunque el período ya haya pasado.{% endblocktranslate %}
+</p>
+<div class="mx-costos-layout">
+    <div class="mx-kpis mx-kpis--costos mx-kpis--col">
+        <div class="kpi mx-c-material"><span class="n">{{ cost_material }}</span><span class="l">{% translate "Material (con merma)" %}</span></div>
+        <div class="kpi mx-c-labor"><span class="n">{{ cost_labor }}</span><span class="l">{% translate "Mano de obra" %}</span></div>
+        <div class="kpi mx-c-machine"><span class="n">{{ cost_machine }}</span><span class="l">{% translate "Costo de máquina" %}</span><span class="s">{{ cost_machine_hours }}</span></div>
+        <div class="kpi mx-c-agg"><span class="n">{{ cost_aggregates }}</span><span class="l">{% translate "Agregados" %}</span></div>
+        <div class="kpi"><span class="n">{{ costo_produccion }}</span><span class="l">{% translate "Total costo de producción" %}</span></div>
+    </div>
+    <div class="mx-card mx-card--costos">
+        <h3>{% translate "Composición del costo de producción" %}</h3>
+        <canvas id="chartCostos" height="220"></canvas>
+    </div>
+</div>
+
+<div class="mx-detalle">
+    <div class="mx-detalle-title">{% translate "Desglose completo: materiales, agregados y máquinas del período" %}</div>
+    <div class="mx-detalle-body">
+        <div class="mx-card" style="flex: 1 1 300px;">
+            <h3>{% translate "Materiales usados" %}</h3>
+            <table class="mx">
+                <thead><tr><th>{% translate "Filamento" %}</th><th class="num">{% translate "Gramos" %}</th><th class="num">{% translate "Costo" %}</th></tr></thead>
+                <tbody>
+                    {% for row in material_breakdown %}
+                    <tr><td>{{ row.label }}</td><td class="num">{{ row.grams }}</td><td class="num">{{ row.money }}</td></tr>
+                    {% empty %}<tr><td colspan="3" class="empty">{% translate "Sin consumo de material en el período." %}</td></tr>{% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="mx-card" style="flex: 1 1 300px;">
+            <h3>{% translate "Agregados usados" %}</h3>
+            <table class="mx">
+                <thead><tr><th>{% translate "Agregado" %}</th><th class="num">{% translate "Cantidad" %}</th><th class="num">{% translate "Costo" %}</th></tr></thead>
+                <tbody>
+                    {% for row in aggregate_breakdown %}
+                    <tr><td>{{ row.label }}</td><td class="num">{{ row.qty }} {{ row.unit }}</td><td class="num">{{ row.money }}</td></tr>
+                    {% empty %}<tr><td colspan="3" class="empty">{% translate "Sin consumo de agregados en el período." %}</td></tr>{% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="mx-card" style="flex: 1 1 300px;">
+            <h3>{% translate "Máquinas usadas" %}</h3>
+            <table class="mx">
+                <thead><tr><th>{% translate "Máquina" %}</th><th class="num">{% translate "Trabajos" %}</th><th class="num">{% translate "Horas" %}</th></tr></thead>
+                <tbody>
+                    {% for row in uso_maquinas %}
+                    <tr><td>{{ row.name }}</td><td class="num">{{ row.jobs }}</td><td class="num">{{ row.horas }}</td></tr>
+                    {% empty %}<tr><td colspan="3" class="empty">{% translate "Sin producción terminada en el período." %}</td></tr>{% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block mx_charts %}
+    new Chart(document.getElementById("chartCostos"), {
+        type: "doughnut",
+        data: { labels: costos.labels, datasets: [{ data: costos.data, backgroundColor: PALETTE, borderWidth: 0 }] },
+        options: {
+            plugins: {
+                legend: { position: "right" },
+                tooltip: {
+                    callbacks: {
+                        // Debajo del total de la porción, agrega el detalle (top 3
+                        // filamentos / impresoras / agregados) que manda el backend.
+                        afterBody: function (items) {
+                            var extra = costosExtra[items[0].dataIndex] || [];
+                            return extra.length ? [""].concat(extra) : [];
+                        }
+                    }
+                }
+            }
+        }
+    });
+{% endblock %}

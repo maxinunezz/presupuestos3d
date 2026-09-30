@@ -1,0 +1,184 @@
+{% extends "admin/base_site.html" %}
+{% load static i18n %}
+{# Base común de los paneles de KPIs (Métricas y Panel de ventas): ambos #}
+{# comparten el motor de cálculo, la barra de período/mes/export y los #}
+{# estilos. Cada página solo define su intro, su cuerpo (mx_body) y qué #}
+{# gráficos de Chart.js instancia (mx_charts) — los datos de TODOS los #}
+{# gráficos ya vienen en el contexto sin importar la página (los arma #}
+{# budgets.metrics.template_context), así que alcanza con no instanciar el #}
+{# gráfico cuyo <canvas> no está presente en esa página. #}
+
+{% block content %}
+<style>
+    .mx-intro { color: #555; font-size: 13px; margin: 6px 0 16px; }
+    html[data-theme="dark"] .mx-intro { color: #bbb; }
+    .mx-intro a { font-weight: 600; }
+
+    .mx-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 22px; }
+    .mx-tabs { display: flex; gap: 6px; }
+    /* "a.mx-tab" (no solo ".mx-tab") para ganarle en especificidad a la regla
+       global del admin "a:link, a:visited" (que en modo oscuro pinta los
+       links de celeste) — si no, las pestañas inactivas se ven celestes en
+       vez de con su propio estilo. Mismo motivo en .mx-month-option más abajo. */
+    a.mx-tab {
+        padding: 7px 16px; border: 1px solid #111; border-radius: 6px; text-decoration: none;
+        color: #111; font-size: 13px; font-weight: 600; background: #fff;
+    }
+    a.mx-tab.active { background: #111; color: #fff; }
+    .mx-range { color: var(--body-quiet-color, #555); font-size: 13px; font-weight: 600; }
+    /* Dropdown de mes: es un <select> nativo mostraba los 24 meses de un
+       tirón (lista larguísima). Lo reemplazamos por un botón + menú propio
+       para poder limitar la altura visible a ~6 opciones y scrollear el
+       resto, sin depender de jQuery/select2 (no están cargados en esta
+       página). */
+    .mx-month-dropdown { position: relative; }
+    .mx-month-select {
+        padding: 6px 10px; border: 1px solid #111; border-radius: 6px; font-size: 13px;
+        font-weight: 600; background: #fff; color: #111; cursor: pointer;
+    }
+    .mx-month-menu {
+        display: none; position: absolute; top: calc(100% + 4px); left: 0; z-index: 20;
+        min-width: 160px; max-height: 216px; overflow-y: auto; background: #111;
+        border: 1px solid #111; border-radius: 6px; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+    }
+    .mx-month-menu.open { display: block; }
+    a.mx-month-option {
+        display: block; padding: 7px 14px; font-size: 13px; color: #fff; text-decoration: none;
+    }
+    a.mx-month-option:hover { background: #333; }
+    a.mx-month-option.active { background: #fff; color: #111; }
+    .mx-excel {
+        margin-left: auto; padding: 8px 18px; background: #16a34a; color: #fff; border-radius: 6px;
+        text-decoration: none; font-size: 13px; font-weight: 600;
+    }
+
+    .mx-section {
+        margin: 26px 0 8px; font-size: 16px; font-weight: bold;
+        border-bottom: 3px solid var(--border-color, #111); padding-bottom: 4px;
+    }
+    /* Cada bloque con su color para guiar la vista. */
+    .mx-section--ventas { border-bottom-color: #2563eb; }
+    .mx-section--prod   { border-bottom-color: #16a34a; }
+    .mx-section--inv    { border-bottom-color: #d97706; }
+    .mx-section--costos { border-bottom-color: #7c3aed; }
+    .mx-section--resultado { border-bottom-color: #111; }
+
+    .mx-kpis { display: flex; gap: 14px; flex-wrap: wrap; }
+    .kpi { background: #111; color: #fff; border-radius: 8px; padding: 14px 18px; min-width: 150px; flex: 1 1 160px; }
+    .kpi .n { font-size: 24px; font-weight: bold; display: block; }
+    .kpi .l { font-size: 12px; color: rgba(255, 255, 255, 0.82); }
+    .kpi .s { font-size: 11px; color: rgba(255, 255, 255, 0.6); display: block; margin-top: 2px; }
+    /* KPIs coloreados por sección (ventas / producción / inventario). */
+    .mx-kpis--ventas .kpi { background: #1d4ed8; }
+    .mx-kpis--prod .kpi   { background: #15803d; }
+    .mx-kpis--inv .kpi    { background: #b45309; }
+    .mx-kpis--costos .kpi { background: #6d28d9; }
+    /* Mismos colores que las porciones del gráfico "Composición del costo de producción". */
+    .mx-kpis--costos .kpi.mx-c-material { background: #2563eb; }
+    .mx-kpis--costos .kpi.mx-c-labor    { background: #16a34a; }
+    .mx-kpis--costos .kpi.mx-c-machine  { background: #f59e0b; }
+    .mx-kpis--costos .kpi.mx-c-agg      { background: #dc2626; }
+    /* "Costos de producción": mitad tarjetas apiladas en columna, mitad gráfico. */
+    .mx-costos-layout { display: flex; gap: 20px; flex-wrap: wrap; align-items: stretch; }
+    .mx-kpis--costos.mx-kpis--col { flex: 1 1 320px; flex-direction: column; }
+    .mx-kpis--costos.mx-kpis--col .kpi { flex: none; }
+    .mx-card--costos { flex: 1 1 320px; }
+    .mx-kpis--resultado .kpi { background: #1f2937; }
+    .mx-kpis--resultado .kpi.mx-ingresos { background: #1d4ed8; }
+    .mx-kpis--resultado .kpi.mx-produccion { background: #c2410c; }
+    .mx-kpis--resultado .kpi.mx-negativo { background: #b91c1c; }
+    .mx-kpis--resultado .kpi.mx-positivo { background: #15803d; }
+    .mx-kpis--resultado .kpi.mx-ext { background: #7f1d1d; }
+    .mx-section--ventaspanel { border-bottom-color: #0891b2; }
+    .mx-kpis--ventaspanel .kpi { background: #0e7490; }
+
+    .mx-grid { display: flex; flex-wrap: wrap; gap: 20px; margin-top: 14px; }
+    .mx-card {
+        flex: 1 1 380px; min-width: 320px; background: #fff; border: 1px solid #ddd;
+        border-radius: 8px; padding: 14px 16px;
+    }
+    .mx-card h3 { margin: 0 0 10px; font-size: 14px; color: #111; }
+
+    table.mx { width: 100%; border-collapse: collapse; background: #fff; }
+    table.mx th { background: #111; color: #fff; text-align: left; padding: 7px 9px; font-size: 11px; text-transform: uppercase; }
+    table.mx td { padding: 7px 9px; border-bottom: 1px solid #e6e6e6; font-size: 13px; color: #1a1a1a; background: #fff; }
+    table.mx td.num, table.mx th.num { text-align: right; }
+    .empty { color: #888; padding: 8px 0; font-size: 13px; }
+
+    /* Detalle de "Costo de producción" (Panel de costos): todo el material,
+       agregados y máquinas usados en el período, no solo el top 3. Siempre
+       visible (no es desplegable): el dueño lo quiere a la vista de una. */
+    .mx-detalle { margin-top: 16px; }
+    .mx-detalle-title {
+        font-size: 13px; font-weight: 600; color: #111;
+        padding: 9px 14px; background: #f2f2f2; border: 1px solid #ddd; border-radius: 6px 6px 0 0;
+    }
+    .mx-detalle-body {
+        border: 1px solid #ddd; border-top: none; border-radius: 0 0 6px 6px;
+        padding: 14px; display: flex; flex-wrap: wrap; gap: 18px; background: #fff;
+    }
+</style>
+
+<p class="mx-intro">{% block mx_intro %}{% endblock %}</p>
+
+<div class="mx-bar">
+    <div class="mx-tabs">
+        {% for p in periods %}
+        <a class="mx-tab {% if p.active %}active{% endif %}" href="?period={{ p.key }}">{{ p.label }}</a>
+        {% endfor %}
+    </div>
+    {% if period == "month" %}
+    <div class="mx-month-dropdown" id="mxMonthDropdown">
+        <button type="button" class="mx-month-select" id="mxMonthToggle" onclick="mxToggleMonthMenu()">
+            {{ selected_date|date:"F Y" }} ▾
+        </button>
+        <div class="mx-month-menu" id="mxMonthMenu">
+            {% for opt in month_options %}
+            <a class="mx-month-option {% if opt.value == selected_date_value %}active{% endif %}"
+               href="?period=month&date={{ opt.value }}">{{ opt.date|date:"F Y" }}</a>
+            {% endfor %}
+        </div>
+    </div>
+    <script>
+        function mxToggleMonthMenu() {
+            document.getElementById("mxMonthMenu").classList.toggle("open");
+        }
+        document.addEventListener("click", function (event) {
+            var dropdown = document.getElementById("mxMonthDropdown");
+            var menu = document.getElementById("mxMonthMenu");
+            if (dropdown && menu && !dropdown.contains(event.target)) {
+                menu.classList.remove("open");
+            }
+        });
+    </script>
+    {% endif %}
+    <span class="mx-range">{{ range_str }}</span>
+    <a class="mx-excel" href="?period={{ period }}{% if period == "month" %}&date={{ selected_date_value }}{% endif %}&export=xlsx">⬇ {% translate "Descargar Excel" %}</a>
+</div>
+
+{% block mx_body %}{% endblock %}
+
+<script src="{% static 'budgets/chart.umd.min.js' %}"></script>
+<script>
+(function () {
+    if (typeof Chart === "undefined") return;  // si no cargó Chart.js: las tablas siguen funcionando
+
+    // Paleta multicolor (ventas azul, producción verde, inventario ámbar, etc.).
+    var PALETTE = ["#2563eb", "#16a34a", "#f59e0b", "#dc2626", "#7c3aed", "#0891b2", "#db2777", "#65a30d"];
+
+    // Las tarjetas siempre son blancas (también en modo oscuro), así que el texto
+    // de los gráficos va fijo en oscuro; si no, en modo oscuro quedaba blanco sobre blanco.
+    Chart.defaults.color = "#333";
+    Chart.defaults.borderColor = "rgba(0, 0, 0, 0.1)";
+
+    // Datos de TODOS los gráficos (el backend los arma siempre, sin importar
+    // la página); cada template solo instancia los que tienen su <canvas>.
+    var fact = {{ fact_chart_json|safe }};
+    var maq = {{ maq_chart_json|safe }};
+    var costos = {{ costos_chart_json|safe }};
+    var costosExtra = {{ costos_extra_json|safe }};
+
+    {% block mx_charts %}{% endblock %}
+})();
+</script>
+{% endblock %}
