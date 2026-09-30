@@ -159,10 +159,15 @@ HTML = """
     <li><span class="tn">17</span> Historial de impresiones por máquina</li>
     <li><span class="tn">18</span> Cola de producción</li>
     <li><span class="tn">19</span> Tablero de producción</li>
-    <li><span class="tn">20</span> Métricas (KPIs del negocio)</li>
-    <li><span class="tn">21</span> Gastos (panel de gastos)</li>
-    <li><span class="tn">22</span> Selector de idioma (Español / English)</li>
-    <li><span class="tn">23</span> Flujo de trabajo recomendado</li>
+    <li><span class="tn">20</span> Ventas (listado y cobros)</li>
+    <li><span class="tn">21</span> Panel de métricas (resultado, inventario y socios)</li>
+    <li><span class="tn">22</span> Socios</li>
+    <li><span class="tn">23</span> Panel de ventas (enfoque comercial)</li>
+    <li><span class="tn">24</span> Panel de costos</li>
+    <li><span class="tn">25</span> Gastos (panel de gastos)</li>
+    <li><span class="tn">26</span> Exportar a Excel y PDF</li>
+    <li><span class="tn">27</span> Selector de idioma (Español / English)</li>
+    <li><span class="tn">28</span> Flujo de trabajo recomendado</li>
 </ul>
 
 <div class="pagebreak"></div>
@@ -179,13 +184,17 @@ HTML = """
 <p>Para entrar abrís el navegador en la dirección del panel y, al estar adentro, vas a ver en la
    página de inicio una lista de secciones agrupadas en bloques:</p>
 <ul>
-    <li><b>Inventario:</b> Filamentos, Agregados, Totales de inventario, Compras, Movimientos de
-        stock y Ajustes manuales de stock.</li>
-    <li><b>Costeo y presupuestos:</b> Costeo de productos, Stock de piezas, Stock de productos
-        terminados, Presupuestos y Métricas.</li>
-    <li><b>Producción:</b> Máquinas, Trabajos de producción, Cola de producción y Tablero de
-        producción.</li>
-    <li><b>Gastos:</b> Gastos, Topes y Panel de gastos.</li>
+    <li><b>Métricas:</b> Panel de métricas, Panel de ventas, Panel de costos, Panel de gastos y
+        Socios — los tableros de solo lectura, lo primero que conviene mirar al entrar.</li>
+    <li><b>Producción:</b> Tablero de producción, Cola de producción, Trabajos de producción y
+        Máquinas.</li>
+    <li><b>Ventas y presupuestos:</b> Ventas (listado con cobros), Presupuestos, Costeo de
+        productos, Stock de productos terminados y Stock de piezas.</li>
+    <li><b>Inventario y compras:</b> Totales de inventario, Movimientos de stock, Compras,
+        Filamentos, Agregados y Ajustes manuales de stock.</li>
+    <li><b>Gastos:</b> Gastos, Categorías, Topes, Áreas responsables y Medios de pago.</li>
+    <li><b>Configuración:</b> Usuarios, Grupos y Tokens de API (administración del sistema, no
+        del negocio).</li>
 </ul>
 <div class="box">
     <b>Cómo se navega:</b> hacés clic en una sección para ver su lista. Arriba a la derecha de
@@ -670,9 +679,15 @@ HTML = """
 
 <!-- TABLERO -->
 <h2>19. Tablero de producción</h2>
-<p>Es la pantalla "entro y me dice todo". De solo lectura, reúne en un solo lugar:</p>
+<p>Es la pantalla "entro y me dice todo" de producción. De solo lectura, arriba de todo muestra un
+   resumen de <b>Producción del mes</b> y abajo reúne en un solo lugar:</p>
 <ul>
+    <li><b>Producción del mes:</b> piezas impresas, horas impresas, tasa de reimpresión (por falla)
+        y cumplimiento de entrega, más un gráfico y una tabla de horas/uso por máquina.</li>
     <li><b>Qué se está imprimiendo</b> ahora en cada máquina y cuándo termina.</li>
+    <li><b>Máquinas fuera de servicio:</b> las que están inactivas, para que no se te pase revisarlas.</li>
+    <li><b>Trabajos sin máquina asignada:</b> los que quedaron "sueltos" (por ejemplo, al desactivar
+        una impresora) y necesitan que los reasignes a mano.</li>
     <li><b>Próximas entregas:</b> los presupuestos aprobados o en producción ordenados por fecha de entrega.</li>
     <li><b>Comprar materia prima:</b> como el material ya se descontó al aprobar, el tablero mira el
         <b>stock real</b> y te lista todo lo que quedó <b>por debajo del mínimo</b> (o en negativo),
@@ -690,66 +705,120 @@ HTML = """
     entregás y qué tenés que ir a comprar antes de quedarte sin material.
 </div>
 
-<!-- METRICAS -->
-<h2>20. Métricas (KPIs del negocio)</h2>
-<p>Es el panel de indicadores del negocio por período. Te muestra cómo venís en <b>ventas</b>,
-   <b>producción</b> e <b>inventario</b>, con números y gráficos, para tomar decisiones (cuánto
-   facturaste, qué se vende más, cuánto imprimís, cuánto gastás en material).</p>
-<h3>Cómo leer la pantalla</h3>
+<!-- VENTAS_LISTADO -->
+<h2>20. Ventas (listado y cobros)</h2>
+<p>Es el listado que reemplaza la planilla de ventas en Excel: <b>una fila por pedido aprobado</b>,
+   con el producto, la cantidad, el precio unitario, el beneficio y el desglose de costos (material,
+   mano de obra, máquina, agregados). Si el pedido tiene un solo producto (el caso más común) muestra
+   ese ítem puntual; con varios productos los resume como "N productos" y suma todo.</p>
+<h3>Qué podés editar ahí mismo</h3>
 <ul>
-    <li>Arriba elegís el período con las pestañas <b>Semana</b>, <b>Mes</b> o <b>Año</b>. Al lado
-        ves el <b>rango de fechas</b> exacto que estás mirando.</li>
-    <li>El botón verde <b>"Descargar Excel"</b> baja todo el período en una planilla de <b>5 hojas</b>:
-        Resumen, Facturación, Productos, Clientes y Producción (con un gráfico nativo de Excel).</li>
-    <li>Cada bloque tiene su <b>color</b> para ubicarlo rápido, y los gráficos usan una paleta de
-        varios colores en vez de escala de grises.</li>
+    <li><b>Estado de cobro</b> (por ejemplo: cobrado / pendiente) y <b>método de pago</b> (Efectivo,
+        Transferencia, Mercado Pago, Ualá, Tarjeta, Otro) se cargan directamente en el listado, sin
+        entrar al presupuesto.</li>
 </ul>
-<table class="legend">
-  <tr>
-    <td style="background:#1d4ed8;">VENTAS · azul</td>
-    <td style="background:#15803d;">PRODUCCIÓN · verde</td>
-    <td style="background:#b45309;">INVENTARIO · ámbar</td>
-  </tr>
-</table>
-
-<div class="chart-frame">
-  <p class="chart-title">Así se ve un gráfico en la pantalla (ejemplo: productos más vendidos del mes)</p>
-  <table class="chart">
-    <tr><td class="cl">Llavero con logo — 120</td><td><div style="background:#2563eb; width:288pt; height:11px;">&nbsp;</div></td></tr>
-    <tr><td class="cl">Maceta hexagonal — 95</td><td><div style="background:#16a34a; width:228pt; height:11px;">&nbsp;</div></td></tr>
-    <tr><td class="cl">Soporte de celular — 80</td><td><div style="background:#f59e0b; width:192pt; height:11px;">&nbsp;</div></td></tr>
-    <tr><td class="cl">Figura articulada — 64</td><td><div style="background:#dc2626; width:154pt; height:11px;">&nbsp;</div></td></tr>
-    <tr><td class="cl">Organizador escritorio — 50</td><td><div style="background:#7c3aed; width:120pt; height:11px;">&nbsp;</div></td></tr>
-    <tr><td class="cl">Topper para torta — 38</td><td><div style="background:#0891b2; width:91pt; height:11px;">&nbsp;</div></td></tr>
-  </table>
-  <p class="chart-note">El gráfico de facturación se ve igual pero en barras azules; el embudo de
-     estados se dibuja como una dona con un color por estado. Todos a color, no en gris.</p>
+<h3>Resumen de Cobros</h3>
+<p>Arriba del listado hay un resumen de <b>Cobros</b>: cuánto ya se cobró y cuánto está pendiente,
+   desglosado por <b>estado de cobro</b> y por <b>método de pago</b>. Respeta los filtros y la
+   búsqueda que tengas aplicados abajo, así podés ver el resumen de un cliente, un mes o un producto
+   puntual.</p>
+<div class="ej">
+    <span class="tag">EJEMPLO</span> Filtrás por el mes de junio: el resumen de Cobros te muestra
+    que de $1.240.000 facturados, $980.000 ya se cobraron y $260.000 siguen pendientes, con el
+    detalle de cuánto entró por Transferencia, Efectivo y Mercado Pago.
 </div>
 
-<h3>A) Ventas (azul)</h3>
+<!-- METRICAS -->
+<h2>21. Panel de métricas (resultado, inventario y socios)</h2>
+<p>Es el panel de <b>resultado del negocio</b> por período: cuánto entró, cuánto costó producir,
+   cuánto se gastó en estructura y cuánto quedó de <b>beneficio</b>, con su <b>margen %</b>. También
+   te muestra, a hoy, cuánto dinero tenés <b>inmovilizado en stock</b> y cómo se reparte la ganancia
+   entre los socios del negocio.</p>
+<h3>Cómo leer la pantalla</h3>
+<ul>
+    <li>Arriba elegís el período con las pestañas <b>Semana</b>, <b>Mes</b> o <b>Año</b>, con el
+        <b>rango de fechas</b> exacto al lado.</li>
+    <li>El botón verde <b>"Descargar Excel"</b> y el botón rojo <b>"Descargar PDF"</b> bajan el
+        panel completo para guardarlo o compartirlo.</li>
+</ul>
+<h3>A) Resultado</h3>
 <table>
     <tr><th>Indicador</th><th>Qué mide</th><th>Ejemplo (mes)</th></tr>
-    <tr><td>Facturación aprobada</td><td>Suma del total de los presupuestos aprobados en el período.</td><td>$1.240.000</td></tr>
-    <tr><td>Presupuestos aprobados</td><td>Cuántos se aprobaron en el período.</td><td>8</td></tr>
+    <tr><td>Ingresos</td><td>Facturación de los presupuestos aprobados en el período.</td><td>$1.240.000</td></tr>
+    <tr><td>Costos de producción</td><td>Material (con merma), mano de obra, máquina y agregados de lo vendido.</td><td>$520.000</td></tr>
+    <tr><td>Gastos operativos</td><td>Gastos de estructura del período, sin los extraordinarios.</td><td>$185.000</td></tr>
+    <tr><td>Beneficio bruto</td><td>Ingresos − costos de producción, con su margen %.</td><td>$720.000 (58%)</td></tr>
+    <tr><td>Beneficio neto</td><td>Beneficio bruto − gastos operativos, con su margen %.</td><td>$535.000 (43%)</td></tr>
+    <tr><td>Beneficio neto final</td><td>Beneficio neto − gastos extraordinarios (informativo).</td><td>$535.000 (43%)</td></tr>
+</table>
+<div class="box">
+    <b>Ojo con los porcentajes en períodos chicos:</b> el margen es beneficio ÷ facturación. Si un
+    período tiene poca o ninguna venta, un gasto operativo mínimo puede dar un margen que parece
+    enorme o negativo — no es un error, es la fórmula con números chicos.
+</div>
+<h3>B) Valor del inventario</h3>
+<p>Es una foto <b>a hoy</b> (no del período) de cuánto dinero está inmovilizado en stock: materia
+   prima (filamentos + agregados a costo actual) y productos/piezas ya terminados, mostrados por
+   separado y sumados en un total.</p>
+<h3>C) Distribución de ingresos</h3>
+<p>Reparte el <b>beneficio neto</b> del período entre los <b>socios activos</b> según el porcentaje
+   que tenga cargado cada uno (ver sección 22). Es un reparto simple del período — no lleva cuenta
+   corriente acumulada de retiros o aportes.</p>
+<div class="ej">
+    <span class="tag">EJEMPLO</span> El beneficio neto del mes fue $535.000. Si tenés dos socios
+    activos al 60% y 40%, el panel muestra $321.000 para el primero y $214.000 para el segundo.
+</div>
+
+<!-- SOCIOS -->
+<h2>22. Socios</h2>
+<p>Es el alta de los <b>socios del negocio</b>, para que el Panel de métricas pueda repartir el
+   beneficio. Cada socio tiene un <b>nombre</b>, un <b>porcentaje</b> (0 a 100) y si está
+   <b>activo</b> o no.</p>
+<div class="box">
+    <b>Importante:</b> si los porcentajes de los socios activos no suman 100%, el Panel de métricas
+    te avisa. No hay cuenta corriente: es un reparto del beneficio del período, no un registro de
+    cuánto retiró cada uno.
+</div>
+
+<!-- METRICAS_VENTAS -->
+<h2>23. Panel de ventas (enfoque comercial)</h2>
+<p>Es el panel puramente <b>comercial</b>: responde "¿cómo estamos vendiendo?" sin mezclar
+   rentabilidad (eso vive en el Panel de métricas). Muestra 5 indicadores, en este orden:</p>
+<table>
+    <tr><th>Indicador</th><th>Qué mide</th><th>Ejemplo (mes)</th></tr>
+    <tr><td>Presupuestos aprobados</td><td>Cuántos pedidos se aprobaron en el período.</td><td>8</td></tr>
+    <tr><td>Facturación aprobada</td><td>Suma del total de esos pedidos.</td><td>$1.240.000</td></tr>
     <tr><td>Ticket promedio</td><td>Facturación ÷ cantidad de aprobados.</td><td>$155.000</td></tr>
     <tr><td>Conversión</td><td>De los presupuestos enviados, cuántos se aprobaron.</td><td>66,7% (8 de 12)</td></tr>
-    <tr><td>Margen bruto</td><td>(Facturación − costo de lo vendido) ÷ facturación.</td><td>50%</td></tr>
-    <tr><td>Tiempo de ciclo</td><td>Días promedio entre aprobar y entregar (completar).</td><td>6,5 días</td></tr>
+    <tr><td>Venta diaria promedio</td><td>Facturación ÷ cantidad de días del período.</td><td>$41.333/día</td></tr>
 </table>
-<p>Además vas a ver tres tablas: <b>productos más vendidos</b>, <b>top clientes</b> y el <b>embudo
-   de estados</b>, que es una foto de cuántos presupuestos hay <i>hoy</i> en cada estado.</p>
+<div class="chart-frame">
+  <p class="chart-title">Así se ve el gráfico de facturación por período</p>
+  <table class="chart">
+    <tr><td class="cl">Semana 1 — $280.000</td><td><div style="background:#2563eb; width:112pt; height:11px;">&nbsp;</div></td></tr>
+    <tr><td class="cl">Semana 2 — $410.000</td><td><div style="background:#2563eb; width:164pt; height:11px;">&nbsp;</div></td></tr>
+    <tr><td class="cl">Semana 3 — $195.000</td><td><div style="background:#2563eb; width:78pt; height:11px;">&nbsp;</div></td></tr>
+    <tr><td class="cl">Semana 4 — $355.000</td><td><div style="background:#2563eb; width:142pt; height:11px;">&nbsp;</div></td></tr>
+  </table>
+</div>
+<p>Debajo, el ranking en 2x2: <b>productos más vendidos</b> por $ y por cantidad, y <b>top
+   clientes</b> por $ y por cantidad. No hay margen ni "Beneficio del mes" en esta pantalla — se
+   sacaron a propósito para no distorsionar la lectura del esfuerzo de ventas.</p>
 
-<h3>B) Producción (verde)</h3>
+<!-- PANEL_COSTOS -->
+<h2>24. Panel de costos</h2>
+<p>Muestra la <b>composición del costo de producción</b> del período, sin ventas ni resultado.</p>
 <table>
     <tr><th>Indicador</th><th>Qué mide</th><th>Ejemplo (mes)</th></tr>
-    <tr><td>Piezas impresas</td><td>Suma de piezas de los trabajos terminados en el período.</td><td>320</td></tr>
-    <tr><td>Horas impresas</td><td>Horas de impresión de esos trabajos terminados.</td><td>142,5 h</td></tr>
-    <tr><td>Tasa de reimpresión</td><td>Reimpresiones por falla ÷ trabajos impresos.</td><td>4,7% (3 de 64)</td></tr>
-    <tr><td>Cumplimiento de entrega</td><td>Entregados a tiempo ÷ entregados con fecha pactada.</td><td>87,5% (7 de 8)</td></tr>
+    <tr><td>Material (con merma)</td><td>Costo de filamento de lo vendido, incluyendo el % de merma.</td><td>$210.000</td></tr>
+    <tr><td>Mano de obra</td><td>Post-proceso cargado por producto.</td><td>$95.000</td></tr>
+    <tr><td>Máquina</td><td>Horas de impresión × costo por hora.</td><td>$140.000</td></tr>
+    <tr><td>Agregados</td><td>Herrajes, packaging y demás insumos no-filamento.</td><td>$75.000</td></tr>
+    <tr><td>Total</td><td>Suma de los cuatro anteriores.</td><td>$520.000</td></tr>
 </table>
-<p>Y la tabla <b>Uso por máquina</b>, con trabajos, piezas y horas por impresora.</p>
-
-<h3>C) Inventario y costos (ámbar)</h3>
+<p>Con un gráfico de torta y, siempre visible (sin desplegar), el detalle completo de
+   <b>materiales</b>, <b>agregados</b> y <b>máquinas</b> usados en el período.</p>
+<h3>Inventario y costos</h3>
 <table>
     <tr><th>Indicador</th><th>Qué mide</th><th>Ejemplo (mes)</th></tr>
     <tr><td>Gasto en compras</td><td>Total de las compras confirmadas en el período.</td><td>$380.000 (3 compras)</td></tr>
@@ -758,13 +827,13 @@ HTML = """
     <tr><td>Insumos bajo stock mínimo</td><td>Cuántos materiales están por debajo del mínimo hoy.</td><td>2</td></tr>
 </table>
 <div class="box">
-    <b>Qué fecha define cada métrica:</b> las ventas se miden por <b>fecha de aprobación</b>, la
-    producción por <b>fin de impresión</b> y las compras por <b>fecha de confirmación</b>. El embudo
-    de estados y los insumos bajo stock son una <b>foto del momento actual</b>, no del período.
+    <b>Qué fecha define cada métrica:</b> el costo de producción se mide por <b>fecha de
+    aprobación</b> y las compras por <b>fecha de confirmación</b>. Los insumos bajo stock son una
+    <b>foto del momento actual</b>, no del período.
 </div>
 
 <!-- GASTOS -->
-<h2>21. Gastos (panel de gastos)</h2>
+<h2>25. Gastos (panel de gastos)</h2>
 <p>Esta sección lleva los <b>gastos operativos y de estructura</b> del negocio: lo que NO es compra
    de insumos ni costo de producción (eso va por Inventario). Por ejemplo: alquiler, contador,
    suscripciones, publicidad, internet, etc. Sirve para saber tu <b>resultado operativo</b>.</p>
@@ -778,20 +847,44 @@ HTML = """
 </ul>
 <h3>Topes</h3>
 <p>En <b>Topes</b> ponés un presupuesto mensual por categoría. El panel te avisa si te pasaste.</p>
+<h3>Operativo vs. extraordinario</h3>
+<p>Un gasto puede marcarse como <b>Extraordinario</b> cuando es puntual y no representa la operación
+   normal del negocio (un viaje, un imprevisto). Se carga igual como Gasto, pero queda <b>afuera</b>
+   del resultado operativo del panel y del beneficio neto de Métricas, para que no distorsione la
+   lectura de la salud del negocio. El total general (evolución, categorías, acumulado anual) sigue
+   sumando <b>todos</b> los gastos, porque es la salida de caja real.</p>
 <h3>Panel de gastos</h3>
 <p>Pantalla de solo lectura con <b>filtro por mes y año</b> (mes 0 = todo el año). Muestra el total
-   y el desglose por categoría (tabla + torta), la evolución mensual (barras), el comparativo vs el
-   período anterior, el compromiso mensual recurrente, el <b>resultado operativo</b> (ventas
-   aprobadas del período − gastos) y el control de topes. También exporta a Excel.</p>
+   y el desglose por categoría (tabla + torta, todos los tipos), la evolución mensual (barras), el
+   comparativo vs el período anterior, el compromiso mensual recurrente, el <b>resultado
+   operativo</b> (ventas aprobadas del período − gastos <i>operativos</i>), los <b>gastos
+   extraordinarios</b> aparte (informativo) y el control de topes por categoría.</p>
 <div class="ej">
     <span class="tag">EJEMPLO</span> En junio cargaste: alquiler $120.000 (mensual), contador
-    $40.000 (mensual), publicidad $25.000 (único). El panel muestra gastos del mes <b>$185.000</b>,
-    y si las ventas aprobadas fueron $1.240.000, el <b>resultado operativo</b> es $1.055.000 y los
-    gastos son el <b>14,9%</b> de las ventas.
+    $40.000 (mensual), publicidad $25.000 (único, operativo) y un viaje imprevisto $60.000
+    (extraordinario). El resultado operativo usa solo los primeros tres ($185.000): si las ventas
+    aprobadas fueron $1.240.000, el <b>resultado operativo</b> es $1.055.000 y los gastos son el
+    <b>14,9%</b> de las ventas. El viaje se ve aparte, sin afectar esa lectura.
+</div>
+
+<!-- EXPORT -->
+<h2>26. Exportar a Excel y PDF</h2>
+<p>El Panel de métricas, el Panel de ventas, el Panel de costos y el Panel de gastos tienen dos
+   botones arriba de todo para llevarte el panel completo fuera del sistema:</p>
+<ul>
+    <li>El botón verde <b>"Descargar Excel"</b> baja una planilla con varias hojas (resumen,
+        detalle por producto/cliente, producción, etc. según el panel), lista para guardar o
+        compartir por mail.</li>
+    <li>El botón rojo <b>"Descargar PDF"</b> baja una versión imprimible simplificada del mismo
+        panel (tablas, sin los gráficos interactivos), pensada para imprimir o adjuntar rápido.</li>
+</ul>
+<div class="box">
+    <b>Ojo:</b> ambos respetan el período/mes que tengas elegido en la pantalla al momento de
+    descargar — cambiá el filtro primero y después descargá.
 </div>
 
 <!-- IDIOMA -->
-<h2>22. Selector de idioma (Español / English)</h2>
+<h2>27. Selector de idioma (Español / English)</h2>
 <p>Arriba en la barra del panel hay un <b>selector de idioma</b>. Podés cambiar todo el admin entre
    <b>Español</b> y <b>English</b>: menús, botones, nombres de las secciones, ayudas y mensajes.
    El idioma queda guardado para tu usuario.</p>
@@ -801,7 +894,7 @@ HTML = """
 </div>
 
 <!-- FLUJO -->
-<h2>23. Flujo de trabajo recomendado</h2>
+<h2>28. Flujo de trabajo recomendado</h2>
 <ul>
     <li><span class="step">1.</span> Cargá tus <b>filamentos</b> y <b>agregados</b> con su costo y su stock mínimo.</li>
     <li><span class="step">2.</span> Cargá el stock inicial con <b>Ajustes manuales</b> o <b>Compras</b>.</li>
@@ -813,7 +906,9 @@ HTML = """
     <li><span class="step">8.</span> Mirá el <b>Tablero</b> cada día para ver producción, entregas y qué comprar.</li>
     <li><span class="step">9.</span> Repuestás materiales con <b>Compras</b> confirmadas; la <b>campanita</b> te avisa cuando algo está bajo.</li>
     <li><span class="step">10.</span> Cargá tus <b>gastos</b> a medida que pagás y revisá el <b>Panel de gastos</b>.</li>
-    <li><span class="step">11.</span> Una vez por semana o por mes, mirá <b>Métricas</b> para ver cómo viene el negocio y bajá el Excel si querés guardarlo.</li>
+    <li><span class="step">11.</span> Marcá el <b>estado de cobro</b> y el <b>método de pago</b> de cada venta en el listado de <b>Ventas</b>.</li>
+    <li><span class="step">12.</span> Cargá los <b>socios</b> y su porcentaje una sola vez, para que el reparto de ganancias salga solo.</li>
+    <li><span class="step">13.</span> Una vez por semana o por mes, mirá el <b>Panel de métricas</b> (resultado y reparto), el <b>Panel de ventas</b> (comercial) y el <b>Panel de costos</b>, y bajá el Excel o el PDF si querés guardarlo.</li>
 </ul>
 
 </body>

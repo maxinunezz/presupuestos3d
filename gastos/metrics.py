@@ -153,16 +153,26 @@ def build_gastos_metrics(year: int, month) -> dict:
     # se listan TODAS las que existan (aunque tengan $0 en el período), igual
     # que antes con el enum completo.
     todas_categorias = list(CategoriaGasto.objects.all())
-    por_cat = {cat.pk: {"total": ZERO, "count": 0} for cat in todas_categorias}
+    por_cat = {
+        cat.pk: {"total": ZERO, "count": 0, "operativo": ZERO, "extraordinario": ZERO}
+        for cat in todas_categorias
+    }
     for g in gastos:
-        por_cat[g.categoria_id]["total"] += Decimal(g.monto)
+        monto = Decimal(g.monto)
+        por_cat[g.categoria_id]["total"] += monto
         por_cat[g.categoria_id]["count"] += 1
+        if g.tipo == Gasto.Tipo.OPERATIVO:
+            por_cat[g.categoria_id]["operativo"] += monto
+        else:
+            por_cat[g.categoria_id]["extraordinario"] += monto
     categorias = [
         {
             "value": cat.pk,
             "label": cat.nombre,
             "total": por_cat[cat.pk]["total"],
             "count": por_cat[cat.pk]["count"],
+            "operativo": por_cat[cat.pk]["operativo"],
+            "extraordinario": por_cat[cat.pk]["extraordinario"],
             "pct": (por_cat[cat.pk]["total"] / total_gastos * 100) if total_gastos else ZERO,
         }
         for cat in todas_categorias
@@ -175,17 +185,27 @@ def build_gastos_metrics(year: int, month) -> dict:
     # siga cuadrando con `total_gastos`.
     SIN_AREA = None
     todas_areas = list(AreaResponsable.objects.all())
-    por_area = {area.pk: {"total": ZERO, "count": 0} for area in todas_areas}
-    por_area[SIN_AREA] = {"total": ZERO, "count": 0}
+    por_area = {
+        area.pk: {"total": ZERO, "count": 0, "operativo": ZERO, "extraordinario": ZERO}
+        for area in todas_areas
+    }
+    por_area[SIN_AREA] = {"total": ZERO, "count": 0, "operativo": ZERO, "extraordinario": ZERO}
     for g in gastos:
-        por_area[g.area_id]["total"] += Decimal(g.monto)
+        monto = Decimal(g.monto)
+        por_area[g.area_id]["total"] += monto
         por_area[g.area_id]["count"] += 1
+        if g.tipo == Gasto.Tipo.OPERATIVO:
+            por_area[g.area_id]["operativo"] += monto
+        else:
+            por_area[g.area_id]["extraordinario"] += monto
     areas = [
         {
             "value": area.pk,
             "label": area.nombre,
             "total": por_area[area.pk]["total"],
             "count": por_area[area.pk]["count"],
+            "operativo": por_area[area.pk]["operativo"],
+            "extraordinario": por_area[area.pk]["extraordinario"],
             "pct": (por_area[area.pk]["total"] / total_gastos * 100) if total_gastos else ZERO,
         }
         for area in todas_areas
@@ -197,6 +217,8 @@ def build_gastos_metrics(year: int, month) -> dict:
                 "label": gettext("Sin área"),
                 "total": por_area[SIN_AREA]["total"],
                 "count": por_area[SIN_AREA]["count"],
+                "operativo": por_area[SIN_AREA]["operativo"],
+                "extraordinario": por_area[SIN_AREA]["extraordinario"],
                 "pct": (
                     por_area[SIN_AREA]["total"] / total_gastos * 100
                     if total_gastos
@@ -395,17 +417,36 @@ def _pct_plain(v) -> str:
     return f"{v:.1f}%"
 
 
+def _chart_segments(items) -> dict:
+    """Arma un donut de un solo anillo pero con el gasto operativo y el
+    extraordinario de cada fila como dos porciones consecutivas (mismo color,
+    la extraordinaria más clara) — así el tamaño real de cada porción sigue
+    sumando el total del período, y se ve a simple vista cuánto de cada
+    área/categoría es extraordinario."""
+    labels, values, color_index, is_extra = [], [], [], []
+    idx = 0
+    for it in items:
+        if it["total"] <= 0:
+            continue
+        if it["operativo"] > 0:
+            labels.append(str(it["label"]))
+            values.append(float(it["operativo"]))
+            color_index.append(idx)
+            is_extra.append(False)
+        if it["extraordinario"] > 0:
+            labels.append(str(it["label"]))
+            values.append(float(it["extraordinario"]))
+            color_index.append(idx)
+            is_extra.append(True)
+        idx += 1
+    return {"labels": labels, "values": values, "colorIndex": color_index, "isExtra": is_extra}
+
+
 def template_context(m: dict) -> dict:
     import json
 
-    cat_chart = {
-        "labels": [str(c["label"]) for c in m["categorias"] if c["total"] > 0],
-        "data": [float(c["total"]) for c in m["categorias"] if c["total"] > 0],
-    }
-    area_chart = {
-        "labels": [str(a["label"]) for a in m["areas"] if a["total"] > 0],
-        "data": [float(a["total"]) for a in m["areas"] if a["total"] > 0],
-    }
+    cat_chart = _chart_segments(m["categorias"])
+    area_chart = _chart_segments(m["areas"])
     serie_chart = {
         "labels": [s["label"] for s in m["serie"]],
         "data": [float(s["total"]) for s in m["serie"]],
@@ -419,6 +460,8 @@ def template_context(m: dict) -> dict:
             "pct": _pct_plain(c["pct"]),
             "var_pct": _pct(c["var_pct"]),
             "var_up": (c["var_pct"] is not None and c["var_pct"] > 0),
+            "extraordinario": _money(c["extraordinario"]) if c["extraordinario"] > 0 else "—",
+            "tiene_extraordinario": c["extraordinario"] > 0,
         }
         for c in m["categorias"]
     ]
@@ -428,6 +471,8 @@ def template_context(m: dict) -> dict:
             "total": _money(a["total"]),
             "count": a["count"],
             "pct": _pct_plain(a["pct"]),
+            "extraordinario": _money(a["extraordinario"]) if a["extraordinario"] > 0 else "—",
+            "tiene_extraordinario": a["extraordinario"] > 0,
         }
         for a in m["areas"]
     ]
@@ -585,9 +630,10 @@ def export_xlsx(m: dict):
         gettext("Gasto"),
         gettext("% del total"),
         gettext("Cantidad"),
+        gettext("Extraordinario"),
         m["prev_label"],
     ])
-    style_header(ws2, 1, 5)
+    style_header(ws2, 1, 6)
     for c in m["categorias"]:
         ws2.append(
             [
@@ -595,6 +641,7 @@ def export_xlsx(m: dict):
                 float(c["total"]),
                 float(c["pct"]),
                 c["count"],
+                float(c["extraordinario"]),
                 float(c["prev"]),
             ]
         )

@@ -48,6 +48,7 @@
     .gx-card h3 { margin: 0 0 10px; font-size: 14px; color: #111; }
     .gx-chart-wrap { position: relative; height: 260px; width: 100%; }
     .gx-chart-wrap canvas { max-width: 100%; }
+    .gx-chart-note { margin: 8px 0 0; font-size: 11px; color: #888; }
 
     @media (max-width: 700px) {
         .gx-card { flex: 1 1 100%; }
@@ -104,10 +105,12 @@
     <div class="gx-card">
         <h3>{% translate "Gastos por área responsable" %}</h3>
         <div class="gx-chart-wrap"><canvas id="chartArea"></canvas></div>
+        {% if hay_extraordinarios %}<p class="gx-chart-note">{% translate "El tramo más claro de cada color es la parte extraordinaria de esa área." %}</p>{% endif %}
     </div>
     <div class="gx-card">
         <h3>{% translate "Gastos por categoría" %}</h3>
         <div class="gx-chart-wrap"><canvas id="chartCat"></canvas></div>
+        {% if hay_extraordinarios %}<p class="gx-chart-note">{% translate "El tramo más claro de cada color es la parte extraordinaria de esa categoría." %}</p>{% endif %}
     </div>
 </div>
 
@@ -115,7 +118,7 @@
     <div class="gx-card">
         <h3>{% translate "Desglose por área responsable" %}</h3>
         <table class="gx">
-            <thead><tr><th>{% translate "Área" %}</th><th class="num">{% translate "Gasto" %}</th><th class="num">%</th><th class="num">{% translate "Cant." %}</th></tr></thead>
+            <thead><tr><th>{% translate "Área" %}</th><th class="num">{% translate "Gasto" %}</th><th class="num">%</th><th class="num">{% translate "Cant." %}</th><th class="num">{% translate "Extra." %}</th></tr></thead>
             <tbody>
                 {% for a in areas %}
                 <tr>
@@ -123,9 +126,10 @@
                     <td class="num">{{ a.total }}</td>
                     <td class="num">{{ a.pct }}</td>
                     <td class="num">{{ a.count }}</td>
+                    <td class="num {% if a.tiene_extraordinario %}over{% endif %}">{{ a.extraordinario }}</td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="4" class="empty">{% translate "No hay áreas cargadas. Cargá áreas en «Áreas responsables»." %}</td></tr>
+                <tr><td colspan="5" class="empty">{% translate "No hay áreas cargadas. Cargá áreas en «Áreas responsables»." %}</td></tr>
                 {% endfor %}
             </tbody>
         </table>
@@ -133,7 +137,7 @@
     <div class="gx-card">
         <h3>{% translate "Desglose por categoría" %}</h3>
         <table class="gx">
-            <thead><tr><th>{% translate "Categoría" %}</th><th class="num">{% translate "Gasto" %}</th><th class="num">%</th><th class="num">{% translate "Cant." %}</th><th class="num">{% translate "vs ant." %}</th></tr></thead>
+            <thead><tr><th>{% translate "Categoría" %}</th><th class="num">{% translate "Gasto" %}</th><th class="num">%</th><th class="num">{% translate "Cant." %}</th><th class="num">{% translate "Extra." %}</th><th class="num">{% translate "vs ant." %}</th></tr></thead>
             <tbody>
                 {% for c in categorias %}
                 <tr>
@@ -141,6 +145,7 @@
                     <td class="num">{{ c.total }}</td>
                     <td class="num">{{ c.pct }}</td>
                     <td class="num">{{ c.count }}</td>
+                    <td class="num {% if c.tiene_extraordinario %}over{% endif %}">{{ c.extraordinario }}</td>
                     <td class="num {% if c.var_up %}up-txt{% else %}down-txt{% endif %}">{{ c.var_pct }}</td>
                 </tr>
                 {% endfor %}
@@ -237,30 +242,50 @@
     var area = {{ area_chart_json|safe }};
     var serie = {{ serie_chart_json|safe }};
     var legendPosition = window.innerWidth < 700 ? "bottom" : "right";
+    var EXTRA_SUFFIX = " {% translate '(extraordinario)' %}";
 
-    if (area.data.length) {
-        new Chart(document.getElementById("chartArea"), {
+    function withAlpha(hex, alpha) {
+        var r = parseInt(hex.slice(1, 3), 16);
+        var g = parseInt(hex.slice(3, 5), 16);
+        var b = parseInt(hex.slice(5, 7), 16);
+        return "rgba(" + r + "," + g + "," + b + "," + alpha + ")";
+    }
+
+    // Donut de un solo anillo: cada área/categoría aporta hasta dos porciones
+    // consecutivas del mismo color (operativo sólido, extraordinario más
+    // claro), así el tamaño de cada porción sigue siendo proporcional al
+    // total real del período y se ve a simple vista qué parte es extraordinaria.
+    function buildDonut(canvasId, chartData) {
+        if (!chartData.values.length) return;
+        var bg = chartData.colorIndex.map(function (ci, i) {
+            var color = PALETTE[ci % PALETTE.length];
+            return chartData.isExtra[i] ? withAlpha(color, 0.35) : color;
+        });
+        var labels = chartData.labels.map(function (label, i) {
+            return chartData.isExtra[i] ? label + EXTRA_SUFFIX : label;
+        });
+        new Chart(document.getElementById(canvasId), {
             type: "doughnut",
-            data: { labels: area.labels, datasets: [{ data: area.data, backgroundColor: PALETTE, borderWidth: 0 }] },
+            data: { labels: labels, datasets: [{ data: chartData.values, backgroundColor: bg, borderWidth: 0 }] },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                plugins: { legend: { position: legendPosition } },
+                plugins: {
+                    legend: {
+                        position: legendPosition,
+                        labels: {
+                            filter: function (legendItem) {
+                                return !chartData.isExtra[legendItem.index];
+                            }
+                        }
+                    }
+                },
             }
         });
     }
 
-    if (cat.data.length) {
-        new Chart(document.getElementById("chartCat"), {
-            type: "doughnut",
-            data: { labels: cat.labels, datasets: [{ data: cat.data, backgroundColor: PALETTE, borderWidth: 0 }] },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { position: legendPosition } },
-            }
-        });
-    }
+    buildDonut("chartArea", area);
+    buildDonut("chartCat", cat);
 
     new Chart(document.getElementById("chartSerie"), {
         type: "bar",

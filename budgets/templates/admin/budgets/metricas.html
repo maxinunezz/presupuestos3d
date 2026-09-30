@@ -25,13 +25,15 @@
     del gasto). Los gastos <b>extraordinarios</b> (viajes, imprevistos) quedan afuera del
     beneficio neto para no distorsionarlo; se muestran aparte, informativos.{% endblocktranslate %}
 </p>
-<div class="mx-kpis mx-kpis--resultado">
+<div class="mx-kpis mx-kpis--resultado mx-kpis--resultado-row">
     <div class="kpi mx-ingresos"><span class="n">{{ facturacion }}</span><span class="l">{% translate "Ingresos" %}</span><span class="s">{% blocktranslate %}Facturación de los {{ n_aprobados }} pedidos aprobados del período (sin cancelados ni pedidos para stock){% endblocktranslate %}</span></div>
     <div class="kpi mx-produccion"><span class="n">{{ costo_produccion }}</span><span class="l">{% translate "Costos de producción" %}</span><span class="s">{% translate "Material, mano de obra, máquina y agregados de lo vendido · ver desglose en Panel de costos" %}</span></div>
     <div class="kpi mx-negativo"><span class="n">{{ gastos_operativos }}</span><span class="l">{% translate "Gastos operativos" %}</span><span class="s">{% translate "Gastos de estructura del período (por fecha del gasto), sin extraordinarios · ver desglose en Panel de gastos" %}</span></div>
     {% if hay_extraordinarios %}
     <div class="kpi mx-ext"><span class="n">{{ gastos_extraordinarios }}</span><span class="l">{% translate "Gastos extraordinarios" %}</span><span class="s">{% translate "Informativo, no afecta el beneficio neto" %}</span></div>
     {% endif %}
+</div>
+<div class="mx-kpis mx-kpis--resultado mx-kpis--resultado-row">
     <div class="kpi mx-positivo"><span class="n">{{ beneficio_bruto }}</span><span class="l">{% translate "Beneficio bruto" %}</span><span class="s">{% blocktranslate %}Ingresos − producción · {{ margen_bruto_pct }} de margen{% endblocktranslate %}</span></div>
     <div class="kpi mx-positivo"><span class="n">{{ beneficio_neto }}</span><span class="l">{% translate "Beneficio neto" %}</span><span class="s">{% blocktranslate %}− gastos operativos · {{ margen_neto_pct }} de margen{% endblocktranslate %}</span></div>
     {% if hay_extraordinarios %}
