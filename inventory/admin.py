@@ -158,12 +158,17 @@ class FilamentAdmin(admin.ModelAdmin):
 
 @admin.register(Aggregate)
 class AggregateAdmin(admin.ModelAdmin):
+    # Mismo ancho angosto que usa FilamentAdmin para sus campos numéricos,
+    # para que ambos listados queden con el mismo criterio visual.
+    NARROW_WIDTH = FilamentAdmin.NARROW_WIDTH
+
     list_display = (
         "name",
         "category",
         "unit",
+        "notes_display",
         "cost_per_unit",
-        "stock_quantity",
+        "stock_quantity_display",
         "min_stock",
         "stock_status",
         "is_active",
@@ -174,6 +179,31 @@ class AggregateAdmin(admin.ModelAdmin):
     formfield_overrides = DECIMAL_LOCALIZE
     # El stock NO se edita a mano: solo cambia al confirmar una Compra.
     readonly_fields = ("stock_quantity",)
+
+    def formfield_for_dbfield(self, db_field, request, **kwargs):
+        formfield = super().formfield_for_dbfield(db_field, request, **kwargs)
+        # Los inputs de "Costo por unidad" y "Stock mínimo" en el listado
+        # (list_editable) salen muy anchos por defecto; los angostamos.
+        if db_field.name in ("cost_per_unit", "min_stock") and formfield is not None:
+            formfield.widget.attrs["style"] = f"width: {self.NARROW_WIDTH};"
+        return formfield
+
+    @admin.display(description=_("Descripción"))
+    def notes_display(self, obj):
+        if not obj.notes:
+            return "—"
+        text = obj.notes.strip().splitlines()[0]
+        return text if len(text) <= 40 else text[:37] + "…"
+
+    @admin.display(description=_("Stock disponible"), ordering="stock_quantity")
+    def stock_quantity_display(self, obj):
+        # "Stock disponible" es de solo lectura (no list_editable), pero lo
+        # angostamos igual que los inputs de al lado para que la fila no
+        # quede tan ancha.
+        return mark_safe(
+            f'<span style="display:inline-block;width:{self.NARROW_WIDTH};">'
+            f"{obj.stock_quantity}</span>"
+        )
 
     @admin.display(description=_("Estado stock"))
     def stock_status(self, obj):
