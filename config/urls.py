@@ -19,6 +19,11 @@ from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path
 
+from config.admin_dashboard import patch_admin_site
+
+# Reordena/reagrupa el índice del admin (ver config/admin_dashboard.py).
+patch_admin_site()
+
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include('config.api_urls')),

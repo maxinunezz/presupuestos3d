@@ -19,6 +19,18 @@ msgstr "Production"
 msgid "Gastos"
 msgstr "Expenses"
 
+msgid "Métricas"
+msgstr "Metrics"
+
+msgid "Ventas y presupuestos"
+msgstr "Sales and budgets"
+
+msgid "Inventario y compras"
+msgstr "Inventory and purchases"
+
+msgid "Configuración"
+msgstr "Settings"
+
 msgid "Otro"
 msgstr "Other"
 
@@ -921,9 +933,6 @@ msgstr "Parts stock"
 
 msgid "Métrica"
 msgstr "Metric"
-
-msgid "Métricas"
-msgstr "Metrics"
 
 msgid "Enviado"
 msgstr "Sent"

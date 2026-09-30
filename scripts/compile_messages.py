@@ -39,6 +39,12 @@ COMMON = {
     'Presupuestos': 'Budgets',
     'Producción': 'Production',
     'Gastos': 'Expenses',
+    # Títulos de las secciones del índice del admin (ver
+    # config/admin_dashboard.py), que reagrupa modelos de varias apps.
+    'Métricas': 'Metrics',
+    'Ventas y presupuestos': 'Sales and budgets',
+    'Inventario y compras': 'Inventory and purchases',
+    'Configuración': 'Settings',
 }
 
 INVENTORY = {
