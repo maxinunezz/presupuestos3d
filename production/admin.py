@@ -1132,7 +1132,11 @@ class TableroAdmin(admin.ModelAdmin):
             "proximas": proximas,
             "buy_filaments": fc_rows(forecast["filaments"], "g"),
             "buy_aggregates": fc_rows(forecast["aggregates"]),
-            "total_pending_hours": format_hours(total_pending_hours_raw),
+            # El indicador principal muestra minutos (más legible para valores
+            # chicos, que en horas quedaban como "0m" sin más contexto) con el
+            # equivalente en horas como subtítulo.
+            "total_pending_minutes": round(total_pending_hours_raw * 60),
+            "total_pending_hours_equiv": f"{total_pending_hours_raw:.1f} h",
             "printing_count": printing_count,
             "pending_count": pending_count,
             "in_production_count": in_production_count,

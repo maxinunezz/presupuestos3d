@@ -489,6 +489,7 @@ BUDGETS = {
     'Ej: 100 redondea el total a la centena más cercana. 0 = sin redondeo.': 'E.g. 100 rounds the total to the nearest hundred. 0 = no rounding.',
     'Enviado el': 'Sent on',
     'Aprobado el': 'Approved on',
+    '%(date)s a las %(time)s': '%(date)s at %(time)s',
     'Producción iniciada el': 'Production started on',
     'Producción terminada el': 'Production finished on',
     'Completado el': 'Completed on',
@@ -781,6 +782,15 @@ BUDGETS = {
     'Panel de costos': 'Costs panel',
     'Composición del costo de producción por período: material, mano de obra, máquina y agregados, promedio de lo aprobado. Sin ventas ni resultado.':
         'Production cost breakdown by period: material, labor, machine and add-ons, average of what was approved. No sales or result.',
+    # "Inventario y costos" se separó del Panel de métricas al final del
+    # Panel de costos: ahora Panel de métricas solo muestra Resultado.
+    'Resultado del negocio por período: ingresos, costos de producción, gastos operativos y beneficio.':
+        'Business result by period: revenue, production costs, operating expenses and profit.',
+    'Ver Panel de costos (composición del costo de producción e inventario)':
+        'View Costs panel (production cost breakdown and inventory)',
+    'Ver Panel de métricas (resultado)': 'View Metrics panel (result)',
+    'Composición del costo de producción por período: material, mano de obra, máquina y agregados, promedio de lo aprobado. Inventario y compras abajo. Sin ventas ni resultado.':
+        'Production cost breakdown by period: material, labor, machine and add-ons, average of what was approved. Inventory and purchases below. No sales or result.',
     'Producción del mes': 'Production this month',
     'Ventas del negocio por período, por fecha de aprobación.': 'Business sales by period, by approval date.',
     'Cobros': 'Payments',
@@ -983,6 +993,8 @@ PRODUCTION = {
     'imprimiendo ahora': 'printing now',
     'en cola (sin arrancar)': 'queued (not started)',
     'horas de impresión pendientes': 'pending print hours',
+    'minutos de impresión pendientes': 'minutes of pending printing',
+    '= %(total_pending_hours_equiv)s': '= %(total_pending_hours_equiv)s',
     'pedidos en producción': 'orders in production',
     'Qué se está imprimiendo': 'What is printing',
     'próximo': 'next',

@@ -1,27 +1,19 @@
 {% extends "admin/budgets/_metrics_base.html" %}
 {% load i18n %}
-{# Panel de métricas: inventario y resultado. Producción (piezas/horas/uso de #}
-{# máquinas) vive en el Tablero de producción; costos de producción en el #}
-{# Panel de costos; ventas y el estado de cobro en el Panel de ventas — todas #}
-{# enlazadas abajo para no duplicar contenido. #}
+{# Panel de métricas: resultado (beneficio bruto/neto/neto final). Producción #}
+{# (piezas/horas/uso de máquinas) vive en el Tablero de producción; costos de #}
+{# producción e inventario/compras en el Panel de costos; ventas y el estado #}
+{# de cobro en el Panel de ventas — todas enlazadas abajo para no duplicar #}
+{# contenido. #}
 
 {% block mx_intro %}
-{% translate "KPIs del negocio por período: inventario y resultado. Compras por fecha de confirmación; el stock bajo es una foto del estado actual (no depende del período)." %}
+{% translate "Resultado del negocio por período: ingresos, costos de producción, gastos operativos y beneficio." %}
 <a href="{% url 'admin:budgets_metricasventas_changelist' %}">→ {% translate "Ver Panel de ventas (facturación, conversión, cobros)" %}</a>
-<a href="{% url 'admin:budgets_panelcostos_changelist' %}">→ {% translate "Ver Panel de costos (composición del costo de producción)" %}</a>
+<a href="{% url 'admin:budgets_panelcostos_changelist' %}">→ {% translate "Ver Panel de costos (composición del costo de producción e inventario)" %}</a>
 <a href="{% url 'admin:production_tablero_changelist' %}">→ {% translate "Ver Tablero de producción (piezas impresas, horas, uso por máquina)" %}</a>
 {% endblock %}
 
 {% block mx_body %}
-<!-- ===================== B) INVENTARIO / COSTOS ===================== -->
-<div class="mx-section mx-section--inv">📦 {% translate "Inventario y costos" %}</div>
-<div class="mx-kpis mx-kpis--inv">
-    <div class="kpi"><span class="n">{{ gasto_compras }}</span><span class="l">{% translate "Gasto en compras" %}</span><span class="s">{% blocktranslate %}{{ n_compras }} compra/s{% endblocktranslate %}</span></div>
-    <div class="kpi"><span class="n">{{ consumo_valor }}</span><span class="l">{% translate "Consumo de material ($)" %}</span></div>
-    <div class="kpi"><span class="n">{{ fil_grams }}</span><span class="l">{% translate "Filamento consumido" %}</span></div>
-    <div class="kpi"><span class="n">{{ low_stock }}</span><span class="l">{% translate "Insumos bajo stock mínimo" %}</span></div>
-</div>
-
 <!-- ===================== D) RESULTADO ===================== -->
 <div class="mx-section mx-section--resultado">📊 {% translate "Resultado" %}</div>
 <p class="mx-intro">

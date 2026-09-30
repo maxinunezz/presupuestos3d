@@ -126,11 +126,12 @@ media/           # uploads locales (.3mf/gcode) — efímero en prod
   de cobro y por método de pago, sobre los pedidos listados según los filtros
   aplicados) — se movió ahí desde el Panel de ventas de Métricas, porque el
   estado de cobro y el método de pago se cargan justo en esta página.
-- Proxy de admin: **Metricas** ("Panel de métricas": producción, inventario,
-  costos y resultado, ver abajo) y **MetricasVentas** ("Panel de ventas":
-  enfoque puramente comercial —volumen y eficiencia de ventas, sin costos de
-  producción ni rentabilidad—, separado de Métricas para no amontonar todo en
-  un único dashboard larguísimo — ver abajo).
+- Proxy de admin: **Metricas** ("Panel de métricas": solo resultado, ver
+  abajo), **MetricasVentas** ("Panel de ventas": enfoque puramente comercial
+  —volumen y eficiencia de ventas, sin costos de producción ni rentabilidad—,
+  separado de Métricas para no amontonar todo en un único dashboard
+  larguísimo — ver abajo) y **PanelCostos** ("Panel de costos": composición
+  del costo de producción e inventario/compras — ver abajo).
 
 ### production
 - **Maquina**: una impresora. `is_active`, `supports_multicolor` (la Bambu Lab
@@ -286,34 +287,57 @@ compras de insumos, que van por inventory). Sirve para el resultado operativo.
   `finished_at`, compras por `confirmed_at`. `build_metrics()`/
   `template_context()` calculan SIEMPRE todos los datos (ventas, producción,
   inventario, costos, resultado) sin importar qué página los va a
-  mostrar; es la vista de admin la que decide qué mostrar. Dos páginas en el
-  admin, ambas dentro de la sección "Métricas" y con el mismo motor:
-  - **Panel de métricas** (proxy `Metricas`): producción, inventario, costos
-    de producción y resultado (beneficio bruto/neto/neto final).
-  - **Panel de ventas** (proxy `MetricasVentas`): **enfoque puramente
-    comercial** — responde "¿cómo estamos vendiendo y qué tan eficiente es el
-    equipo comercial?", sin ningún indicador de rentabilidad (eso vive en
-    Panel de métricas). Muestra 5 KPIs, en este orden (pedido puntual del
-    dueño): Presupuestos aprobados (cantidad), Facturación aprobada, Ticket
-    promedio, Conversión (% de presupuestos enviados que terminan aprobados) y
-    Venta diaria promedio (facturación del período sobre la cantidad de días
-    que tiene ese período — con la vista de mes, los días del mes).
-    Debajo, el gráfico de Facturación por período, y al final el
-    ranking de productos/clientes (2x2: Productos más vendidos por $ y por
-    cantidad, Top clientes por $ y por cantidad). No tiene margen ni
-    "Beneficio del mes" (se sacaron a propósito: distorsionan el objetivo de
-    medir esfuerzo de ventas) ni Cobros (se movió al listado de `PanelVentas`,
-    en "Ventas y presupuestos", porque el estado de cobro y el método de pago
-    se cargan justo ahí). Cada página linkea a la otra, y el Panel de ventas
-    también linkea al listado de Ventas para ver Cobros.
+  mostrar; es la vista de admin la que decide qué mostrar. Tres páginas en el
+  admin, todas con el mismo motor:
+  - **Panel de métricas** (proxy `Metricas`, sección "Métricas"): **solo
+    resultado** — ingresos, costos de producción, gastos operativos y
+    beneficio (bruto/neto/neto final). Producción (piezas/horas/uso de
+    máquinas) vive en el Tablero de producción; costos de producción e
+    inventario/compras en el Panel de costos; ventas y cobros en el Panel de
+    ventas/Ventas — todo enlazado desde acá para no duplicar contenido.
+  - **Panel de ventas** (proxy `MetricasVentas`, sección "Métricas"):
+    **enfoque puramente comercial** — responde "¿cómo estamos vendiendo y qué
+    tan eficiente es el equipo comercial?", sin ningún indicador de
+    rentabilidad (eso vive en Panel de métricas). Muestra 5 KPIs, en este
+    orden (pedido puntual del dueño): Presupuestos aprobados (cantidad),
+    Facturación aprobada, Ticket promedio, Conversión (% de presupuestos
+    enviados que terminan aprobados) y Venta diaria promedio (facturación del
+    período sobre la cantidad de días que tiene ese período — con la vista de
+    mes, los días del mes). Debajo, el gráfico de Facturación por período, y
+    al final el ranking de productos/clientes (2x2: Productos más vendidos
+    por $ y por cantidad, Top clientes por $ y por cantidad). No tiene margen
+    ni "Beneficio del mes" (se sacaron a propósito: distorsionan el objetivo
+    de medir esfuerzo de ventas) ni Cobros (se movió al listado de
+    `PanelVentas`, en "Ventas y presupuestos", porque el estado de cobro y el
+    método de pago se cargan justo ahí). Cada página linkea a la otra, y el
+    Panel de ventas también linkea al listado de Ventas para ver Cobros.
+  - **Panel de costos** (proxy `PanelCostos`, sección "Métricas", entre Panel
+    de ventas y Panel de gastos): composición del costo de producción del
+    período (5 KPIs — material con merma, mano de obra, máquina, agregados,
+    total — + gráfico de torta) con el desglose completo siempre visible (sin
+    desplegable: materiales, agregados y máquinas usados en el período), y al
+    final la sección "Inventario y costos" (gasto en compras, consumo de
+    material, filamento consumido, insumos bajo stock mínimo). Sin ventas ni
+    resultado. Antes vivían como secciones del Panel de métricas; se
+    separaron a su propia página para no amontonar todo en un único
+    dashboard larguísimo.
   Comparten `templates/admin/budgets/_metrics_base.html` (estilos, barra de
   período/mes/export, y el `<script>` que instancia Chart.js) vía bloques
-  `mx_intro`/`mx_body`/`mx_charts`; `metricas.html` y `metricas_ventas.html`
-  solo definen su propio contenido. `admin.py` comparte la lógica de
-  `changelist_view` (parseo de período/mes, export a xlsx) en una base común
-  `_MetricsDashboardAdmin`, con `MetricasAdmin`/`MetricasVentasAdmin` como
-  subclases finas (solo cambian `change_list_template`/`dashboard_title`).
-  Export a Excel (openpyxl, 5 hojas) disponible desde ambas páginas.
+  `mx_intro`/`mx_body`/`mx_charts`; `metricas.html`, `metricas_ventas.html` y
+  `panel_costos.html` solo definen su propio contenido. `admin.py` comparte la
+  lógica de `changelist_view` (parseo de período/mes, export a xlsx) en una
+  base común `_MetricsDashboardAdmin`, con `MetricasAdmin`/
+  `MetricasVentasAdmin`/`PanelCostosAdmin` como subclases finas (solo cambian
+  `change_list_template`/`dashboard_title`). Export a Excel (openpyxl) desde
+  las tres páginas.
+  Por separado, el **Tablero de producción** (proxy `Tablero`, primero en la
+  sección "Producción", justo arriba de Cola de producción) también reusa
+  `build_metrics()`/`template_context()` (llamado directo desde
+  `TableroAdmin.changelist_view`, sin extender `_metrics_base.html` para no
+  arrastrar la barra de período/Excel) para mostrar arriba de todo una
+  sección "Producción del mes": piezas impresas, horas impresas, % de
+  reimpresión y cumplimiento de entregas, más un gráfico de horas por máquina
+  y su tabla de uso.
 
 ## Admin: patrones usados
 

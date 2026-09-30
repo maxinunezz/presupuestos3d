@@ -335,8 +335,7 @@ class PanelVentasAdmin(admin.ModelAdmin):
         "cantidad_display",
         "precio_unitario_display",
         "total_display",
-        "approved_at",
-        "mes_display",
+        "approved_at_display",
         "status",
         "estado_venta",
         "medio_pago",
@@ -416,8 +415,7 @@ class PanelVentasAdmin(admin.ModelAdmin):
         "client_name",
         "para_stock",
         "status",
-        "approved_at",
-        "mes_display",
+        "approved_at_display",
         "producto_display",
         "cantidad_display",
         "precio_unitario_display",
@@ -435,8 +433,7 @@ class PanelVentasAdmin(admin.ModelAdmin):
         "client_name",
         "para_stock",
         "status",
-        "approved_at",
-        "mes_display",
+        "approved_at_display",
         "producto_display",
         "cantidad_display",
         "precio_unitario_display",
@@ -487,11 +484,19 @@ class PanelVentasAdmin(admin.ModelAdmin):
             return f"$ {format_money(items[0].effective_unit_price)}"
         return "—"
 
-    @admin.display(description=_("Mes"))
-    def mes_display(self, obj):
+    @admin.display(description=_("Aprobado el"), ordering="approved_at")
+    def approved_at_display(self, obj):
+        # Formato corto dd/mm/aaaa a las HH:MM en vez del formato largo default
+        # del admin (ej. "30 de septiembre de 2026 a las 12:18"): con la fecha
+        # completa a la vista, la columna "Mes" (aparte) quedaba redundante y
+        # se sacó del listado.
         if not obj.approved_at:
             return "—"
-        return timezone.localtime(obj.approved_at).strftime("%m/%Y")
+        dt = timezone.localtime(obj.approved_at)
+        return gettext("%(date)s a las %(time)s") % {
+            "date": dt.strftime("%d/%m/%Y"),
+            "time": dt.strftime("%H:%M"),
+        }
 
     @admin.display(description=_("Beneficio"))
     def beneficio_display(self, obj):
@@ -776,6 +781,7 @@ class PresupuestoAdmin(admin.ModelAdmin):
     inlines = (PresupuestoItemInline, ProductionJobInline)
     formfield_overrides = DECIMAL_LOCALIZE
     readonly_fields = (
+        "created_at",
         "approved_at",
         "sent_at",
         "production_started_at",
@@ -805,6 +811,7 @@ class PresupuestoAdmin(admin.ModelAdmin):
             {
                 "classes": ("collapse",),
                 "fields": (
+                    "created_at",
                     "sent_at",
                     "approved_at",
                     "production_started_at",

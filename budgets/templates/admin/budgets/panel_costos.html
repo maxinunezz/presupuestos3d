@@ -1,14 +1,15 @@
 {% extends "admin/budgets/_metrics_base.html" %}
 {% load i18n %}
 {# Panel de costos: composición del costo de producción por período (material, #}
-{# mano de obra, máquina y agregados). Antes era la sección "Costos de #}
-{# producción" del Panel de métricas; se separó a su propia página para no #}
-{# amontonar todo en un único dashboard larguísimo. Sin ventas ni resultado — #}
-{# eso vive en Panel de métricas/Panel de ventas. #}
+{# mano de obra, máquina y agregados) e inventario/compras. Antes eran las #}
+{# secciones "Costos de producción" e "Inventario y costos" del Panel de #}
+{# métricas; se separaron a su propia página para no amontonar todo en un #}
+{# único dashboard larguísimo. Sin ventas ni resultado — eso vive en Panel de #}
+{# métricas/Panel de ventas. #}
 
 {% block mx_intro %}
-{% translate "Composición del costo de producción por período: material, mano de obra, máquina y agregados, promedio de lo aprobado. Sin ventas ni resultado." %}
-<a href="{% url 'admin:budgets_metricas_changelist' %}">→ {% translate "Ver Panel de métricas (producción, inventario y resultado)" %}</a>
+{% translate "Composición del costo de producción por período: material, mano de obra, máquina y agregados, promedio de lo aprobado. Inventario y compras abajo. Sin ventas ni resultado." %}
+<a href="{% url 'admin:budgets_metricas_changelist' %}">→ {% translate "Ver Panel de métricas (resultado)" %}</a>
 <a href="{% url 'admin:budgets_metricasventas_changelist' %}">→ {% translate "Ver Panel de ventas (facturación, conversión, cobros)" %}</a>
 {% endblock %}
 
@@ -72,6 +73,15 @@
             </table>
         </div>
     </div>
+</div>
+
+<!-- ===================== INVENTARIO Y COSTOS ===================== -->
+<div class="mx-section mx-section--inv">📦 {% translate "Inventario y costos" %}</div>
+<div class="mx-kpis mx-kpis--inv">
+    <div class="kpi"><span class="n">{{ gasto_compras }}</span><span class="l">{% translate "Gasto en compras" %}</span><span class="s">{% blocktranslate %}{{ n_compras }} compra/s{% endblocktranslate %}</span></div>
+    <div class="kpi"><span class="n">{{ consumo_valor }}</span><span class="l">{% translate "Consumo de material ($)" %}</span></div>
+    <div class="kpi"><span class="n">{{ fil_grams }}</span><span class="l">{% translate "Filamento consumido" %}</span></div>
+    <div class="kpi"><span class="n">{{ low_stock }}</span><span class="l">{% translate "Insumos bajo stock mínimo" %}</span></div>
 </div>
 {% endblock %}
 

@@ -982,6 +982,9 @@ msgstr "Sent on"
 msgid "Aprobado el"
 msgstr "Approved on"
 
+msgid "%(date)s a las %(time)s"
+msgstr "%(date)s at %(time)s"
+
 msgid "Producción iniciada el"
 msgstr "Production started on"
 
@@ -1775,6 +1778,18 @@ msgstr "Costs panel"
 msgid "Composición del costo de producción por período: material, mano de obra, máquina y agregados, promedio de lo aprobado. Sin ventas ni resultado."
 msgstr "Production cost breakdown by period: material, labor, machine and add-ons, average of what was approved. No sales or result."
 
+msgid "Resultado del negocio por período: ingresos, costos de producción, gastos operativos y beneficio."
+msgstr "Business result by period: revenue, production costs, operating expenses and profit."
+
+msgid "Ver Panel de costos (composición del costo de producción e inventario)"
+msgstr "View Costs panel (production cost breakdown and inventory)"
+
+msgid "Ver Panel de métricas (resultado)"
+msgstr "View Metrics panel (result)"
+
+msgid "Composición del costo de producción por período: material, mano de obra, máquina y agregados, promedio de lo aprobado. Inventario y compras abajo. Sin ventas ni resultado."
+msgstr "Production cost breakdown by period: material, labor, machine and add-ons, average of what was approved. Inventory and purchases below. No sales or result."
+
 msgid "Producción del mes"
 msgstr "Production this month"
 
@@ -2095,6 +2110,12 @@ msgstr "queued (not started)"
 
 msgid "horas de impresión pendientes"
 msgstr "pending print hours"
+
+msgid "minutos de impresión pendientes"
+msgstr "minutes of pending printing"
+
+msgid "= %(total_pending_hours_equiv)s"
+msgstr "= %(total_pending_hours_equiv)s"
 
 msgid "pedidos en producción"
 msgstr "orders in production"

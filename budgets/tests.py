@@ -1187,9 +1187,10 @@ class PanelVentasColumnasTests(TestCase):
         self.assertEqual(self.admin.labor_display(pres), "$ 90,00")
         self.assertEqual(self.admin.extras_display(pres), "$ 300,00")
         self.assertEqual(self.admin.beneficio_display(pres), "$ -690,00")
+        dt = timezone.localtime(pres.approved_at)
         self.assertEqual(
-            self.admin.mes_display(pres),
-            timezone.localtime(pres.approved_at).strftime("%m/%Y"),
+            self.admin.approved_at_display(pres),
+            f"{dt.strftime('%d/%m/%Y')} a las {dt.strftime('%H:%M')}",
         )
 
     def test_pedido_con_varios_productos_se_resume(self):
@@ -1402,8 +1403,8 @@ class MetricasVentasPaginaTests(TestCase):
 
     def test_panel_de_metricas_ya_no_muestra_ventas_ni_cobros(self):
         # Las secciones de ventas/cobros se movieron a MetricasVentas/Ventas;
-        # producción al Tablero y costos al Panel de costos: el panel de
-        # métricas (inventario/resultado) no debe repetir nada de eso.
+        # producción al Tablero, costos e inventario al Panel de costos: el
+        # panel de métricas (solo resultado) no debe repetir nada de eso.
         resp = self.client.get(self.url_metricas, {"period": "month"})
         self.assertEqual(resp.status_code, 200)
         self.assertNotContains(resp, "Facturación aprobada")
@@ -1411,8 +1412,8 @@ class MetricasVentasPaginaTests(TestCase):
         self.assertNotContains(resp, "Por estado de cobro")
         self.assertNotContains(resp, "Piezas impresas")
         self.assertNotContains(resp, "Total costo de producción")
+        self.assertNotContains(resp, "Gasto en compras")
         # Pero sigue teniendo lo propio de este panel.
-        self.assertContains(resp, "Gasto en compras")
         self.assertContains(resp, "Beneficio neto")
 
     def test_panel_de_ventas_tiene_top_clientes_por_cantidad(self):
@@ -1455,6 +1456,9 @@ class PanelCostosPaginaTests(TestCase):
         self.assertContains(resp, "Total costo de producción")
         self.assertContains(resp, "Materiales usados")
         self.assertContains(resp, str(self.fil))
+        # "Inventario y costos" se movió acá desde el Panel de métricas.
+        self.assertContains(resp, "Inventario y costos")
+        self.assertContains(resp, "Gasto en compras")
 
     def test_no_muestra_ventas_ni_produccion_ni_resultado(self):
         resp = self.client.get(self.url, {"period": "month"})
