@@ -879,6 +879,7 @@ PRODUCTION = {
     'Marcar impresiones obsoletas': 'Mark prints obsolete',
     'Inicio est.': 'Est. start',
     'Fin impr. est.': 'Est. print end',
+    'Fin impr. real': 'Actual print end',
     "Trabajo '%(obj)s' impreso: %(surplus)s unidad(es) sobrante(s) "
     "se sumaron al stock de la pieza.":
         "Job '%(obj)s' printed: %(surplus)s surplus unit(s) "

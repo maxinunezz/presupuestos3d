@@ -1904,6 +1904,9 @@ msgstr "Est. start"
 msgid "Fin impr. est."
 msgstr "Est. print end"
 
+msgid "Fin impr. real"
+msgstr "Actual print end"
+
 msgid "Trabajo '%(obj)s' impreso: %(surplus)s unidad(es) sobrante(s) se sumaron al stock de la pieza."
 msgstr "Job '%(obj)s' printed: %(surplus)s surplus unit(s) were added to the part's stock."
 

@@ -288,6 +288,7 @@ class ProductionJobAdmin(admin.ModelAdmin):
         "print_hours_display",
         "estimated_start_display",
         "estimated_print_end_display",
+        "finished_at_display",
     )
     # Por defecto se ordenan por fecha de ingreso a la cola (más viejo primero,
     # como una cola real): el trabajo se crea al aprobar su presupuesto, así
@@ -474,6 +475,13 @@ class ProductionJobAdmin(admin.ModelAdmin):
     @admin.display(description=_("Fin impr. est."))
     def estimated_print_end_display(self, obj):
         return _fmt_dt(obj.estimated_print_end)
+
+    @admin.display(description=_("Fin impr. real"), ordering="finished_at")
+    def finished_at_display(self, obj):
+        # Fecha real en que se marcó el trabajo como Impreso (`finished_at`),
+        # a diferencia de "Fin impr. est." que es solo la proyección del
+        # scheduler. Vacío mientras el trabajo no esté Impreso.
+        return _fmt_dt(obj.finished_at)
 
     def save_model(self, request, obj, form, change):
         previous_status = None
