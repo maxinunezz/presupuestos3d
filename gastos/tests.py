@@ -17,7 +17,10 @@ def categoria(nombre):
     return CategoriaGasto.objects.get_or_create(nombre=nombre)[0]
 
 
-def gasto(cat, monto, dia, mes=6, anio=2026, recurrente=False, periodicidad=None, tipo=None):
+def gasto(
+    cat, monto, dia, mes=6, anio=2026, recurrente=False, periodicidad=None, tipo=None,
+    cuota_actual=None, cuotas_totales=None,
+):
     return Gasto.objects.create(
         categoria=cat,
         tipo=tipo or Gasto.Tipo.OPERATIVO,
@@ -26,6 +29,8 @@ def gasto(cat, monto, dia, mes=6, anio=2026, recurrente=False, periodicidad=None
         fecha=date(anio, mes, dia),
         es_recurrente=recurrente,
         periodicidad=periodicidad or Gasto.Periodicidad.UNICA,
+        cuota_actual=cuota_actual,
+        cuotas_totales=cuotas_totales,
     )
 
 
@@ -47,6 +52,44 @@ class GastoModelTests(TestCase):
     def test_monthly_equivalent_no_recurrente_es_cero(self):
         g = gasto(categoria("Administración"), 500, 5)
         self.assertEqual(g.monthly_equivalent, Decimal("0"))
+
+    def test_meses_restantes_con_cuotas(self):
+        g = gasto(
+            categoria("IT"), 1000, 5,
+            recurrente=True, periodicidad=Gasto.Periodicidad.MENSUAL,
+            cuota_actual=4, cuotas_totales=12,
+        )
+        self.assertEqual(g.meses_restantes, 8)
+
+    def test_meses_restantes_sin_cuotas_es_none(self):
+        g = gasto(
+            categoria("IT"), 1000, 5,
+            recurrente=True, periodicidad=Gasto.Periodicidad.MENSUAL,
+        )
+        self.assertIsNone(g.meses_restantes)
+
+    def test_cuota_actual_y_totales_deben_ir_juntas(self):
+        g = Gasto(
+            categoria=categoria("IT"),
+            concepto="Impresora",
+            monto=Decimal("1000"),
+            fecha=date(2026, 6, 5),
+            cuota_actual=4,
+        )
+        with self.assertRaises(Exception):
+            g.full_clean()
+
+    def test_cuota_actual_no_puede_superar_el_total(self):
+        g = Gasto(
+            categoria=categoria("IT"),
+            concepto="Impresora",
+            monto=Decimal("1000"),
+            fecha=date(2026, 6, 5),
+            cuota_actual=13,
+            cuotas_totales=12,
+        )
+        with self.assertRaises(Exception):
+            g.full_clean()
 
 
 class GastosMetricsTests(TestCase):
@@ -73,6 +116,28 @@ class GastosMetricsTests(TestCase):
     def test_run_rate_mensual_de_recurrentes(self):
         m = build_gastos_metrics(2026, 6)
         self.assertEqual(m["run_rate_mensual"], Decimal("300.00"))
+        self.assertEqual(m["run_rate_anual"], Decimal("3600.00"))
+
+    def test_run_rate_anual_capado_por_cuotas_restantes(self):
+        # Cuota 4 de 12 de una impresora: la proyección anual no debe contar
+        # más de las 8 cuotas que faltan (no 12 meses completos).
+        Gasto.objects.all().delete()
+        gasto(
+            categoria("IT"), 1000, 5,
+            recurrente=True, periodicidad=Gasto.Periodicidad.MENSUAL,
+            cuota_actual=4, cuotas_totales=12,
+        )
+        m = build_gastos_metrics(2026, 6)
+        self.assertEqual(m["run_rate_mensual"], Decimal("1000.00"))
+        self.assertEqual(m["run_rate_anual"], Decimal("8000.00"))  # 8 cuotas restantes
+
+    def test_run_rate_anual_sin_cuotas_sigue_proyectando_12_meses(self):
+        Gasto.objects.all().delete()
+        gasto(
+            categoria("Suscripciones"), 300, 15,
+            recurrente=True, periodicidad=Gasto.Periodicidad.MENSUAL,
+        )
+        m = build_gastos_metrics(2026, 6)
         self.assertEqual(m["run_rate_anual"], Decimal("3600.00"))
 
     def test_comparativo_mes_anterior(self):

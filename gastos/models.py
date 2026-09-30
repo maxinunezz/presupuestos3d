@@ -1,5 +1,6 @@
 from decimal import Decimal
 
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
@@ -176,6 +177,27 @@ class Gasto(models.Model):
         default=Periodicidad.UNICA,
         help_text=_("Si es recurrente, cada cuánto se paga (para el compromiso mensual)."),
     )
+    cuota_actual = models.PositiveSmallIntegerField(
+        _("Cuota actual"),
+        null=True,
+        blank=True,
+        help_text=_(
+            "Si este gasto es una cuota de un plan de pagos (ej: una impresora "
+            "en 12 cuotas), qué número de cuota es este pago puntual (ej: 4 si "
+            "es la cuota 4 de 12). Se usa junto con \"Cuotas totales\"."
+        ),
+    )
+    cuotas_totales = models.PositiveSmallIntegerField(
+        _("Cuotas totales"),
+        null=True,
+        blank=True,
+        help_text=_(
+            "Cuántas cuotas tiene el plan de pagos en total. Completalo junto "
+            "con \"Cuota actual\" para que la proyección anual del compromiso "
+            "mensual no siga contando este gasto después de terminar de "
+            "pagarse. Dejalo vacío si no aplica (gasto recurrente indefinido)."
+        ),
+    )
     notas = models.TextField(_("Notas"), blank=True)
     created_at = models.DateTimeField(_("Creado"), auto_now_add=True)
     updated_at = models.DateTimeField(_("Actualizado"), auto_now=True)
@@ -187,6 +209,35 @@ class Gasto(models.Model):
 
     def __str__(self):
         return f"{self.categoria} · {self.concepto} (${self.monto})"
+
+    def clean(self):
+        super().clean()
+        if bool(self.cuotas_totales) != bool(self.cuota_actual):
+            raise ValidationError(
+                _(
+                    "Completá tanto \"Cuota actual\" como \"Cuotas totales\", o "
+                    "dejá los dos vacíos."
+                )
+            )
+        if (
+            self.cuotas_totales
+            and self.cuota_actual
+            and self.cuota_actual > self.cuotas_totales
+        ):
+            raise ValidationError(
+                _("La \"Cuota actual\" no puede ser mayor que las \"Cuotas totales\".")
+            )
+
+    @property
+    def meses_restantes(self) -> int | None:
+        """
+        Cuotas que faltan pagar DESPUÉS de esta (para no proyectar el
+        compromiso mensual más allá de cuando termina el plan de pagos).
+        None = indefinido / no aplica (no es un gasto en cuotas).
+        """
+        if not (self.cuotas_totales and self.cuota_actual):
+            return None
+        return max(self.cuotas_totales - self.cuota_actual, 0)
 
     @property
     def monthly_equivalent(self) -> Decimal:

@@ -272,6 +272,42 @@ GASTOS = {
     'Periodicidad': 'Frequency',
     'Si es recurrente, cada cuánto se paga (para el compromiso mensual).':
         'If recurring, how often it is paid (for the monthly commitment).',
+    'Cuota actual': 'Current installment',
+    'Si este gasto es una cuota de un plan de pagos (ej: una impresora '
+    'en 12 cuotas), qué número de cuota es este pago puntual (ej: 4 si '
+    'es la cuota 4 de 12). Se usa junto con "Cuotas totales".':
+        'If this expense is an installment of a payment plan (e.g.: a printer '
+        'paid in 12 installments), which installment number this specific '
+        'payment is (e.g.: 4 if it is installment 4 of 12). Used together with '
+        '"Total installments".',
+    'Cuotas totales': 'Total installments',
+    'Cuántas cuotas tiene el plan de pagos en total. Completalo junto '
+    'con "Cuota actual" para que la proyección anual del compromiso '
+    'mensual no siga contando este gasto después de terminar de '
+    'pagarse. Dejalo vacío si no aplica (gasto recurrente indefinido).':
+        'How many installments the payment plan has in total. Fill it in '
+        'together with "Current installment" so the annual projection of the '
+        'monthly commitment stops counting this expense once it is fully paid '
+        'off. Leave it empty if it does not apply (open-ended recurring '
+        'expense).',
+    'Completá tanto "Cuota actual" como "Cuotas totales", o '
+    'dejá los dos vacíos.':
+        'Fill in both "Current installment" and "Total installments", or '
+        'leave both empty.',
+    'La "Cuota actual" no puede ser mayor que las "Cuotas totales".':
+        'The "Current installment" cannot be greater than the "Total installments".',
+    'Marcá los gastos fijos (suscripciones, abonos) para que entren '
+    'en el compromiso mensual del panel. Si es un plan de pagos en '
+    'cuotas (ej: una impresora en 12 cuotas), completá "Cuota '
+    'actual" y "Cuotas totales" para que la proyección anual no '
+    'lo siga contando después de terminar de pagarse.':
+        'Mark fixed expenses (subscriptions, plans) so they count toward the '
+        'monthly commitment in the dashboard. If it is an installment payment '
+        'plan (e.g.: a printer paid in 12 installments), fill in "Current '
+        'installment" and "Total installments" so the annual projection stops '
+        'counting it once it is fully paid off.',
+    'Cuotas': 'Installments',
+    'Cuota': 'Installment',
     'Gasto': 'Expense',
     'Tope mensual ($)': 'Monthly cap ($)',
     'Gasto máximo esperado por mes para esta categoría. 0 = sin tope.':

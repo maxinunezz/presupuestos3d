@@ -77,6 +77,7 @@ class GastoAdmin(admin.ModelAdmin):
         "monto_display",
         "es_recurrente",
         "periodicidad",
+        "cuotas_display",
         "proveedor",
         "medio_pago",
     )
@@ -91,10 +92,13 @@ class GastoAdmin(admin.ModelAdmin):
         (
             _("Recurrencia"),
             {
-                "fields": ("es_recurrente", "periodicidad"),
+                "fields": ("es_recurrente", "periodicidad", "cuota_actual", "cuotas_totales"),
                 "description": _(
                     "Marcá los gastos fijos (suscripciones, abonos) para que entren "
-                    "en el compromiso mensual del panel."
+                    "en el compromiso mensual del panel. Si es un plan de pagos en "
+                    "cuotas (ej: una impresora en 12 cuotas), completá \"Cuota "
+                    "actual\" y \"Cuotas totales\" para que la proyección anual no "
+                    "lo siga contando después de terminar de pagarse."
                 ),
             },
         ),
@@ -106,6 +110,12 @@ class GastoAdmin(admin.ModelAdmin):
         from budgets.pdf import format_money
 
         return f"$ {format_money(obj.monto)}"
+
+    @admin.display(description=_("Cuotas"))
+    def cuotas_display(self, obj):
+        if obj.cuotas_totales and obj.cuota_actual:
+            return f"{obj.cuota_actual}/{obj.cuotas_totales}"
+        return "-"
 
 
 @admin.register(TopeGasto)

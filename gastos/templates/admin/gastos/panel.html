@@ -166,12 +166,12 @@
     <div class="gx-card">
         <h3>{% translate "Gastos recurrentes del período" %}</h3>
         <table class="gx">
-            <thead><tr><th>{% translate "Concepto" %}</th><th>{% translate "Categoría" %}</th><th>{% translate "Periodicidad" %}</th><th class="num">{% translate "Equiv. mensual" %}</th></tr></thead>
+            <thead><tr><th>{% translate "Concepto" %}</th><th>{% translate "Categoría" %}</th><th>{% translate "Periodicidad" %}</th><th>{% translate "Cuota" %}</th><th class="num">{% translate "Equiv. mensual" %}</th></tr></thead>
             <tbody>
                 {% for r in recurrentes %}
-                <tr><td>{{ r.concepto }}</td><td>{{ r.categoria }}</td><td>{{ r.periodicidad }}</td><td class="num">{{ r.monthly }}</td></tr>
+                <tr><td>{{ r.concepto }}</td><td>{{ r.categoria }}</td><td>{{ r.periodicidad }}</td><td>{{ r.cuotas }}</td><td class="num">{{ r.monthly }}</td></tr>
                 {% empty %}
-                <tr><td colspan="4" class="empty">{% translate "No hay gastos recurrentes en este período." %}</td></tr>
+                <tr><td colspan="5" class="empty">{% translate "No hay gastos recurrentes en este período." %}</td></tr>
                 {% endfor %}
             </tbody>
         </table>

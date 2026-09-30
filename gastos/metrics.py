@@ -250,7 +250,20 @@ def build_gastos_metrics(year: int, month) -> dict:
     run_rate_mensual = (
         sum((g.monthly_equivalent for g in recurrentes), ZERO) / run_rate_divisor
     ).quantize(Decimal("0.01"))
-    run_rate_anual = (run_rate_mensual * 12).quantize(Decimal("0.01"))
+    # Proyección anual: en vista de un mes se puede afinar con las cuotas
+    # cargadas (`cuota_actual`/`cuotas_totales`) para no seguir proyectando un
+    # gasto en cuotas (ej: una impresora en 12 pagos) más allá de cuando
+    # termina de pagarse. En vista anual (varios meses/eventos mezclados) se
+    # mantiene la proyección simple (promedio × 12).
+    if is_month_view and recurrentes:
+        total_proyeccion = ZERO
+        for g in recurrentes:
+            restantes = g.meses_restantes
+            meses_proyectados = 12 if restantes is None else min(12, restantes)
+            total_proyeccion += g.monthly_equivalent * meses_proyectados
+        run_rate_anual = total_proyeccion.quantize(Decimal("0.01"))
+    else:
+        run_rate_anual = (run_rate_mensual * 12).quantize(Decimal("0.01"))
     recurrentes_detalle = sorted(
         (
             {
@@ -258,6 +271,11 @@ def build_gastos_metrics(year: int, month) -> dict:
                 "categoria": g.categoria.nombre,
                 "periodicidad": g.get_periodicidad_display(),
                 "monthly": g.monthly_equivalent,
+                "cuotas": (
+                    f"{g.cuota_actual}/{g.cuotas_totales}"
+                    if g.cuotas_totales and g.cuota_actual
+                    else "—"
+                ),
             }
             for g in recurrentes
         ),
@@ -419,6 +437,7 @@ def template_context(m: dict) -> dict:
             "categoria": r["categoria"],
             "periodicidad": r["periodicidad"],
             "monthly": _money(r["monthly"]),
+            "cuotas": r["cuotas"],
         }
         for r in m["recurrentes_detalle"]
     ]
@@ -604,12 +623,19 @@ def export_xlsx(m: dict):
         gettext("Concepto"),
         gettext("Categoría"),
         gettext("Periodicidad"),
+        gettext("Cuota"),
         gettext("Equivalente mensual"),
     ])
-    style_header(ws4, 1, 4)
+    style_header(ws4, 1, 5)
     for r in m["recurrentes_detalle"]:
         ws4.append(
-            [r["concepto"], str(r["categoria"]), str(r["periodicidad"]), float(r["monthly"])]
+            [
+                r["concepto"],
+                str(r["categoria"]),
+                str(r["periodicidad"]),
+                r["cuotas"],
+                float(r["monthly"]),
+            ]
         )
     autosize(ws4)
 
