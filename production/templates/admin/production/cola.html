@@ -29,7 +29,12 @@
     .badge-prio { background: #111; color: #fff; border-radius: 3px; padding: 1px 6px; font-size: 11px; }
     .badge-prio.high { background: #b3261e; }
     tr.row-overdue td { background: #fdecea !important; }
-    html[data-theme="dark"] tr.row-overdue td { background: #3a1613 !important; }
+    html[data-theme="dark"] tr.row-overdue td { background: #3a1613 !important; color: #fff !important; }
+    html[data-theme="dark"] tr.row-overdue .pos { color: #f0a8a0 !important; }
+    @media (prefers-color-scheme: dark) {
+        html[data-theme="auto"] tr.row-overdue td { background: #3a1613 !important; color: #fff !important; }
+        html[data-theme="auto"] tr.row-overdue .pos { color: #f0a8a0 !important; }
+    }
 
     .btn-mark-done {
         background: #b3261e; color: #fff; border: none; border-radius: 4px;
