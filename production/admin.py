@@ -880,6 +880,15 @@ class TableroAdmin(admin.ModelAdmin):
             if current:
                 data = schedule.get(current.id, {})
                 printing = current.status == ProductionJob.Status.PRINTING
+                print_end_raw = data.get("print_end")
+                # Mismo criterio que la Cola de producción: "atrasado" es
+                # Imprimiendo con fin estimado ya pasado (probablemente ya
+                # terminó y falta marcarlo como Impreso).
+                overdue = (
+                    printing
+                    and print_end_raw is not None
+                    and print_end_raw < now
+                )
                 cur = {
                     "producto": str(current.producto),
                     "pieza": current.pieza.name if current.pieza_id else None,
@@ -887,7 +896,8 @@ class TableroAdmin(admin.ModelAdmin):
                     "cliente": current.presupuesto.client_name,
                     "presupuesto_id": current.presupuesto_id,
                     "printing": printing,
-                    "print_end": _fmt_dt(data.get("print_end")),
+                    "overdue": overdue,
+                    "print_end": _fmt_dt(print_end_raw),
                     "mark_done_url": (
                         reverse(
                             "admin:production_tablero_marcar_impreso",

@@ -25,11 +25,21 @@
     .now-card .idle { color: #999; }
     .badge-print { background: #28a745; color: #fff; border-radius: 3px; padding: 1px 7px; font-size: 11px; }
     .badge-next { background: #ffeeba; color: #7a5b00; border-radius: 3px; padding: 1px 7px; font-size: 11px; }
+    .badge-overdue { background: #b3261e; color: #fff; border-radius: 3px; padding: 1px 7px; font-size: 11px; }
     .now-card.inactive { border-color: #f3b9b2; }
     .now-card.inactive .nc-head { background: #b3261e; }
     .badge-off { background: #b3261e; color: #fff; border-radius: 3px; padding: 1px 7px; font-size: 11px; }
     .now-card.inactive .note { color: #1a1a1a; margin-top: 6px; }
     .now-card.inactive .note-empty { color: #999; margin-top: 6px; font-style: italic; }
+
+    /* "Atrasado": mismo criterio y colores que la Cola de producción. */
+    .now-card.overdue .nc-body { background: #fdecea; }
+    html[data-theme="dark"] .now-card.overdue .nc-body { background: #3a1613; color: #fff; }
+    html[data-theme="dark"] .now-card.overdue .nc-body .meta { color: #ddd; }
+    @media (prefers-color-scheme: dark) {
+        html[data-theme="auto"] .now-card.overdue .nc-body { background: #3a1613; color: #fff; }
+        html[data-theme="auto"] .now-card.overdue .nc-body .meta { color: #ddd; }
+    }
 
     table.tb { width: 100%; border-collapse: collapse; background: #fff; margin-top: 10px; }
     table.tb th { background: #111; color: #fff; text-align: left; padding: 8px 10px; font-size: 12px; text-transform: uppercase; }
@@ -70,11 +80,12 @@
 <div class="tb-section">🖨️ {% translate "Qué se está imprimiendo" %}</div>
 <div class="now-grid">
     {% for m in machines %}
-    <div class="now-card">
+    <div class="now-card{% if m.current.overdue %} overdue{% endif %}">
         <div class="nc-head">{{ m.name }}</div>
         <div class="nc-body">
             {% if m.current %}
                 {% if m.current.printing %}<span class="badge-print">{% translate "imprimiendo" %}</span>{% else %}<span class="badge-next">{% translate "próximo" %}</span>{% endif %}
+                {% if m.current.overdue %} <span class="badge-overdue">⚠ {% translate "atrasado" %}</span>{% endif %}
                 <div class="prod">{% if m.current.pieza %}{{ m.current.pieza }} ×{{ m.current.quantity }}{% else %}{{ m.current.producto }} ×{{ m.current.quantity }}{% endif %}</div>
                 {% if m.current.pieza %}<div class="meta">{% translate "de" %} {{ m.current.producto }}</div>{% endif %}
                 <div class="meta">{{ m.current.cliente }} · #{{ m.current.presupuesto_id }}</div>
