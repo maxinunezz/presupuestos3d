@@ -2122,6 +2122,45 @@ msgstr "Cancel"
 msgid "No se puede perder más que el total de filamento de la pieza."
 msgstr "You cannot lose more than the part's total filament."
 
+msgid "Trabajo"
+msgstr "Job"
+
+msgid "Corridas de gcode"
+msgstr "Gcode runs"
+
+msgid "Abierto"
+msgstr "Open"
+
+msgid "Cierre"
+msgstr "Closed"
+
+msgid "Tramo de impresión"
+msgstr "Print segment"
+
+msgid "Tramos de impresión"
+msgstr "Print segments"
+
+msgid "Trabajo '%(obj)s' pasado de máquina mientras imprimía: las corridas que ya se hicieron quedan a nombre de la máquina anterior; de acá en más cuentan para '%(maquina)s'."
+msgstr "Job '%(obj)s' moved to another machine while printing: the runs already done stay credited to the previous machine; from now on they count for '%(maquina)s'."
+
+msgid "Trabajo '%(obj)s' no se le cambió la máquina desde acá porque está Imprimiendo: abrí el trabajo (o usá \"Cambiar de máquina\" desde la cola/tablero) para reasignarlo sin perder de dónde salió cada corrida."
+msgstr "Job '%(obj)s' was not moved to another machine from here because it is Printing: open the job (or use \"Change machine\" from the queue/dashboard) to reassign it without losing which machine did which run."
+
+msgid "Cambiar de máquina"
+msgstr "Change machine"
+
+msgid "Corrida impresa"
+msgstr "Run printed"
+
+msgid "Pedido impreso"
+msgstr "Order printed"
+
+msgid "¿Marcar este pedido como impreso?"
+msgstr "Mark this order as printed?"
+
+msgid "Este trabajo está Imprimiendo. ¿Confirmás cambiarlo de máquina? Las corridas que ya se hicieron van a quedar a nombre de la máquina anterior."
+msgstr "This job is Printing. Are you sure you want to change its machine? The runs already done will stay credited to the previous machine."
+
 msgid "%(n_gastos)s gasto(s)"
 msgstr "%(n_gastos)s expense(s)"
 

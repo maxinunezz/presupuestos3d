@@ -984,6 +984,39 @@ PRODUCTION = {
     'Cancelar': 'Cancel',
     'No se puede perder más que el total de filamento de la pieza.':
         "You cannot lose more than the part's total filament.",
+    'Trabajo': 'Job',
+    'Máquina': 'Machine',
+    'Corridas de gcode': 'Gcode runs',
+    'Abierto': 'Open',
+    'Cierre': 'Closed',
+    'Tramo de impresión': 'Print segment',
+    'Tramos de impresión': 'Print segments',
+    "Trabajo '%(obj)s' pasado de máquina mientras imprimía: "
+    "las corridas que ya se hicieron quedan a nombre de la "
+    "máquina anterior; de acá en más cuentan para "
+    "'%(maquina)s'.":
+        "Job '%(obj)s' moved to another machine while printing: "
+        "the runs already done stay credited to the "
+        "previous machine; from now on they count for "
+        "'%(maquina)s'.",
+    "Trabajo '%(obj)s' no se le cambió la máquina desde acá "
+    "porque está Imprimiendo: abrí el trabajo (o usá "
+    "\"Cambiar de máquina\" desde la cola/tablero) para "
+    "reasignarlo sin perder de dónde salió cada corrida.":
+        "Job '%(obj)s' was not moved to another machine from "
+        "here because it is Printing: open the job (or use "
+        "\"Change machine\" from the queue/dashboard) to "
+        "reassign it without losing which machine did which run.",
+    'Cambiar de máquina': 'Change machine',
+    'Corrida impresa': 'Run printed',
+    'Pedido impreso': 'Order printed',
+    '¿Marcar este pedido como impreso?': 'Mark this order as printed?',
+    'Este trabajo está Imprimiendo. ¿Confirmás cambiarlo de máquina? '
+    'Las corridas que ya se hicieron van a quedar a nombre de la '
+    'máquina anterior.':
+        'This job is Printing. Are you sure you want to change its '
+        'machine? The runs already done will stay credited to the '
+        'previous machine.',
 }
 
 # Cadenas de {% blocktranslate %}: el msgid real que arma Django usa

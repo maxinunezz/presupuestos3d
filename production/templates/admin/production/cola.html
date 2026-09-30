@@ -47,6 +47,12 @@
         margin-bottom: 4px;
     }
     .btn-mark-run:hover { background: #333; }
+    .btn-change-machine {
+        background: #111; color: #fff; border: none; border-radius: 4px;
+        padding: 3px 8px; font-size: 11px; cursor: pointer; white-space: nowrap;
+        text-decoration: none; display: inline-block; margin-top: 4px;
+    }
+    .btn-change-machine:hover { background: #333; }
     .runs-progress { color: #666; font-size: 11px; }
     html[data-theme="dark"] .runs-progress { color: #aaa; }
 
@@ -117,7 +123,7 @@
                         {% if j.printing %}
                         <form method="post" action="{{ j.run_url }}">
                             {% csrf_token %}
-                            <button type="submit" class="btn-mark-run">▶ {% translate "Corrida terminada" %}</button>
+                            <button type="submit" class="btn-mark-run">▶ {% translate "Corrida impresa" %}</button>
                         </form>
                         {% elif j.pending %}
                         <form method="post" action="{{ j.empezar_url }}">
@@ -126,10 +132,11 @@
                         </form>
                         {% endif %}
                         {% if j.printing %}
-                        <form method="post" action="{{ j.mark_done_url }}" onsubmit="return confirm('{% translate "¿Marcar este trabajo como Impreso?" %}');">
+                        <form method="post" action="{{ j.mark_done_url }}" onsubmit="return confirm('{% translate "¿Marcar este pedido como impreso?" %}');">
                             {% csrf_token %}
-                            <button type="submit" class="btn-mark-done">✅ {% translate "Impreso" %}</button>
+                            <button type="submit" class="btn-mark-done">✅ {% translate "Pedido impreso" %}</button>
                         </form>
+                        <br><a class="btn-change-machine" href="{{ j.change_machine_url }}">🔄 {% translate "Cambiar de máquina" %}</a>
                         {% endif %}
                     </td>
                 </tr>
@@ -174,7 +181,7 @@
                 {% if j.printing %}
                 <form method="post" action="{{ j.run_url }}">
                     {% csrf_token %}
-                    <button type="submit" class="btn-mark-run">▶ {% translate "Corrida terminada" %}</button>
+                    <button type="submit" class="btn-mark-run">▶ {% translate "Corrida impresa" %}</button>
                 </form>
                 {% elif j.pending %}
                 <form method="post" action="{{ j.empezar_url }}">
@@ -183,10 +190,11 @@
                 </form>
                 {% endif %}
                 {% if j.printing %}
-                <form method="post" action="{{ j.mark_done_url }}" onsubmit="return confirm('{% translate "¿Marcar este trabajo como Impreso?" %}');">
+                <form method="post" action="{{ j.mark_done_url }}" onsubmit="return confirm('{% translate "¿Marcar este pedido como impreso?" %}');">
                     {% csrf_token %}
-                    <button type="submit" class="btn-mark-done">✅ {% translate "Impreso" %}</button>
+                    <button type="submit" class="btn-mark-done">✅ {% translate "Pedido impreso" %}</button>
                 </form>
+                <br><a class="btn-change-machine" href="{{ j.change_machine_url }}">🔄 {% translate "Cambiar de máquina" %}</a>
                 {% endif %}
             </td>
         </tr>

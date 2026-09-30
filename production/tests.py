@@ -10,7 +10,7 @@ from django.utils import timezone
 from budgets.models import Pieza, PiezaFilamentLine, Presupuesto, Producto
 from inventory.models import Filament, StockMovement
 
-from .models import HistorialImpresion, Maquina, ProductionJob
+from .models import HistorialImpresion, Maquina, ProductionJob, TramoImpresion
 from .scheduler import next_loadable, rebalance_idle_machines, recommend_machine
 
 
@@ -391,8 +391,9 @@ class HistorialImpresionTests(TestCase):
 
     def test_register_history_crea_registro(self):
         job = self._job(quantity=2, machine=self.maquina)
-        registro = job.register_history()
-        self.assertIsNotNone(registro)
+        registros = job.register_history()
+        self.assertEqual(len(registros), 1)
+        registro = registros[0]
         self.assertEqual(self.maquina.historial.count(), 1)
         self.assertEqual(registro.maquina, self.maquina)
         self.assertEqual(registro.cantidad, 2)
@@ -405,9 +406,9 @@ class HistorialImpresionTests(TestCase):
 
     def test_register_history_cancelado(self):
         job = self._job(machine=self.maquina)
-        registro = job.register_history(estado=HistorialImpresion.Estado.CANCELADO)
-        self.assertIsNotNone(registro)
-        self.assertEqual(registro.estado, HistorialImpresion.Estado.CANCELADO)
+        registros = job.register_history(estado=HistorialImpresion.Estado.CANCELADO)
+        self.assertEqual(len(registros), 1)
+        self.assertEqual(registros[0].estado, HistorialImpresion.Estado.CANCELADO)
         self.assertEqual(self.maquina.historial.count(), 1)
 
     def test_cancelar_presupuesto_registra_en_historial(self):
@@ -433,7 +434,7 @@ class HistorialImpresionTests(TestCase):
 
     def test_register_history_sin_maquina_no_hace_nada(self):
         job = self._job(machine=None)
-        self.assertIsNone(job.register_history())
+        self.assertEqual(job.register_history(), [])
         self.assertEqual(HistorialImpresion.objects.count(), 0)
         self.assertFalse(job.history_added)
 
@@ -740,3 +741,264 @@ class RebalanceIdleMachinesTests(TestCase):
 
         pending.refresh_from_db()
         self.assertEqual(pending.machine_id, self.a1n1.id)
+
+
+class TramoImpresionTests(TestCase):
+    """
+    Reproduce el bug reportado: un trabajo de 9 corridas que arranca en una
+    máquina y se reasigna a mitad de camino a otra. Las corridas hechas en
+    cada máquina deben quedar repartidas (tramos), tanto en el historial
+    ("Últimos impresos por máquina") como en las horas acumuladas de cada
+    máquina — no todo atribuido a la máquina donde terminó.
+    """
+
+    def setUp(self):
+        self.fil = Filament.objects.create(
+            brand="M",
+            material_type=Filament.MaterialType.PLA,
+            color="C",
+            cost_per_kg=Decimal("10000"),
+            stock_grams=Decimal("100000"),
+        )
+        self.producto = make_producto()
+        # 1 corrida = 1 unidad, 1 hora de impresión por corrida.
+        self.pieza = add_pieza(
+            self.producto, self.fil, Decimal("10"), print_hours=Decimal("1")
+        )
+        self.pieza.pieces_per_gcode = 1
+        self.pieza.save(update_fields=["pieces_per_gcode"])
+        self.ender = Maquina.objects.create(name="Ender")
+        self.a1n2 = Maquina.objects.create(name="A1N2", supports_multicolor=True)
+        self.pres = Presupuesto.objects.create(client_name="Cliente")
+        self.job = ProductionJob.objects.create(
+            presupuesto=self.pres,
+            producto=self.producto,
+            pieza=self.pieza,
+            quantity=9,
+            machine=self.ender,
+            status=ProductionJob.Status.PRINTING,
+        )
+
+    def _finish_on_a1n2(self):
+        """Corre 3 corridas en la Ender, cambia a la A1N2 a mitad de camino
+        (como hizo el usuario) y termina las 6 restantes ahí."""
+        for _ in range(3):
+            self.job.advance_run()
+        self.job.machine = self.a1n2
+        self.job.save(update_fields=["machine"])
+        for _ in range(6):
+            self.job.advance_run()
+
+    def test_advance_run_acredita_corridas_a_la_maquina_actual(self):
+        self._finish_on_a1n2()
+        self.assertEqual(self.job.completed_runs, 9)
+        tramos = list(self.job.tramos.order_by("started_at"))
+        self.assertEqual(len(tramos), 2)
+        self.assertEqual(tramos[0].machine_id, self.ender.id)
+        self.assertEqual(tramos[0].runs, 3)
+        self.assertFalse(tramos[0].is_open)
+        self.assertEqual(tramos[1].machine_id, self.a1n2.id)
+        self.assertEqual(tramos[1].runs, 6)
+
+    def test_finalize_completa_corridas_no_registradas_en_maquina_actual(self):
+        # Si el trabajo se marca Impreso sin pasar por "Corrida terminada"
+        # para cada una (ej. de a una sola vez), las corridas que falten se
+        # acreditan a la máquina actual.
+        for _ in range(3):
+            self.job.advance_run()
+        self.job.machine = self.a1n2
+        self.job.save(update_fields=["machine"])
+        # No se llaman más advance_run(): quedan 6 corridas sin registrar.
+        self.job.finalize_tramos()
+        tramos = list(self.job.tramos.all())
+        total_runs = sum(t.runs for t in tramos)
+        self.assertEqual(total_runs, 9)
+        self.assertTrue(all(not t.is_open for t in tramos))
+        a1n2_runs = sum(t.runs for t in tramos if t.machine_id == self.a1n2.id)
+        self.assertEqual(a1n2_runs, 6)
+
+    def test_register_history_reparte_entre_las_dos_maquinas(self):
+        self._finish_on_a1n2()
+        self.job.status = ProductionJob.Status.DONE
+        self.job.finished_at = timezone.now()
+        self.job.save(update_fields=["status", "finished_at"])
+        self.job.finalize_tramos()
+
+        registros = self.job.register_history()
+        self.assertEqual(len(registros), 2)
+        by_machine = {r.maquina_id: r for r in registros}
+        self.assertIn(self.ender.id, by_machine)
+        self.assertIn(self.a1n2.id, by_machine)
+        self.assertEqual(by_machine[self.ender.id].cantidad, 3)
+        self.assertEqual(by_machine[self.ender.id].horas_impresion, Decimal("3.00"))
+        self.assertEqual(by_machine[self.a1n2.id].cantidad, 6)
+        self.assertEqual(by_machine[self.a1n2.id].horas_impresion, Decimal("6.00"))
+        # La suma sigue dando el total del trabajo.
+        self.assertEqual(
+            sum(r.cantidad for r in registros), self.job.quantity
+        )
+
+    def test_recalc_printed_hours_reparte_entre_las_dos_maquinas(self):
+        self._finish_on_a1n2()
+        self.job.status = ProductionJob.Status.DONE
+        self.job.finished_at = timezone.now()
+        self.job.save(update_fields=["status", "finished_at"])
+        self.job.finalize_tramos()
+
+        self.ender.recalc_printed_hours()
+        self.a1n2.recalc_printed_hours()
+        self.ender.refresh_from_db()
+        self.a1n2.refresh_from_db()
+        self.assertEqual(self.ender.total_hours_printed, Decimal("3.00"))
+        self.assertEqual(self.a1n2.total_hours_printed, Decimal("6.00"))
+
+    def test_job_sin_tramos_sigue_contando_entero_en_su_maquina_final(self):
+        # Compatibilidad: un trabajo DONE de antes de que existiera el
+        # sistema de tramos (nunca se le creó ninguno) se sigue contando
+        # entero en su máquina final, como antes.
+        self.job.status = ProductionJob.Status.DONE
+        self.job.save(update_fields=["status"])
+        self.assertFalse(self.job.tramos.exists())
+
+        self.ender.recalc_printed_hours()
+        self.ender.refresh_from_db()
+        self.assertEqual(self.ender.total_hours_printed, Decimal("9.00"))
+
+        registros = self.job.register_history()
+        self.assertEqual(len(registros), 1)
+        self.assertEqual(registros[0].maquina_id, self.ender.id)
+        self.assertEqual(registros[0].cantidad, 9)
+
+    def test_mark_obsolete_descarta_los_tramos(self):
+        self.job.consume_stock()
+        for _ in range(3):
+            self.job.advance_run()
+        self.job.machine = self.a1n2
+        self.job.save(update_fields=["machine"])
+        self.assertTrue(self.job.tramos.exists())
+
+        self.job.mark_obsolete(Decimal("0"))
+
+        self.assertFalse(self.job.tramos.exists())
+        self.assertEqual(self.job.completed_runs, 0)
+
+
+class MachineChangeValidationTests(TestCase):
+    """
+    Tier 1 del guardarraíl: cambiar la máquina de un trabajo Imprimiendo
+    desde el listado (edición rápida list_editable) queda bloqueado; hay que
+    abrirlo (o usar "Cambiar de máquina" desde la cola/tablero) para
+    reasignarlo de forma prolija.
+    """
+
+    def setUp(self):
+        self.fil = Filament.objects.create(
+            brand="M",
+            material_type=Filament.MaterialType.PLA,
+            color="C",
+            cost_per_kg=Decimal("10000"),
+            stock_grams=Decimal("100000"),
+        )
+        self.producto = make_producto()
+        self.pieza = add_pieza(self.producto, self.fil, Decimal("10"))
+        self.ender = Maquina.objects.create(name="Ender")
+        self.a1n2 = Maquina.objects.create(name="A1N2", supports_multicolor=True)
+        self.pres = Presupuesto.objects.create(client_name="Cliente")
+        self.job = ProductionJob.objects.create(
+            presupuesto=self.pres,
+            producto=self.producto,
+            pieza=self.pieza,
+            quantity=3,
+            machine=self.ender,
+            status=ProductionJob.Status.PRINTING,
+        )
+        User = get_user_model()
+        User.objects.create_superuser("admin", password="x")
+        self.client.login(username="admin", password="x")
+
+    def _post_list_editable(self, machine_id):
+        url = reverse("admin:production_productionjob_changelist")
+        return self.client.post(
+            url,
+            {
+                "form-TOTAL_FORMS": "1",
+                "form-INITIAL_FORMS": "1",
+                "form-MIN_NUM_FORMS": "0",
+                "form-MAX_NUM_FORMS": "1000",
+                "form-0-id": str(self.job.pk),
+                "form-0-machine": str(machine_id),
+                "form-0-order": "0",
+                "form-0-status": ProductionJob.Status.PRINTING,
+                "_save": "Save",
+            },
+        )
+
+    def test_list_editable_no_cambia_maquina_de_trabajo_imprimiendo(self):
+        self._post_list_editable(self.a1n2.pk)
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.machine_id, self.ender.id)
+
+    def test_list_editable_permite_otros_cambios_si_no_toca_la_maquina(self):
+        response = self.client.post(
+            reverse("admin:production_productionjob_changelist"),
+            {
+                "form-TOTAL_FORMS": "1",
+                "form-INITIAL_FORMS": "1",
+                "form-MIN_NUM_FORMS": "0",
+                "form-MAX_NUM_FORMS": "1000",
+                "form-0-id": str(self.job.pk),
+                "form-0-machine": str(self.ender.pk),
+                "form-0-order": "5",
+                "form-0-status": ProductionJob.Status.PRINTING,
+                "_save": "Save",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.order, 5)
+
+    def test_list_editable_no_cambia_maquina_si_trabajo_esta_en_cola(self):
+        # PENDING (no PRINTING): el guardarraíl solo aplica a Imprimiendo, un
+        # trabajo que todavía no arrancó se puede reasignar sin problema.
+        self.job.status = ProductionJob.Status.PENDING
+        self.job.save(update_fields=["status"])
+        url = reverse("admin:production_productionjob_changelist")
+        self.client.post(
+            url,
+            {
+                "form-TOTAL_FORMS": "1",
+                "form-INITIAL_FORMS": "1",
+                "form-MIN_NUM_FORMS": "0",
+                "form-MAX_NUM_FORMS": "1000",
+                "form-0-id": str(self.job.pk),
+                "form-0-machine": str(self.a1n2.pk),
+                "form-0-order": "0",
+                "form-0-status": ProductionJob.Status.PENDING,
+                "_save": "Save",
+            },
+        )
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.machine_id, self.a1n2.id)
+
+    def test_cambiar_maquina_desde_la_ficha_del_trabajo_si_funciona(self):
+        # La vía sancionada (abrir el trabajo y guardarlo desde ahí, que es
+        # a donde lleva el botón "Cambiar de máquina" de la cola/tablero) sí
+        # permite reasignarlo mientras imprime.
+        url = reverse("admin:production_productionjob_change", args=[self.job.pk])
+        response = self.client.post(
+            url,
+            {
+                "presupuesto": str(self.pres.pk),
+                "producto": str(self.producto.pk),
+                "pieza": str(self.pieza.pk),
+                "quantity": "3",
+                "machine": str(self.a1n2.pk),
+                "order": "0",
+                "status": ProductionJob.Status.PRINTING,
+                "completed_runs": "0",
+                "_save": "Save",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.machine_id, self.a1n2.id)

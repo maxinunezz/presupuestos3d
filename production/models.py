@@ -64,16 +64,36 @@ class Maquina(models.Model):
 
     def recalc_printed_hours(self, save=True) -> Decimal:
         """
-        Recalcula y guarda las horas impresas acumuladas sumando las horas de
-        todos los trabajos ya terminados (DONE) de esta máquina. Idempotente:
-        recalcula desde cero, así marcar/desmarcar trabajos nunca desincroniza.
+        Recalcula y guarda las horas impresas acumuladas de esta máquina.
+
+        Suma las horas de cada TRAMO (segmento por máquina) de los trabajos ya
+        terminados (DONE) que se imprimieron, aunque sea parcialmente, en esta
+        máquina — así un trabajo que empezó en una máquina y terminó en otra
+        reparte sus horas entre ambas según cuántas corridas hizo cada una.
+        Los trabajos terminados que nunca pasaron por el sistema de tramos
+        (impresiones de antes de esta función) se siguen contando enteros en
+        su máquina final, como antes. Idempotente: recalcula desde cero.
         """
         total = Decimal("0")
-        done_jobs = self.jobs.filter(
-            status=ProductionJob.Status.DONE
+        tramos = TramoImpresion.objects.filter(
+            machine=self, job__status=ProductionJob.Status.DONE
+        ).select_related("job", "job__producto", "job__pieza")
+        for tramo in tramos:
+            job = tramo.job
+            runs_total = job.gcode_runs or 1
+            total += job.print_hours * Decimal(tramo.runs) / Decimal(runs_total)
+
+        tramo_job_ids = set(
+            TramoImpresion.objects.filter(job__status=ProductionJob.Status.DONE)
+            .values_list("job_id", flat=True)
+            .distinct()
+        )
+        legacy_done = self.jobs.filter(status=ProductionJob.Status.DONE).exclude(
+            pk__in=tramo_job_ids
         ).select_related("producto", "pieza")
-        for job in done_jobs:
+        for job in legacy_done:
             total += job.print_hours
+
         self.total_hours_printed = total.quantize(Decimal("0.01"))
         if save:
             Maquina.objects.filter(pk=self.pk).update(
@@ -216,31 +236,85 @@ class ProductionJob(models.Model):
 
     def register_history(self, estado=None):
         """
-        Guarda un registro en el historial de la máquina que ejecutó el trabajo
-        (snapshot con título, cantidad y horas). Se usa al imprimirse (estado
-        Impreso) y al cancelarse (estado Cancelado). Idempotente (flag
-        history_added). No hace nada si no hay máquina.
+        Guarda uno o más registros en el historial de las máquinas que
+        ejecutaron el trabajo (snapshot con título, cantidad y horas). Se usa
+        al imprimirse (estado Impreso) y al cancelarse (estado Cancelado).
+        Idempotente (flag history_added).
+
+        Si el trabajo tiene TRAMOS (imprimió, aunque sea parcialmente, en más
+        de una máquina), genera un registro POR TRAMO, repartiendo la
+        cantidad y las horas del trabajo proporcionalmente a las corridas que
+        hizo cada máquina (la última absorbe el resto, para que la suma
+        cierre exacto). Si no tiene tramos (trabajos viejos, o cancelados sin
+        haber arrancado), mantiene el comportamiento anterior: un solo
+        registro en la máquina actual del trabajo.
         """
-        if self.history_added or not self.machine_id:
-            return None
+        if self.history_added:
+            return []
+
+        from decimal import ROUND_HALF_UP
 
         from django.utils import timezone
 
         if estado is None:
             estado = HistorialImpresion.Estado.IMPRESO
 
-        registro = HistorialImpresion.objects.create(
-            maquina_id=self.machine_id,
-            presupuesto=self.presupuesto,
-            titulo=self.history_title(),
-            cantidad=self.quantity,
-            horas_impresion=self.print_hours,
-            estado=estado,
-            finalizado_el=self.finished_at or timezone.now(),
-        )
+        finalizado = self.finished_at or timezone.now()
+        tramos = [t for t in self.tramos.all().order_by("started_at") if t.runs > 0]
+        registros = []
+
+        if tramos:
+            total_runs = sum(t.runs for t in tramos)
+            qty_restante = self.quantity
+            horas_restante = self.print_hours
+            for idx, tramo in enumerate(tramos):
+                es_ultimo = idx == len(tramos) - 1
+                if es_ultimo:
+                    cantidad = qty_restante
+                    horas = horas_restante
+                else:
+                    frac = Decimal(tramo.runs) / Decimal(total_runs)
+                    cantidad = int(
+                        (Decimal(self.quantity) * frac).to_integral_value(
+                            rounding=ROUND_HALF_UP
+                        )
+                    )
+                    cantidad = min(cantidad, qty_restante)
+                    horas = (self.print_hours * frac).quantize(Decimal("0.01"))
+                    horas = min(horas, horas_restante)
+                qty_restante -= cantidad
+                horas_restante -= horas
+                if cantidad <= 0 and horas <= 0:
+                    continue
+                registros.append(
+                    HistorialImpresion.objects.create(
+                        maquina_id=tramo.machine_id,
+                        presupuesto=self.presupuesto,
+                        titulo=self.history_title(),
+                        cantidad=max(cantidad, 0),
+                        horas_impresion=max(horas, Decimal("0")),
+                        estado=estado,
+                        finalizado_el=finalizado,
+                    )
+                )
+        elif self.machine_id:
+            registros.append(
+                HistorialImpresion.objects.create(
+                    maquina_id=self.machine_id,
+                    presupuesto=self.presupuesto,
+                    titulo=self.history_title(),
+                    cantidad=self.quantity,
+                    horas_impresion=self.print_hours,
+                    estado=estado,
+                    finalizado_el=finalizado,
+                )
+            )
+        else:
+            return []
+
         self.history_added = True
         self.save(update_fields=["history_added"])
-        return registro
+        return registros
 
     @property
     def gcode_runs(self) -> int:
@@ -256,15 +330,73 @@ class ProductionJob(models.Model):
 
     def advance_run(self) -> int:
         """
-        Suma una corrida de gcode terminada (tope: `gcode_runs`). No guarda el
-        estado del trabajo ni dispara los efectos de fin (eso lo hace quien
-        llama, vía `ProductionJobAdmin.save_model`, para que se comporte igual
-        que marcar el trabajo Impreso a mano). Devuelve `completed_runs`.
+        Suma una corrida de gcode terminada (tope: `gcode_runs`). Además
+        acredita esa corrida al TRAMO abierto de la máquina actual (ver
+        `_current_tramo`), así queda registrado en qué máquina se hizo cada
+        corrida. No guarda el estado del trabajo ni dispara los efectos de
+        fin (eso lo hace quien llama, vía `ProductionJobAdmin.save_model`,
+        para que se comporte igual que marcar el trabajo Impreso a mano).
+        Devuelve `completed_runs`.
         """
         total = self.gcode_runs
         if self.completed_runs < total:
             self.completed_runs += 1
+            tramo = self._current_tramo()
+            if tramo:
+                tramo.runs += 1
+                tramo.save(update_fields=["runs"])
         return self.completed_runs
+
+    def _current_tramo(self):
+        """
+        Devuelve el tramo (segmento por máquina) abierto de este trabajo en
+        su máquina ACTUAL, creándolo si hace falta. Si había un tramo abierto
+        en otra máquina (porque se reasignó el trabajo), lo cierra acá mismo:
+        así el cambio de máquina se "autocorrige" solo, sin necesidad de un
+        botón especial que lo dispare — se detecta la próxima vez que se
+        registra una corrida o que el trabajo termina.
+        """
+        if not self.machine_id:
+            return None
+        from django.utils import timezone
+
+        abierto = self.tramos.filter(is_open=True).order_by("-started_at").first()
+        if abierto and abierto.machine_id == self.machine_id:
+            return abierto
+        if abierto:
+            abierto.is_open = False
+            abierto.closed_at = timezone.now()
+            abierto.save(update_fields=["is_open", "closed_at"])
+        return self.tramos.create(machine_id=self.machine_id)
+
+    def finalize_tramos(self):
+        """
+        Al terminar el trabajo (Impreso), completa el tramo de la máquina
+        actual con las corridas que todavía no se hubieran contabilizado (por
+        ejemplo si se marcó Impreso directo, sin ir apretando "Corrida
+        terminada" una por una), y cierra cualquier tramo que hubiera quedado
+        abierto. Así la suma de corridas de los tramos siempre coincide con
+        `gcode_runs`, y `register_history`/`Maquina.recalc_printed_hours`
+        reparten bien las horas entre las máquinas que participaron.
+        """
+        from django.utils import timezone
+
+        total = self.gcode_runs
+        logged = sum(self.tramos.values_list("runs", flat=True))
+        remaining = max(total - logged, 0)
+        now = timezone.now()
+
+        if remaining and self.machine_id:
+            tramo = self.tramos.filter(
+                is_open=True, machine_id=self.machine_id
+            ).first()
+            if tramo:
+                tramo.runs += remaining
+                tramo.save(update_fields=["runs"])
+            else:
+                self.tramos.create(machine_id=self.machine_id, runs=remaining)
+
+        self.tramos.filter(is_open=True).update(is_open=False, closed_at=now)
 
     @property
     def units_printed(self) -> int:
@@ -564,6 +696,10 @@ class ProductionJob(models.Model):
             self.surplus_added = False
             self.history_added = False
             self.completed_runs = 0
+            # La impresión fallida se descarta entera: los tramos que se
+            # hubieran registrado (qué máquina hizo qué corridas) ya no
+            # sirven, la reimpresión arranca de cero.
+            self.tramos.all().delete()
             self.save(
                 update_fields=[
                     "status",
@@ -647,6 +783,44 @@ class HistorialImpresion(models.Model):
 
     def __str__(self):
         return self.titulo
+
+
+class TramoImpresion(models.Model):
+    """
+    Un TRAMO es el segmento de corridas de gcode de un trabajo que se
+    imprimieron en una máquina en particular. La mayoría de los trabajos
+    tienen un solo tramo (empezaron y terminaron en la misma máquina). Si el
+    trabajo se reasigna a otra máquina mientras imprime, se cierra el tramo
+    viejo y se abre uno nuevo: así queda registrado cuántas corridas hizo
+    cada máquina, y `Maquina.recalc_printed_hours()` / `HistorialImpresion`
+    reparten las horas y el historial correctamente entre ambas en vez de
+    atribuirle todo a la máquina final (ver `ProductionJob._current_tramo`).
+    """
+
+    job = models.ForeignKey(
+        ProductionJob,
+        verbose_name=_("Trabajo"),
+        on_delete=models.CASCADE,
+        related_name="tramos",
+    )
+    machine = models.ForeignKey(
+        Maquina,
+        verbose_name=_("Máquina"),
+        on_delete=models.CASCADE,
+        related_name="tramos",
+    )
+    runs = models.PositiveIntegerField(_("Corridas de gcode"), default=0)
+    is_open = models.BooleanField(_("Abierto"), default=True)
+    started_at = models.DateTimeField(_("Inicio"), auto_now_add=True)
+    closed_at = models.DateTimeField(_("Cierre"), null=True, blank=True)
+
+    class Meta:
+        verbose_name = _("Tramo de impresión")
+        verbose_name_plural = _("Tramos de impresión")
+        ordering = ["job", "started_at"]
+
+    def __str__(self):
+        return f"{self.job} → {self.machine} ({self.runs} corridas)"
 
 
 class Tablero(ProductionJob):

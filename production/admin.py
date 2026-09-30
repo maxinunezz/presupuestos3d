@@ -1,10 +1,13 @@
+from urllib.parse import quote as urlquote
+
 from django.contrib import admin, messages
 from django.db.models import DecimalField
-from django.http import HttpResponseNotAllowed
+from django.http import HttpResponseNotAllowed, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext
 from django.utils.translation import gettext_lazy as _
@@ -305,6 +308,28 @@ class ProductionJobAdmin(admin.ModelAdmin):
     )
     actions = ("marcar_obsoleta", "marcar_imprimiendo", "marcar_impreso")
 
+    class Media:
+        # Aviso extra (confirm() de JS) antes de guardar un cambio de máquina
+        # en un trabajo que ya está Imprimiendo, para que no sea un cambio
+        # "silencioso" (el servidor de todas formas lo permite: esta ficha es
+        # la vía sancionada para reasignar, a diferencia del listado).
+        js = ("production/js/confirm_machine_change.js",)
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        field = super().formfield_for_foreignkey(db_field, request, **kwargs)
+        if db_field.name == "machine" and field is not None:
+            # El JS del aviso extra (confirm_machine_change.js) no puede usar
+            # {% translate %} (es un archivo estático) ni depender del catálogo
+            # JS de Django (este proyecto traduce por dominio "django", no
+            # "djangojs"): el mensaje ya traducido se manda acá, al idioma
+            # activo de este request, como atributo del <select>.
+            field.widget.attrs["data-confirm-msg"] = gettext(
+                "Este trabajo está Imprimiendo. ¿Confirmás cambiarlo de "
+                "máquina? Las corridas que ya se hicieron van a quedar "
+                "a nombre de la máquina anterior."
+            )
+        return field
+
     @admin.display(description=_("Ingresó"), ordering="created_at")
     def creado_display(self, obj):
         return _fmt_dt(obj.created_at)
@@ -452,12 +477,15 @@ class ProductionJobAdmin(admin.ModelAdmin):
 
     def save_model(self, request, obj, form, change):
         previous_status = None
+        previous_machine_id = None
         if obj.pk:
-            previous_status = (
+            previous = (
                 ProductionJob.objects.filter(pk=obj.pk)
-                .values_list("status", flat=True)
+                .values_list("status", "machine_id")
                 .first()
             )
+            if previous:
+                previous_status, previous_machine_id = previous
         just_marked_done = (
             obj.status == ProductionJob.Status.DONE
             and previous_status != ProductionJob.Status.DONE
@@ -465,6 +493,45 @@ class ProductionJobAdmin(admin.ModelAdmin):
         just_marked_printing = (
             obj.status == ProductionJob.Status.PRINTING
             and previous_status != ProductionJob.Status.PRINTING
+        )
+        # Edición rápida desde el listado (list_editable: máquina/orden/
+        # estado): tanto el guardado de una fila del listado como el
+        # guardado de la ficha completa del trabajo pasan por acá (Django no
+        # usa save_formset para list_editable). Se distinguen mirando los
+        # campos del form: el de edición rápida sólo trae machine/order/status
+        # (más el id oculto), la ficha completa trae todos los campos del modelo.
+        is_bulk_quick_edit = form is not None and set(form.fields.keys()) <= {
+            "machine",
+            "order",
+            "status",
+            "id",
+        }
+        # Si un trabajo está Imprimiendo, bloqueamos el cambio de máquina "sin
+        # más" desde la edición rápida del listado: un cambio así de un solo
+        # click, sin darse cuenta, es lo que mezclaba corridas de dos máquinas
+        # distintas bajo la máquina final. Para reasignar un trabajo que está
+        # imprimiendo hay que abrirlo (o usar el botón "Cambiar de máquina" de
+        # la cola/tablero) y guardarlo desde su propia pantalla, donde el
+        # cambio queda repartido en tramos.
+        blocked_machine_change = (
+            is_bulk_quick_edit
+            and previous_status == ProductionJob.Status.PRINTING
+            and previous_machine_id is not None
+            and previous_machine_id != obj.machine_id
+        )
+        if blocked_machine_change:
+            obj.machine_id = previous_machine_id
+
+        # Cambio de máquina de un trabajo que ya estaba Imprimiendo: esta es
+        # la vía "sancionada" (el botón "Cambiar de máquina" de la cola/
+        # tablero trae acá, y la edición rápida del listado ya bloqueó el
+        # cambio de un solo click, arriba). El tramo viejo se cierra solo la
+        # próxima vez que se registre una corrida o el trabajo termine (ver
+        # `ProductionJob._current_tramo`).
+        machine_changed_while_printing = (
+            not blocked_machine_change
+            and previous_status == ProductionJob.Status.PRINTING
+            and previous_machine_id != obj.machine_id
         )
 
         # Marca inicio real al empezar a imprimir.
@@ -475,11 +542,40 @@ class ProductionJobAdmin(admin.ModelAdmin):
             obj.finished_at = timezone.now()
         super().save_model(request, obj, form, change)
 
+        if blocked_machine_change:
+            self.message_user(
+                request,
+                gettext(
+                    "Trabajo '%(obj)s' no se le cambió la máquina desde acá "
+                    "porque está Imprimiendo: abrí el trabajo (o usá "
+                    "\"Cambiar de máquina\" desde la cola/tablero) para "
+                    "reasignarlo sin perder de dónde salió cada corrida."
+                )
+                % {"obj": obj},
+                level=messages.WARNING,
+            )
+
+        if machine_changed_while_printing and obj.machine_id:
+            self.message_user(
+                request,
+                gettext(
+                    "Trabajo '%(obj)s' pasado de máquina mientras imprimía: "
+                    "las corridas que ya se hicieron quedan a nombre de la "
+                    "máquina anterior; de acá en más cuentan para "
+                    "'%(maquina)s'."
+                )
+                % {"obj": obj, "maquina": obj.machine},
+            )
+
         # Al marcar 'Impreso': el material ya se descontó al aprobar; acá la
         # sobrante del último gcode se suma al stock de la pieza. (Para trabajos
         # del modo anterior sin pieza, recién acá se descuenta el material.)
         if obj.status == ProductionJob.Status.DONE:
             obj.consume_stock()  # no-op si ya se descontó al aprobar
+            # Cierra el tramo abierto (acreditándole las corridas que
+            # faltaran contabilizar), antes de repartir horas e historial
+            # entre las máquinas que hayan participado de este trabajo.
+            obj.finalize_tramos()
             surplus = obj.register_surplus()
             if surplus:
                 self.message_user(
@@ -582,6 +678,24 @@ class ProductionJobAdmin(admin.ModelAdmin):
                     )
                     % {"job": moved_job, "maquina": moved_job.machine},
                 )
+
+    def response_change(self, request, obj):
+        # El botón "Cambiar de máquina" de la Cola/Tablero trae acá con un
+        # "?next=" a esa misma pantalla: al guardar, en vez de mandar a la
+        # ficha del trabajo o al listado de "Trabajos de producción", volvemos
+        # adonde estaba el usuario. Así el aviso de `save_model` (cambio de
+        # máquina bloqueado, o corridas que quedan a nombre de la máquina
+        # anterior) se ve en el lugar donde lo esperaba, en vez de perderse en
+        # una pantalla que después no mira.
+        next_url = request.GET.get("next") or request.POST.get("next")
+        if next_url and url_has_allowed_host_and_scheme(
+            next_url, allowed_hosts={request.get_host()}, require_https=request.is_secure()
+        ):
+            if not any(
+                k in request.POST for k in ("_continue", "_addanother", "_saveasnew")
+            ):
+                return HttpResponseRedirect(next_url)
+        return super().response_change(request, obj)
 
 
 class ColaProduccion(ProductionJob):
@@ -703,6 +817,13 @@ class ColaProduccionAdmin(admin.ModelAdmin):
                 ),
                 "empezar_url": reverse(
                     "admin:production_colaproduccion_empezar", args=[job.id]
+                ),
+                "change_machine_url": (
+                    reverse("admin:production_productionjob_change", args=[job.id])
+                    + "?next="
+                    + urlquote(
+                        reverse("admin:production_colaproduccion_changelist")
+                    )
                 ),
             }
 
@@ -913,6 +1034,13 @@ class TableroAdmin(admin.ModelAdmin):
                     ),
                     "empezar_url": reverse(
                         "admin:production_tablero_empezar", args=[current.id]
+                    ),
+                    "change_machine_url": (
+                        reverse(
+                            "admin:production_productionjob_change", args=[current.id]
+                        )
+                        + "?next="
+                        + urlquote(reverse("admin:production_tablero_changelist"))
                     ),
                 }
             machines.append(
