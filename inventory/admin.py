@@ -107,7 +107,7 @@ class FilamentAdmin(admin.ModelAdmin):
         "material_type",
         "color",
         "cost_per_kg",
-        "cost_per_gram",
+        "notes_display",
         "stock_grams",
         "min_stock",
         "stock_status",
@@ -122,9 +122,20 @@ class FilamentAdmin(admin.ModelAdmin):
     # suma cuando la compra pasa a "Confirmada".
     readonly_fields = ("stock_grams",)
 
-    @admin.display(description=_("Costo/g"))
-    def cost_per_gram(self, obj):
-        return f"${obj.cost_per_gram}"
+    def formfield_for_dbfield(self, db_field, request, **kwargs):
+        formfield = super().formfield_for_dbfield(db_field, request, **kwargs)
+        # El input de "Costo por kg" en el listado (list_editable) sale muy
+        # ancho por defecto; lo angostamos un poco.
+        if db_field.name == "cost_per_kg" and formfield is not None:
+            formfield.widget.attrs["style"] = "width: 90px;"
+        return formfield
+
+    @admin.display(description=_("Descripción"))
+    def notes_display(self, obj):
+        if not obj.notes:
+            return "—"
+        text = obj.notes.strip().splitlines()[0]
+        return text if len(text) <= 40 else text[:37] + "…"
 
     @admin.display(description=_("Estado stock"))
     def stock_status(self, obj):
