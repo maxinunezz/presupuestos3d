@@ -8,11 +8,15 @@
 
     .mx-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 22px; }
     .mx-tabs { display: flex; gap: 6px; }
-    .mx-tab {
+    /* "a.mx-tab" (no solo ".mx-tab") para ganarle en especificidad a la regla
+       global del admin "a:link, a:visited" (que en modo oscuro pinta los
+       links de celeste) — si no, las pestañas inactivas se ven celestes en
+       vez de con su propio estilo. Mismo motivo en .mx-month-option más abajo. */
+    a.mx-tab {
         padding: 7px 16px; border: 1px solid #111; border-radius: 6px; text-decoration: none;
         color: #111; font-size: 13px; font-weight: 600; background: #fff;
     }
-    .mx-tab.active { background: #111; color: #fff; }
+    a.mx-tab.active { background: #111; color: #fff; }
     .mx-range { color: var(--body-quiet-color, #555); font-size: 13px; font-weight: 600; }
     /* Dropdown de mes: es un <select> nativo mostraba los 24 meses de un
        tirón (lista larguísima). Lo reemplazamos por un botón + menú propio
@@ -26,15 +30,15 @@
     }
     .mx-month-menu {
         display: none; position: absolute; top: calc(100% + 4px); left: 0; z-index: 20;
-        min-width: 160px; max-height: 216px; overflow-y: auto; background: #fff;
-        border: 1px solid #111; border-radius: 6px; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25);
+        min-width: 160px; max-height: 216px; overflow-y: auto; background: #111;
+        border: 1px solid #111; border-radius: 6px; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
     }
     .mx-month-menu.open { display: block; }
-    .mx-month-option {
-        display: block; padding: 7px 14px; font-size: 13px; color: #111; text-decoration: none;
+    a.mx-month-option {
+        display: block; padding: 7px 14px; font-size: 13px; color: #fff; text-decoration: none;
     }
-    .mx-month-option:hover { background: #f0f0f0; }
-    .mx-month-option.active { background: #111; color: #fff; }
+    a.mx-month-option:hover { background: #333; }
+    a.mx-month-option.active { background: #fff; color: #111; }
     .mx-excel {
         margin-left: auto; padding: 8px 18px; background: #16a34a; color: #fff; border-radius: 6px;
         text-decoration: none; font-size: 13px; font-weight: 600;
