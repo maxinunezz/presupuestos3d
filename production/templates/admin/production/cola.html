@@ -125,7 +125,7 @@
                             <button type="submit" class="btn-mark-run">▶ {% translate "Empezar" %}</button>
                         </form>
                         {% endif %}
-                        {% if j.printing and j.can_mark_done %}
+                        {% if j.printing %}
                         <form method="post" action="{{ j.mark_done_url }}" onsubmit="return confirm('{% translate "¿Marcar este trabajo como Impreso?" %}');">
                             {% csrf_token %}
                             <button type="submit" class="btn-mark-done">✅ {% translate "Impreso" %}</button>
@@ -182,7 +182,7 @@
                     <button type="submit" class="btn-mark-run">▶ {% translate "Empezar" %}</button>
                 </form>
                 {% endif %}
-                {% if j.printing and j.can_mark_done %}
+                {% if j.printing %}
                 <form method="post" action="{{ j.mark_done_url }}" onsubmit="return confirm('{% translate "¿Marcar este trabajo como Impreso?" %}');">
                     {% csrf_token %}
                     <button type="submit" class="btn-mark-done">✅ {% translate "Impreso" %}</button>

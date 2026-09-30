@@ -92,7 +92,7 @@
                     <button type="submit" class="btn-mark-run">▶ {% translate "Empezar" %}</button>
                 </form>
                 {% endif %}
-                {% if m.current.printing and m.current.can_mark_done %}
+                {% if m.current.printing %}
                 <form method="post" action="{{ m.current.mark_done_url }}" onsubmit="return confirm('{% translate "¿Marcar este trabajo como Impreso?" %}');" style="display:inline;">
                     {% csrf_token %}
                     <button type="submit" class="btn-mark-done">✅ {% translate "Marcar como Impreso" %}</button>
