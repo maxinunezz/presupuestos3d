@@ -54,7 +54,7 @@
     <thead>
         <tr>
             <th>{% translate "Filamento" %}</th>
-            <th class="num">{% translate "Stock (g)" %}</th>
+            <th>{% translate "Material" %}</th>
             <th class="num">{% translate "Stock (kg)" %}</th>
             <th class="num">{% translate "Costo/kg" %}</th>
             <th class="num">{% translate "Valor en stock" %}</th>
@@ -64,7 +64,7 @@
         {% for r in fil_rows %}
         <tr>
             <td>{{ r.name }}</td>
-            <td class="num">{{ r.stock_grams }}</td>
+            <td>{{ r.material_type }}</td>
             <td class="num">{{ r.stock_kg }}</td>
             <td class="num">$ {{ r.cost_per_kg }}</td>
             <td class="num">$ {{ r.value }}</td>
@@ -74,8 +74,7 @@
         {% endfor %}
         {% if fil_rows %}
         <tr class="total-row">
-            <td>{% translate "TOTAL filamentos" %}</td>
-            <td class="num">{{ fil_total_grams }} g</td>
+            <td colspan="2">{% translate "TOTAL filamentos" %}</td>
             <td class="num">{{ fil_total_kg }} kg</td>
             <td class="num">—</td>
             <td class="num">$ {{ fil_total_money }}</td>

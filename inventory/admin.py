@@ -275,9 +275,9 @@ class StockTotalsAdmin(admin.ModelAdmin):
                 fil_total_money += value
                 fil_rows.append(
                     {
-                        "name": str(f),
+                        "name": f"{f.brand} {f.color}",
                         "brand": f.brand,
-                        "stock_grams": _num(f.stock_grams),
+                        "material_type": f.get_material_type_display(),
                         "stock_kg": _num(f.stock_grams / Decimal("1000"), 3),
                         "cost_per_kg": _money(f.cost_per_kg),
                         "value": _money(value),
