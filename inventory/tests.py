@@ -83,6 +83,40 @@ class CompraConfirmTests(TestCase):
         # No sumó dos veces.
         self.assertEqual(self.fil.stock_grams, Decimal("600"))
 
+    def test_precio_pagado_es_el_total_de_la_linea_no_por_kg(self):
+        # "Precio pagado" es lo que efectivamente se pagó por TODA la línea
+        # (como en una factura), no el costo por kg. Acá se compran 2kg
+        # (2000g) por $20.000 en total: el costo por kg debe quedar en
+        # $10.000/kg, no en $20.000/kg.
+        compra = Compra.objects.create()
+        line = CompraLine.objects.create(
+            compra=compra,
+            filament=self.fil,
+            quantity=Decimal("2000"),
+            unit_price=Decimal("20000"),
+        )
+        self.assertEqual(line.effective_unit_price, Decimal("10000.00"))
+        self.assertEqual(line.line_cost, Decimal("20000.00"))
+        compra.confirm()
+        self.fil.refresh_from_db()
+        self.assertEqual(self.fil.cost_per_kg, Decimal("10000.00"))
+
+    def test_precio_pagado_total_para_agregado(self):
+        agg = Aggregate.objects.create(name="Argolla", cost_per_unit=Decimal("1"))
+        compra = Compra.objects.create()
+        line = CompraLine.objects.create(
+            compra=compra,
+            aggregate=agg,
+            quantity=Decimal("100"),
+            unit_price=Decimal("50000"),
+        )
+        self.assertEqual(line.effective_unit_price, Decimal("500.00"))
+        self.assertEqual(line.line_cost, Decimal("50000.00"))
+        compra.confirm()
+        agg.refresh_from_db()
+        self.assertEqual(agg.cost_per_unit, Decimal("500.00"))
+        self.assertEqual(agg.stock_quantity, Decimal("100"))
+
 
 class ApiPermissionTests(TestCase):
     """C1: la API de inventario exige staff y es de solo lectura."""

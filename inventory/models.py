@@ -433,8 +433,12 @@ class CompraLine(models.Model):
     Una línea de compra: un filamento o un agregado (existente o creado en el
     momento desde el selector), con la cantidad comprada y el precio pagado.
 
-    - Filamento: `quantity` en gramos, `unit_price` = costo por kg.
-    - Agregado:  `quantity` en unidades, `unit_price` = costo por unidad.
+    `unit_price` ("Precio pagado") es el TOTAL pagado por esta línea completa,
+    no el precio por unidad/kg: es lo que naturalmente se lee en una factura o
+    ticket. El costo unitario (por kg para filamento, por unidad para
+    agregado) se calcula dividiendo ese total por la cantidad
+    (`effective_unit_price`), y es ese costo unitario el que se graba como
+    nuevo precio del artículo al confirmar la compra.
 
     Si `unit_price` se deja vacío, se mantiene el precio actual del artículo.
     """
@@ -475,10 +479,12 @@ class CompraLine(models.Model):
         null=True,
         blank=True,
         help_text=_(
-            "Filamento: costo por KILOGRAMO (no por gramo ni por bobina). "
-            "Agregado: costo por la unidad que tenga cargada. Si se deja vacío, "
-            "se mantiene el precio actual del artículo. Los decimales pueden ir "
-            "con coma o con punto."
+            "TOTAL pagado por esta línea completa (no por unidad ni por kg): "
+            "si compraste 100 argollas por $50.000 en total, cargá 50.000. El "
+            "sistema divide por la cantidad para calcular el costo unitario (o "
+            "por kg, para filamento) y actualiza el precio del artículo con ese "
+            "costo unitario. Si se deja vacío, se mantiene el precio actual del "
+            "artículo. Los decimales pueden ir con coma o con punto."
         ),
     )
 
@@ -514,9 +520,20 @@ class CompraLine(models.Model):
 
     @property
     def effective_unit_price(self) -> Decimal:
-        """Precio a usar: el cargado o, si está vacío, el precio actual del artículo."""
+        """
+        Costo por unidad (o por kg, para filamento) a usar. "Precio pagado"
+        (`unit_price`) es el TOTAL de la línea, así que acá se divide por la
+        cantidad (convertida a kg para filamento) para obtener el costo
+        unitario. Si no se cargó precio, se usa el precio actual del artículo
+        (que ya está expresado en esa misma unidad).
+        """
         if self.unit_price is not None:
-            return self.unit_price
+            divisor = (
+                self.quantity / Decimal("1000") if self.filament_id else self.quantity
+            )
+            if not divisor:
+                return Decimal("0.00")
+            return (self.unit_price / divisor).quantize(Decimal("0.01"))
         if self.filament_id:
             return self.filament.cost_per_kg
         return self.aggregate.cost_per_unit
@@ -524,9 +541,13 @@ class CompraLine(models.Model):
     @property
     def line_cost(self) -> Decimal:
         """
-        Costo total de la línea. Para filamento, el precio es por kg y la
-        cantidad en gramos, así que se convierte a kg.
+        Costo total de la línea. Si se cargó "Precio pagado" es directamente
+        ese total (es lo que efectivamente se pagó). Si no se cargó, se
+        calcula con el precio actual del artículo (por kg o por unidad)
+        multiplicado por la cantidad.
         """
+        if self.unit_price is not None:
+            return self.unit_price.quantize(Decimal("0.01"))
         price = self.effective_unit_price
         if self.filament_id:
             return (self.quantity / Decimal("1000") * price).quantize(Decimal("0.01"))
@@ -544,9 +565,11 @@ class CompraLine(models.Model):
                 Decimal("0.01")
             )
             note = ""
-            if self.unit_price is not None and self.unit_price != fil.cost_per_kg:
-                note = f"Precio actualizado: ${fil.cost_per_kg}/kg → ${self.unit_price}/kg"
-                fil.cost_per_kg = self.unit_price
+            if self.unit_price is not None:
+                new_cost = self.effective_unit_price
+                if new_cost != fil.cost_per_kg:
+                    note = f"Precio actualizado: ${fil.cost_per_kg}/kg → ${new_cost}/kg"
+                    fil.cost_per_kg = new_cost
             fil.save(update_fields=["stock_grams", "cost_per_kg", "updated_at"])
             StockMovement.objects.create(
                 filament=fil,
@@ -560,9 +583,11 @@ class CompraLine(models.Model):
                 Decimal("0.01")
             )
             note = ""
-            if self.unit_price is not None and self.unit_price != agg.cost_per_unit:
-                note = f"Precio actualizado: ${agg.cost_per_unit}/u → ${self.unit_price}/u"
-                agg.cost_per_unit = self.unit_price
+            if self.unit_price is not None:
+                new_cost = self.effective_unit_price
+                if new_cost != agg.cost_per_unit:
+                    note = f"Precio actualizado: ${agg.cost_per_unit}/u → ${new_cost}/u"
+                    agg.cost_per_unit = new_cost
             agg.save(update_fields=["stock_quantity", "cost_per_unit", "updated_at"])
             StockMovement.objects.create(
                 aggregate=agg,

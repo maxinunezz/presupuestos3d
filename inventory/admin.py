@@ -256,18 +256,21 @@ class CompraLineInline(admin.TabularInline):
     model = CompraLine
     extra = 1
     autocomplete_fields = ("filament", "aggregate")
-    readonly_fields = ("line_cost_display",)
-    fields = ("filament", "aggregate", "quantity", "unit_price", "line_cost_display")
+    readonly_fields = ("unit_cost_display",)
+    fields = ("filament", "aggregate", "quantity", "unit_price", "unit_cost_display")
     formfield_overrides = DECIMAL_LOCALIZE
 
-    @admin.display(description=_("Costo de línea"))
-    def line_cost_display(self, obj):
-        return f"${obj.line_cost}" if obj.pk else "-"
+    @admin.display(description=_("Costo unitario"))
+    def unit_cost_display(self, obj):
+        if not obj.pk:
+            return "-"
+        suffix = "/kg" if obj.filament_id else "/u"
+        return f"${obj.effective_unit_price}{suffix}"
 
     def get_readonly_fields(self, request, obj=None):
         # Una compra confirmada no se puede editar (ya impactó el inventario).
         if obj and obj.status == Compra.Status.CONFIRMED:
-            return ("filament", "aggregate", "quantity", "unit_price", "line_cost_display")
+            return ("filament", "aggregate", "quantity", "unit_price", "unit_cost_display")
         return self.readonly_fields
 
 
