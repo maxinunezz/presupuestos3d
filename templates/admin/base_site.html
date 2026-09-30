@@ -8,9 +8,91 @@
 
 {% block extrastyle %}{{ block.super }}
 <style>
+    /* Agrupa campanita + selector de idioma + "Bienvenidos" en un solo
+       bloque (a la derecha del título, gracias al justify-content:
+       space-between que Django ya le pone a #header) para poder ordenarlos
+       distinto en escritorio y en mobile sin duplicar el markup interno de
+       Django (userlinks, logout form, etc. siguen viniendo de block.super). */
+    .admin-usertools {
+        display: flex;
+        align-items: center;
+        gap: 22px;
+        position: relative;
+    }
+    /* Escritorio: campanita → selector de idioma → luna → "Bienvenidos, ...",
+       todo junto a la derecha, con más aire entre cada elemento. */
+    .admin-usertools #stock-bell { order: 1; }
+    .admin-usertools #lang-switch { order: 2; }
+    .admin-usertools #user-tools { order: 3; }
+    /* La luna viene al final de "Cerrar sesión" (todo dentro de #user-tools,
+       ver color_theme_toggle.html de Django); convertimos #user-tools en un
+       flex propio y la mandamos al frente (antes del texto "Bienvenidos...")
+       para que quede entre el selector de idioma y el saludo. */
+    .admin-usertools #user-tools {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+    /* Ojo: acá NO se usa "gap" (afectaría también el espaciado entre
+       "Ver el sitio" / "Cambiar contraseña" / "Cerrar sesión", que ya viene
+       bien así de Django). Solo se separa la luna del saludo, con el mismo
+       valor que separa campanita/selector/luna entre sí (gap de arriba),
+       para que las tres distancias queden parejas. */
+    .admin-usertools #user-tools .theme-toggle {
+        order: -1;
+        margin-right: 22px;
+    }
+
+    @media (min-width: 1025px) {
+        /* Más aire vertical en el header en escritorio (Django trae 10px
+           40px por defecto). */
+        #header {
+            padding: 18px 40px;
+        }
+    }
+
+    @media (max-width: 1024px) {
+        /* Responsive: acá Django ya pasa #header a columna (ver
+           responsive.css), así que esto queda debajo del título. Arriba
+           "Bienvenidos, ..." (fila completa) y abajo una fila con el
+           selector a la izquierda y la campanita a la derecha. */
+        .admin-usertools {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-areas:
+                "welcome welcome"
+                "lang bell";
+            gap: 8px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .admin-usertools #user-tools { grid-area: welcome; }
+        .admin-usertools #lang-switch { grid-area: lang; justify-self: start; }
+        .admin-usertools #stock-bell { grid-area: bell; justify-self: end; }
+        /* El botón de tema (luna/sol, de Django) viene pegado al final del
+           renglón "Bienvenidos, ... / Cambiar contraseña / Cerrar sesión".
+           Se lo saca del flujo normal y se lo ancla, centrado, a la altura
+           del renglón selector/campanita (la última fila del grid), en vez
+           de dejarlo en su propio renglón aparte. */
+        .admin-usertools #user-tools .theme-toggle {
+            position: absolute;
+            left: 50%;
+            bottom: 0;
+            transform: translateX(-50%);
+            margin: 0;
+        }
+        /* El dropdown tiene un ancho fijo (320px) pensado para escritorio;
+           en pantallas angostas eso lo saca del viewport (el padding de
+           #header a este breakpoint hace que la campanita no esté pegada
+           al borde real de la pantalla) y queda "cortado" a la izquierda.
+           Acá se limita el ancho al espacio real disponible. */
+        #stock-bell .bell-dropdown {
+            width: auto;
+            max-width: calc(100vw - 24px);
+        }
+    }
     #lang-switch {
         display: inline-block;
-        margin-right: 18px;
         vertical-align: middle;
     }
     #lang-switch select {
@@ -26,7 +108,6 @@
     #stock-bell {
         position: relative;
         display: inline-block;
-        margin-right: 18px;
         vertical-align: middle;
     }
     #stock-bell .bell-icon {
@@ -102,6 +183,7 @@
 {% endblock %}
 
 {% block usertools %}
+<div class="admin-usertools">
 {% if user.is_active and user.is_staff %}
 {% get_current_language as CURRENT_LANGUAGE %}
 {% get_available_languages as LANGUAGES %}
@@ -134,4 +216,5 @@
 </div>
 {% endif %}
 {{ block.super }}
+</div>
 {% endblock %}
