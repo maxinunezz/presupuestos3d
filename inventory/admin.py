@@ -102,13 +102,17 @@ def _stock_badge(is_low):
 
 @admin.register(Filament)
 class FilamentAdmin(admin.ModelAdmin):
+    # Ancho común de los campos numéricos angostos del listado (Costo por kg,
+    # Stock disponible, Stock mínimo), para que queden todos parejos.
+    NARROW_WIDTH = "90px"
+
     list_display = (
         "brand",
         "material_type",
         "color",
-        "cost_per_kg",
         "notes_display",
-        "stock_grams",
+        "cost_per_kg",
+        "stock_grams_display",
         "min_stock",
         "stock_status",
         "is_active",
@@ -124,10 +128,10 @@ class FilamentAdmin(admin.ModelAdmin):
 
     def formfield_for_dbfield(self, db_field, request, **kwargs):
         formfield = super().formfield_for_dbfield(db_field, request, **kwargs)
-        # El input de "Costo por kg" en el listado (list_editable) sale muy
-        # ancho por defecto; lo angostamos un poco.
-        if db_field.name == "cost_per_kg" and formfield is not None:
-            formfield.widget.attrs["style"] = "width: 90px;"
+        # Los inputs de "Costo por kg" y "Stock mínimo" en el listado
+        # (list_editable) salen muy anchos por defecto; los angostamos.
+        if db_field.name in ("cost_per_kg", "min_stock") and formfield is not None:
+            formfield.widget.attrs["style"] = f"width: {self.NARROW_WIDTH};"
         return formfield
 
     @admin.display(description=_("Descripción"))
@@ -136,6 +140,16 @@ class FilamentAdmin(admin.ModelAdmin):
             return "—"
         text = obj.notes.strip().splitlines()[0]
         return text if len(text) <= 40 else text[:37] + "…"
+
+    @admin.display(description=_("Stock disponible (g)"), ordering="stock_grams")
+    def stock_grams_display(self, obj):
+        # "Stock disponible" es de solo lectura (no list_editable), pero lo
+        # angostamos igual que los inputs de al lado para que la fila no
+        # quede tan ancha.
+        return mark_safe(
+            f'<span style="display:inline-block;width:{self.NARROW_WIDTH};">'
+            f"{obj.stock_grams}</span>"
+        )
 
     @admin.display(description=_("Estado stock"))
     def stock_status(self, obj):
