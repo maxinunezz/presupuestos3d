@@ -433,6 +433,9 @@ msgstr "Expense date. Determines which month/year it falls under in the dashboar
 msgid "Medio de pago"
 msgstr "Payment method"
 
+msgid "Medios de pago"
+msgstr "Payment methods"
+
 msgid "Es recurrente"
 msgstr "Is recurring"
 

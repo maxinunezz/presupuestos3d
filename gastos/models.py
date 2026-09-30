@@ -50,6 +50,28 @@ class AreaResponsable(models.Model):
         return self.nombre
 
 
+class MedioPagoGasto(models.Model):
+    """
+    Medio de pago de un gasto (Efectivo, Transferencia, Tarjeta, etc.). Antes
+    era un choice fijo en el código (`Gasto.MedioPago`); ahora es un modelo
+    editable desde el admin para poder sumar medios nuevos (ej: "Ualá") sin
+    programar ni migrar nada. Es opcional: no todos los gastos necesitan
+    tener uno cargado. Borrar un medio en uso está bloqueado
+    (`on_delete=PROTECT` en `Gasto`) para no perder el historial de gastos ya
+    cargados con él.
+    """
+
+    nombre = models.CharField(_("Nombre"), max_length=50, unique=True)
+
+    class Meta:
+        verbose_name = _("Medio de pago")
+        verbose_name_plural = _("Medios de pago")
+        ordering = ["nombre"]
+
+    def __str__(self):
+        return self.nombre
+
+
 def _default_categoria_gasto():
     """
     Categoría que se preselecciona al cargar un Gasto nuevo: "Administración"
@@ -91,13 +113,6 @@ class Gasto(models.Model):
         MENSUAL = "MENSUAL", _("Mensual")
         ANUAL = "ANUAL", _("Anual")
 
-    class MedioPago(models.TextChoices):
-        EFECTIVO = "EFECTIVO", _("Efectivo")
-        TRANSFERENCIA = "TRANSFERENCIA", _("Transferencia")
-        TARJETA = "TARJETA", _("Tarjeta de crédito")
-        DEBITO = "DEBITO", _("Débito automático")
-        OTRO = "OTRO", _("Otro")
-
     categoria = models.ForeignKey(
         CategoriaGasto,
         verbose_name=_("Categoría"),
@@ -138,10 +153,12 @@ class Gasto(models.Model):
         help_text=_("Fecha del gasto. Define en qué mes/año cae en el panel."),
     )
     proveedor = models.CharField(_("Proveedor"), max_length=150, blank=True)
-    medio_pago = models.CharField(
-        _("Medio de pago"),
-        max_length=20,
-        choices=MedioPago.choices,
+    medio_pago = models.ForeignKey(
+        MedioPagoGasto,
+        verbose_name=_("Medio de pago"),
+        on_delete=models.PROTECT,
+        related_name="gastos",
+        null=True,
         blank=True,
     )
     es_recurrente = models.BooleanField(

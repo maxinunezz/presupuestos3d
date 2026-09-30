@@ -12,7 +12,14 @@ from .metrics import (
     export_xlsx,
     template_context,
 )
-from .models import AreaResponsable, CategoriaGasto, Gasto, PanelGastos, TopeGasto
+from .models import (
+    AreaResponsable,
+    CategoriaGasto,
+    Gasto,
+    MedioPagoGasto,
+    PanelGastos,
+    TopeGasto,
+)
 
 # Los campos de cantidad/precio (DecimalField) aceptan tanto coma como punto
 # para los decimales (ej: 8500,50 u 8500.50).
@@ -46,6 +53,19 @@ class AreaResponsableAdmin(admin.ModelAdmin):
     search_fields = ("nombre",)
 
 
+@admin.register(MedioPagoGasto)
+class MedioPagoGastoAdmin(admin.ModelAdmin):
+    """
+    Medios de pago (Efectivo, Transferencia, Tarjeta, etc.). Se agregan/editan
+    acá mismo, sin tocar nada de programación. Borrar un medio que ya tenga
+    Gastos cargados está bloqueado para no perder ese historial: hay que
+    reasignarlos primero a otro medio.
+    """
+
+    list_display = ("nombre",)
+    search_fields = ("nombre",)
+
+
 @admin.register(Gasto)
 class GastoAdmin(admin.ModelAdmin):
     list_display = (
@@ -62,7 +82,7 @@ class GastoAdmin(admin.ModelAdmin):
     )
     list_filter = ("tipo", "categoria", "area", "es_recurrente", "periodicidad", "medio_pago")
     search_fields = ("concepto", "proveedor", "notas")
-    autocomplete_fields = ("categoria", "area")
+    autocomplete_fields = ("categoria", "area", "medio_pago")
     date_hierarchy = "fecha"
     formfield_overrides = DECIMAL_LOCALIZE
     fieldsets = (

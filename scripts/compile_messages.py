@@ -263,6 +263,7 @@ GASTOS = {
     'Fecha del gasto. Define en qué mes/año cae en el panel.':
         'Expense date. Determines which month/year it falls under in the dashboard.',
     'Medio de pago': 'Payment method',
+    'Medios de pago': 'Payment methods',
     'Es recurrente': 'Is recurring',
     'Marcalo si es un gasto fijo que se repite (suscripción, abono). '
     'Se usa para calcular el compromiso mensual (run-rate).':
