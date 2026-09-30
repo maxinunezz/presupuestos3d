@@ -112,7 +112,8 @@ media/           # uploads locales (.3mf/gcode) — efímero en prod
 - `Presupuesto.medio_pago` incluye **Ualá** (fintech/billetera usada seguido
   por el negocio) como choice propio, además de Efectivo/Transferencia/Mercado
   Pago/Tarjeta/Otro.
-- Proxy de admin: **PanelVentas** ("Panel de ventas"), pensado para reemplazar
+- Proxy de admin: **PanelVentas** ("Ventas", dentro de "Ventas y presupuestos",
+  justo arriba de "Presupuestos"), pensado para reemplazar
   la planilla de ventas en Excel: un pedido aprobado por fila con producto,
   cantidad, precio unitario y fecha/mes (si el pedido tiene un solo producto,
   que es el caso más común, muestra ese ítem puntual; con varios productos los

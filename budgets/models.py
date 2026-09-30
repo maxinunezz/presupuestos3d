@@ -1650,7 +1650,7 @@ class PanelVentas(Presupuesto):
     class Meta:
         proxy = True
         verbose_name = _("Venta")
-        verbose_name_plural = _("Panel de ventas")
+        verbose_name_plural = _("Ventas")
 
 
 class PresupuestoItem(models.Model):

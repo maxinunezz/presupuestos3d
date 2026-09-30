@@ -6,12 +6,14 @@ relación con cómo se usa el negocio en el día a día. Acá se reemplaza ese
 orden por uno pensado para el flujo real de trabajo:
 
 - Primero "Métricas": los paneles de solo lectura que hoy viven repartidos
-  en cada app (Métricas, Panel de ventas, Panel de gastos, Tablero de
-  producción, Totales de inventario) — lo primero que se mira al entrar.
+  en cada app (Métricas, Panel de gastos, Tablero de producción, Totales de
+  inventario) — lo primero que se mira al entrar.
 - Después las apps de negocio (Producción, Ventas y presupuestos, Inventario
   y compras, Gastos), y dentro de cada una: primero lo operativo (lo que se
   toca seguido), al final los catálogos/configuración (lo que se carga una
-  vez y no se vuelve a tocar).
+  vez y no se vuelve a tocar). Dentro de "Ventas y presupuestos", "Ventas"
+  (el panel, antes "Panel de ventas") queda justo arriba de "Presupuestos",
+  ya que es la vista de solo lectura de esos mismos pedidos ya aprobados.
 - Al final "Configuración" (usuarios, grupos, tokens de API): administración
   del sistema, no del negocio.
 
@@ -34,7 +36,6 @@ _SECTIONS = [
         _("Métricas"),
         [
             ("budgets", "Metricas"),
-            ("budgets", "PanelVentas"),
             ("gastos", "PanelGastos"),
             ("production", "Tablero"),
             ("inventory", "StockTotals"),
@@ -53,6 +54,7 @@ _SECTIONS = [
         "ventas_presupuestos",
         _("Ventas y presupuestos"),
         [
+            ("budgets", "PanelVentas"),
             ("budgets", "Presupuesto"),
             ("budgets", "Producto"),
             ("budgets", "StockProductos"),
