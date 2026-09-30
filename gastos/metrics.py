@@ -16,7 +16,7 @@ from decimal import Decimal
 from django.utils import timezone
 from django.utils.translation import gettext
 
-from .models import CategoriaGasto, Gasto, TopeGasto
+from .models import AreaResponsable, CategoriaGasto, Gasto, TopeGasto
 
 ZERO = Decimal("0")
 
@@ -140,7 +140,9 @@ def build_gastos_metrics(year: int, month) -> dict:
         prev_label = gettext("Año %(year)s") % {"year": year - 1}
 
     gastos = list(
-        Gasto.objects.filter(fecha__gte=start, fecha__lt=end).select_related("categoria")
+        Gasto.objects.filter(fecha__gte=start, fecha__lt=end).select_related(
+            "categoria", "area"
+        )
     )
 
     # --- Total y desglose por categoría ---
@@ -166,6 +168,43 @@ def build_gastos_metrics(year: int, month) -> dict:
         for cat in todas_categorias
     ]
     categorias.sort(key=lambda c: c["total"], reverse=True)
+
+    # --- Desglose por área responsable ---
+    # El área es opcional (no todos los gastos la tienen asignada): los gastos
+    # sin área se agrupan aparte en "Sin área" para que el total del desglose
+    # siga cuadrando con `total_gastos`.
+    SIN_AREA = None
+    todas_areas = list(AreaResponsable.objects.all())
+    por_area = {area.pk: {"total": ZERO, "count": 0} for area in todas_areas}
+    por_area[SIN_AREA] = {"total": ZERO, "count": 0}
+    for g in gastos:
+        por_area[g.area_id]["total"] += Decimal(g.monto)
+        por_area[g.area_id]["count"] += 1
+    areas = [
+        {
+            "value": area.pk,
+            "label": area.nombre,
+            "total": por_area[area.pk]["total"],
+            "count": por_area[area.pk]["count"],
+            "pct": (por_area[area.pk]["total"] / total_gastos * 100) if total_gastos else ZERO,
+        }
+        for area in todas_areas
+    ]
+    if por_area[SIN_AREA]["count"]:
+        areas.append(
+            {
+                "value": SIN_AREA,
+                "label": gettext("Sin área"),
+                "total": por_area[SIN_AREA]["total"],
+                "count": por_area[SIN_AREA]["count"],
+                "pct": (
+                    por_area[SIN_AREA]["total"] / total_gastos * 100
+                    if total_gastos
+                    else ZERO
+                ),
+            }
+        )
+    areas.sort(key=lambda a: a["total"], reverse=True)
 
     # --- Evolución: 12 meses del año seleccionado ---
     serie = []
@@ -296,6 +335,7 @@ def build_gastos_metrics(year: int, month) -> dict:
         "total_gastos": total_gastos,
         "n_gastos": n_gastos,
         "categorias": categorias,
+        "areas": areas,
         "serie": serie,
         "prev_total": prev_total,
         "variacion_pct": variacion_pct,
@@ -344,6 +384,10 @@ def template_context(m: dict) -> dict:
         "labels": [str(c["label"]) for c in m["categorias"] if c["total"] > 0],
         "data": [float(c["total"]) for c in m["categorias"] if c["total"] > 0],
     }
+    area_chart = {
+        "labels": [str(a["label"]) for a in m["areas"] if a["total"] > 0],
+        "data": [float(a["total"]) for a in m["areas"] if a["total"] > 0],
+    }
     serie_chart = {
         "labels": [s["label"] for s in m["serie"]],
         "data": [float(s["total"]) for s in m["serie"]],
@@ -359,6 +403,15 @@ def template_context(m: dict) -> dict:
             "var_up": (c["var_pct"] is not None and c["var_pct"] > 0),
         }
         for c in m["categorias"]
+    ]
+    areas = [
+        {
+            "label": a["label"],
+            "total": _money(a["total"]),
+            "count": a["count"],
+            "pct": _pct_plain(a["pct"]),
+        }
+        for a in m["areas"]
     ]
     recurrentes = [
         {
@@ -397,6 +450,7 @@ def template_context(m: dict) -> dict:
         "total_gastos": _money(m["total_gastos"]),
         "n_gastos": m["n_gastos"],
         "categorias": categorias,
+        "areas": areas,
         "variacion_pct": _pct(m["variacion_pct"]),
         "variacion_up": (m["variacion_pct"] is not None and m["variacion_pct"] > 0),
         "prev_total": _money(m["prev_total"]),
@@ -418,6 +472,7 @@ def template_context(m: dict) -> dict:
         "promedio_mensual": _money(m["promedio_mensual"]),
         "meses_transcurridos": m["meses_transcurridos"],
         "cat_chart_json": json.dumps(cat_chart),
+        "area_chart_json": json.dumps(area_chart),
         "serie_chart_json": json.dumps(serie_chart),
     }
 

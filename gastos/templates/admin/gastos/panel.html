@@ -8,8 +8,14 @@
 
     .gx-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 22px; }
     .gx-bar form { display: flex; gap: 8px; align-items: center; }
-    .gx-bar select { padding: 6px 10px; border-radius: 6px; }
-    .gx-go { padding: 7px 14px; border: 1px solid #111; border-radius: 6px; background: #111; color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; }
+    /* Mismo estilo que el dropdown de mes de Métricas (.mx-month-select):
+       borde negro, texto en negrita, fondo blanco. */
+    .gx-bar select {
+        padding: 6px 10px; border: 1px solid #111; border-radius: 6px; font-size: 13px;
+        font-weight: 600; background: #fff; color: #111; cursor: pointer;
+    }
+    .gx-go { padding: 7px 16px; border: 1px solid #111; border-radius: 6px; text-decoration: none; color: #111; font-size: 13px; font-weight: 600; background: #fff; cursor: pointer; }
+    .gx-go:hover { background: #111; color: #fff; }
     .gx-range { color: var(--body-quiet-color, #555); font-size: 13px; font-weight: 600; }
     .gx-excel {
         margin-left: auto; padding: 8px 18px; background: #16a34a; color: #fff; border-radius: 6px;
@@ -20,7 +26,6 @@
         margin: 26px 0 8px; font-size: 16px; font-weight: bold;
         border-bottom: 3px solid #111; padding-bottom: 4px;
     }
-    .gx-section--res { border-bottom-color: #2563eb; }
     .gx-section--rec { border-bottom-color: #7c3aed; }
     .gx-section--ext { border-bottom-color: #b91c1c; }
     .gx-section--top { border-bottom-color: #d97706; }
@@ -33,16 +38,21 @@
     .kpi .s { font-size: 11px; color: rgba(255, 255, 255, 0.6); display: block; margin-top: 2px; }
     .kpi.up { background: #b91c1c; }
     .kpi.down { background: #15803d; }
-    .kpi.pos { background: #15803d; }
-    .kpi.neg { background: #b91c1c; }
     .gx-kpis--rec .kpi { background: #6d28d9; }
 
     .gx-grid { display: flex; flex-wrap: wrap; gap: 20px; margin-top: 14px; }
     .gx-card {
-        flex: 1 1 380px; min-width: 320px; background: #fff; border: 1px solid #ddd;
-        border-radius: 8px; padding: 14px 16px;
+        flex: 1 1 380px; min-width: 280px; max-width: 100%; background: #fff; border: 1px solid #ddd;
+        border-radius: 8px; padding: 14px 16px; box-sizing: border-box; overflow-x: auto;
     }
     .gx-card h3 { margin: 0 0 10px; font-size: 14px; color: #111; }
+    .gx-chart-wrap { position: relative; height: 260px; width: 100%; }
+    .gx-chart-wrap canvas { max-width: 100%; }
+
+    @media (max-width: 700px) {
+        .gx-card { flex: 1 1 100%; }
+        .gx-chart-wrap { height: 220px; }
+    }
 
     table.gx { width: 100%; border-collapse: collapse; background: #fff; }
     table.gx th { background: #111; color: #fff; text-align: left; padding: 7px 9px; font-size: 11px; text-transform: uppercase; }
@@ -58,8 +68,8 @@
     {% blocktranslate %}Gastos del negocio (administración, comercialización, suscripciones, IT)
     por <b>fecha del gasto</b>. No incluye los <b>costos</b> de producción ni las compras de
     insumos (eso va por Inventario y Métricas). Los totales, la evolución y el desglose por
-    categoría de esta sección incluyen <b>todos</b> los gastos; el resultado operativo vs ventas
-    usa solo los <b>operativos</b> (los extraordinarios se muestran aparte, más abajo).{% endblocktranslate %}
+    categoría de esta sección incluyen <b>todos</b> los gastos (los extraordinarios se muestran
+    aparte, más abajo).{% endblocktranslate %}
 </p>
 
 <div class="gx-bar">
@@ -92,16 +102,34 @@
 
 <div class="gx-grid">
     <div class="gx-card">
-        <h3>{% translate "Gastos por categoría" %}</h3>
-        <canvas id="chartCat" height="160"></canvas>
+        <h3>{% translate "Gastos por área responsable" %}</h3>
+        <div class="gx-chart-wrap"><canvas id="chartArea"></canvas></div>
     </div>
     <div class="gx-card">
-        <h3>{% blocktranslate %}Evolución mensual ({{ sel_year }}){% endblocktranslate %}</h3>
-        <canvas id="chartSerie" height="160"></canvas>
+        <h3>{% translate "Gastos por categoría" %}</h3>
+        <div class="gx-chart-wrap"><canvas id="chartCat"></canvas></div>
     </div>
 </div>
 
 <div class="gx-grid">
+    <div class="gx-card">
+        <h3>{% translate "Desglose por área responsable" %}</h3>
+        <table class="gx">
+            <thead><tr><th>{% translate "Área" %}</th><th class="num">{% translate "Gasto" %}</th><th class="num">%</th><th class="num">{% translate "Cant." %}</th></tr></thead>
+            <tbody>
+                {% for a in areas %}
+                <tr>
+                    <td>{{ a.label }}</td>
+                    <td class="num">{{ a.total }}</td>
+                    <td class="num">{{ a.pct }}</td>
+                    <td class="num">{{ a.count }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="4" class="empty">{% translate "No hay áreas cargadas. Cargá áreas en «Áreas responsables»." %}</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
     <div class="gx-card">
         <h3>{% translate "Desglose por categoría" %}</h3>
         <table class="gx">
@@ -121,27 +149,12 @@
     </div>
 </div>
 
-<!-- ===================== Resultado operativo ===================== -->
-<div class="gx-section gx-section--res">📊 {% translate "Resultado operativo (vs ventas)" %}</div>
-<p class="gx-intro">
-    {% blocktranslate %}Solo gastos <b>operativos</b> (estructura del negocio). Los
-    <b>extraordinarios</b> (viajes, imprevistos) se muestran aparte, más abajo, para
-    no distorsionar esta lectura.{% endblocktranslate %}
-</p>
-<div class="gx-kpis">
-    <div class="kpi"><span class="n">{{ ventas }}</span><span class="l">{% translate "Ventas aprobadas" %}</span></div>
-    <div class="kpi"><span class="n">{{ gastos_operativos }}</span><span class="l">{% translate "Gastos operativos" %}</span></div>
-    <div class="kpi {% if resultado_positivo %}pos{% else %}neg{% endif %}">
-        <span class="n">{{ resultado }}</span><span class="l">{% translate "Ventas − Gastos operativos" %}</span>
+<div class="gx-grid">
+    <div class="gx-card">
+        <h3>{% blocktranslate %}Evolución mensual ({{ sel_year }}){% endblocktranslate %}</h3>
+        <div class="gx-chart-wrap"><canvas id="chartSerie"></canvas></div>
     </div>
-    <div class="kpi"><span class="n">{{ gastos_sobre_ventas }}</span><span class="l">{% translate "Gastos operativos sobre ventas" %}</span></div>
 </div>
-{% if hay_extraordinarios %}
-<p class="gx-intro">
-    {% blocktranslate %}Incluyendo los {{ gastos_extraordinarios }} de gastos extraordinarios del
-    período, el resultado final es {{ resultado_final }}.{% endblocktranslate %}
-</p>
-{% endif %}
 
 <!-- ===================== Recurrentes (run-rate) ===================== -->
 <div class="gx-section gx-section--rec">🔁 {% translate "Compromiso mensual recurrente" %}</div>
@@ -221,20 +234,43 @@
     Chart.defaults.borderColor = "rgba(0, 0, 0, 0.1)";
 
     var cat = {{ cat_chart_json|safe }};
+    var area = {{ area_chart_json|safe }};
     var serie = {{ serie_chart_json|safe }};
+    var legendPosition = window.innerWidth < 700 ? "bottom" : "right";
+
+    if (area.data.length) {
+        new Chart(document.getElementById("chartArea"), {
+            type: "doughnut",
+            data: { labels: area.labels, datasets: [{ data: area.data, backgroundColor: PALETTE, borderWidth: 0 }] },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { position: legendPosition } },
+            }
+        });
+    }
 
     if (cat.data.length) {
         new Chart(document.getElementById("chartCat"), {
             type: "doughnut",
             data: { labels: cat.labels, datasets: [{ data: cat.data, backgroundColor: PALETTE, borderWidth: 0 }] },
-            options: { plugins: { legend: { position: "right" } } }
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { position: legendPosition } },
+            }
         });
     }
 
     new Chart(document.getElementById("chartSerie"), {
         type: "bar",
         data: { labels: serie.labels, datasets: [{ label: "{% translate 'Gastos' %}", data: serie.data, backgroundColor: "#7c3aed", borderRadius: 4 }] },
-        options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: { y: { beginAtZero: true } },
+        }
     });
 })();
 </script>

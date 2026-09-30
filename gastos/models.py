@@ -27,6 +27,29 @@ class CategoriaGasto(models.Model):
         return self.nombre
 
 
+class AreaResponsable(models.Model):
+    """
+    Área del negocio responsable del gasto (ej: Producción, Ventas, Dirección).
+    Es una clasificación aparte e independiente de `categoria`: la categoría
+    dice "qué tipo de gasto es" (Administración, IT, etc.) y el área dice
+    "quién lo generó / a quién se le imputa". Editable desde el admin para
+    poder sumar áreas nuevas sin programar ni migrar nada. Es opcional: no
+    todos los gastos necesitan tener un área asignada. Borrar un área en uso
+    está bloqueado (`on_delete=PROTECT` en `Gasto`) para no perder el
+    historial de gastos ya cargados con ella.
+    """
+
+    nombre = models.CharField(_("Nombre"), max_length=50, unique=True)
+
+    class Meta:
+        verbose_name = _("Área responsable")
+        verbose_name_plural = _("Áreas responsables")
+        ordering = ["nombre"]
+
+    def __str__(self):
+        return self.nombre
+
+
 def _default_categoria_gasto():
     """
     Categoría que se preselecciona al cargar un Gasto nuevo: "Administración"
@@ -81,6 +104,15 @@ class Gasto(models.Model):
         on_delete=models.PROTECT,
         related_name="gastos",
         default=_default_categoria_gasto,
+    )
+    area = models.ForeignKey(
+        AreaResponsable,
+        verbose_name=_("Área responsable"),
+        on_delete=models.PROTECT,
+        related_name="gastos",
+        null=True,
+        blank=True,
+        help_text=_("Área del negocio responsable del gasto (opcional)."),
     )
     tipo = models.CharField(
         _("Tipo"),

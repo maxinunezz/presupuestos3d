@@ -356,6 +356,16 @@ GASTOS = {
     'Restante': 'Remaining',
     'No hay topes cargados. Cargá topes mensuales en «Topes de gasto».':
         'No caps configured. Set monthly caps in «Expense caps».',
+    'Área responsable': 'Responsible area',
+    'Áreas responsables': 'Responsible areas',
+    'Área del negocio responsable del gasto (opcional).':
+        'Business area responsible for the expense (optional).',
+    'Sin área': 'No area',
+    'Gastos por área responsable': 'Expenses by responsible area',
+    'Desglose por área responsable': 'Breakdown by responsible area',
+    'Área': 'Area',
+    'No hay áreas cargadas. Cargá áreas en «Áreas responsables».':
+        'No areas configured. Set them up in «Responsible areas».',
 }
 
 BUDGETS = {

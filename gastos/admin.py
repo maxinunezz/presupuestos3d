@@ -12,7 +12,7 @@ from .metrics import (
     export_xlsx,
     template_context,
 )
-from .models import CategoriaGasto, Gasto, PanelGastos, TopeGasto
+from .models import AreaResponsable, CategoriaGasto, Gasto, PanelGastos, TopeGasto
 
 # Los campos de cantidad/precio (DecimalField) aceptan tanto coma como punto
 # para los decimales (ej: 8500,50 u 8500.50).
@@ -33,11 +33,25 @@ class CategoriaGastoAdmin(admin.ModelAdmin):
     search_fields = ("nombre",)
 
 
+@admin.register(AreaResponsable)
+class AreaResponsableAdmin(admin.ModelAdmin):
+    """
+    Áreas responsables (Producción, Ventas, Dirección, etc.). Se agregan/editan
+    acá mismo, sin tocar nada de programación. Borrar un área que ya tenga
+    Gastos cargados está bloqueado para no perder ese historial: hay que
+    reasignarlos primero a otra área.
+    """
+
+    list_display = ("nombre",)
+    search_fields = ("nombre",)
+
+
 @admin.register(Gasto)
 class GastoAdmin(admin.ModelAdmin):
     list_display = (
         "fecha",
         "categoria",
+        "area",
         "tipo",
         "concepto",
         "monto_display",
@@ -46,13 +60,13 @@ class GastoAdmin(admin.ModelAdmin):
         "proveedor",
         "medio_pago",
     )
-    list_filter = ("tipo", "categoria", "es_recurrente", "periodicidad", "medio_pago")
+    list_filter = ("tipo", "categoria", "area", "es_recurrente", "periodicidad", "medio_pago")
     search_fields = ("concepto", "proveedor", "notas")
-    autocomplete_fields = ("categoria",)
+    autocomplete_fields = ("categoria", "area")
     date_hierarchy = "fecha"
     formfield_overrides = DECIMAL_LOCALIZE
     fieldsets = (
-        (None, {"fields": ("categoria", "tipo", "concepto", "monto", "fecha")}),
+        (None, {"fields": ("categoria", "area", "tipo", "concepto", "monto", "fecha")}),
         (_("Pago"), {"fields": ("proveedor", "medio_pago")}),
         (
             _("Recurrencia"),

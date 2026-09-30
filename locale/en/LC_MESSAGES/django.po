@@ -694,6 +694,30 @@ msgstr "Remaining"
 msgid "No hay topes cargados. Cargá topes mensuales en «Topes de gasto»."
 msgstr "No caps configured. Set monthly caps in «Expense caps»."
 
+msgid "Área responsable"
+msgstr "Responsible area"
+
+msgid "Áreas responsables"
+msgstr "Responsible areas"
+
+msgid "Área del negocio responsable del gasto (opcional)."
+msgstr "Business area responsible for the expense (optional)."
+
+msgid "Sin área"
+msgstr "No area"
+
+msgid "Gastos por área responsable"
+msgstr "Expenses by responsible area"
+
+msgid "Desglose por área responsable"
+msgstr "Breakdown by responsible area"
+
+msgid "Área"
+msgstr "Area"
+
+msgid "No hay áreas cargadas. Cargá áreas en «Áreas responsables»."
+msgstr "No areas configured. Set them up in «Responsible areas»."
+
 msgid ":white_check_mark: Pedido #%(pedido)s — %(cliente)s: se terminaron de imprimir todas las piezas."
 msgstr ":white_check_mark: Order #%(pedido)s — %(cliente)s: all parts finished printing."
 
