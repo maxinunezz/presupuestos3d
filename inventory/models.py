@@ -135,16 +135,45 @@ class Filament(models.Model):
         return shortage
 
 
+class AggregateCategory(models.Model):
+    """
+    Categoría de agregado (Herraje, Packaging, Decoración, Otro). Antes era
+    un choice fijo en el código (`Aggregate.Category`); ahora es un modelo
+    editable desde el admin para poder sumar categorías nuevas (ej:
+    "Repuestos") sin programar ni migrar nada. Borrar una categoría en uso
+    está bloqueado (`on_delete=PROTECT` en `Aggregate`) para no perder la
+    clasificación de los agregados ya cargados con ella.
+    """
+
+    nombre = models.CharField(_("Nombre"), max_length=50, unique=True)
+
+    class Meta:
+        verbose_name = _("Categoría de agregado")
+        verbose_name_plural = _("Categorías de agregado")
+        ordering = ["nombre"]
+
+    def __str__(self):
+        return self.nombre
+
+
+def _default_aggregate_category():
+    """
+    Categoría que se preselecciona al cargar un Agregado nuevo: "Otro" si
+    existe (la que era default antes de este modelo), si no la primera que
+    haya. Devuelve None si todavía no hay ninguna categoría cargada.
+    """
+    return (
+        AggregateCategory.objects.filter(nombre="Otro")
+        .values_list("id", flat=True)
+        .first()
+        or AggregateCategory.objects.order_by("id").values_list("id", flat=True).first()
+    )
+
+
 class Aggregate(models.Model):
     """
     Insumos que no son filamento: argollas, packaging, llaveros, pegatinas, etc.
     """
-
-    class Category(models.TextChoices):
-        HARDWARE = "HARDWARE", _("Herraje (argollas, llaveros, etc.)")
-        PACKAGING = "PACKAGING", "Packaging"
-        DECORATION = "DECORATION", _("Decoración (pegatinas, etc.)")
-        OTHER = "OTHER", _("Otro")
 
     class Unit(models.TextChoices):
         UNIT = "UNIT", _("Unidad")
@@ -153,8 +182,12 @@ class Aggregate(models.Model):
         GRAM = "GRAM", _("Gramo")
 
     name = models.CharField(_("Nombre"), max_length=150)
-    category = models.CharField(
-        _("Categoría"), max_length=20, choices=Category.choices, default=Category.OTHER
+    category = models.ForeignKey(
+        AggregateCategory,
+        verbose_name=_("Categoría"),
+        on_delete=models.PROTECT,
+        related_name="aggregates",
+        default=_default_aggregate_category,
     )
     unit = models.CharField(_("Unidad"), max_length=10, choices=Unit.choices, default=Unit.UNIT)
     cost_per_unit = models.DecimalField(
@@ -204,7 +237,7 @@ class Aggregate(models.Model):
     class Meta:
         verbose_name = _("Agregado")
         verbose_name_plural = _("Agregados")
-        ordering = ["category", "name"]
+        ordering = ["category__nombre", "name"]
 
     def __str__(self):
         return self.name

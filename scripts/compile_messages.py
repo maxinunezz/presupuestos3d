@@ -84,6 +84,8 @@ INVENTORY = {
         'enter grams (e.g. rings → 200). Set 0 to disable alerts for this aggregate.',
     'Agregado': 'Aggregate',
     'Agregados': 'Aggregates',
+    'Categoría de agregado': 'Aggregate category',
+    'Categorías de agregado': 'Aggregate categories',
     'Totales de inventario': 'Inventory totals',
     'Compra': 'Purchase',
     'Presupuesto aprobado': 'Budget approved',

@@ -4,7 +4,11 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from .models import Aggregate, Compra, CompraLine, Filament, StockMovement
+from .models import Aggregate, AggregateCategory, Compra, CompraLine, Filament, StockMovement
+
+
+def categoria_agregado(nombre="Otro"):
+    return AggregateCategory.objects.get_or_create(nombre=nombre)[0]
 
 
 class FilamentStockTests(TestCase):
@@ -217,7 +221,7 @@ class StockMovementAdminReadOnlyTests(TestCase):
         self.client.login(username="dueño", password="x")
         self.agg = Aggregate.objects.create(
             name="Bolsas ziploc",
-            category=Aggregate.Category.PACKAGING,
+            category=categoria_agregado("Packaging"),
             unit=Aggregate.Unit.UNIT,
             cost_per_unit=Decimal("10"),
             stock_quantity=Decimal("100"),

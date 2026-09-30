@@ -28,12 +28,17 @@ class FilamentSerializer(serializers.ModelSerializer):
 
 
 class AggregateSerializer(serializers.ModelSerializer):
+    # "category" queda como PK (id de AggregateCategory) para poder filtrar/crear;
+    # se suma el nombre de solo lectura para no obligar al front a resolverlo.
+    category_display = serializers.CharField(source="category.nombre", read_only=True)
+
     class Meta:
         model = Aggregate
         fields = [
             "id",
             "name",
             "category",
+            "category_display",
             "unit",
             "cost_per_unit",
             "stock_quantity",

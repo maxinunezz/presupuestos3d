@@ -23,7 +23,7 @@ class AggregateViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Aggregate.objects.all()
     serializer_class = AggregateSerializer
     filter_backends = [SearchFilter]
-    search_fields = ["name", "category"]
+    search_fields = ["name", "category__nombre"]
 
     def get_queryset(self):
         qs = super().get_queryset()

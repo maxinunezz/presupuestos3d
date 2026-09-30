@@ -106,6 +106,12 @@ msgstr "Add-on"
 msgid "Agregados"
 msgstr "Add-ons"
 
+msgid "Categoría de agregado"
+msgstr "Aggregate category"
+
+msgid "Categorías de agregado"
+msgstr "Aggregate categories"
+
 msgid "Totales de inventario"
 msgstr "Inventory totals"
 

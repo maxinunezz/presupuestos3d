@@ -13,6 +13,7 @@ from django.utils.translation import gettext_lazy as _
 
 from .models import (
     Aggregate,
+    AggregateCategory,
     AjusteStock,
     Compra,
     CompraLine,
@@ -156,6 +157,20 @@ class FilamentAdmin(admin.ModelAdmin):
         return _stock_badge(obj.is_low_stock)
 
 
+@admin.register(AggregateCategory)
+class AggregateCategoryAdmin(admin.ModelAdmin):
+    """
+    Categorías de agregado (Herraje, Packaging, Decoración, etc.). Antes eran
+    opciones fijas en el código; ahora se agregan/editan acá mismo, sin tocar
+    nada de programación. Borrar una categoría que ya tenga Agregados
+    cargados está bloqueado para no perder esa clasificación: hay que
+    reasignarlos primero a otra categoría.
+    """
+
+    list_display = ("nombre",)
+    search_fields = ("nombre",)
+
+
 @admin.register(Aggregate)
 class AggregateAdmin(admin.ModelAdmin):
     # Mismo ancho angosto que usa FilamentAdmin para sus campos numéricos,
@@ -177,6 +192,7 @@ class AggregateAdmin(admin.ModelAdmin):
     search_fields = ("name", "notes")
     list_editable = ("cost_per_unit", "min_stock", "is_active")
     formfield_overrides = DECIMAL_LOCALIZE
+    autocomplete_fields = ("category",)
     # El stock NO se edita a mano: solo cambia al confirmar una Compra.
     readonly_fields = ("stock_quantity",)
 
@@ -243,7 +259,7 @@ class StockTotalsAdmin(admin.ModelAdmin):
                 | Q(material_type__icontains=q)
             )
             aggregates = aggregates.filter(
-                Q(name__icontains=q) | Q(category__icontains=q)
+                Q(name__icontains=q) | Q(category__nombre__icontains=q)
             )
 
         show_fil = only in ("", "filament")
@@ -279,7 +295,7 @@ class StockTotalsAdmin(admin.ModelAdmin):
                 agg_rows.append(
                     {
                         "name": a.name,
-                        "category": a.get_category_display(),
+                        "category": str(a.category),
                         "unit": a.get_unit_display(),
                         "stock_quantity": _num(a.stock_quantity),
                         "cost_per_unit": _money(a.cost_per_unit),
