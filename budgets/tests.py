@@ -938,6 +938,34 @@ class MetricasResultadoTests(TestCase):
         self.assertEqual(m["gastos_operativos"], Decimal("0"))
         self.assertEqual(m["beneficio_neto"], Decimal("760.00"))
 
+    def test_desglose_completo_material_y_agregados(self):
+        # Mismo caso que test_desglose_de_costos_de_produccion, pero
+        # verificando el detalle desplegable (material_breakdown /
+        # aggregate_breakdown): gramos y cantidad por ítem, no solo el $.
+        now = timezone.now()
+        self._aprobado(
+            sale_price=Decimal("2000"),
+            grams=Decimal("100"),
+            hours=Decimal("2"),
+            machine_rate=Decimal("100"),
+            agg_qty=2,
+            quantity=1,
+            when=now,
+        )
+        m = build_metrics("month", now=now)
+        self.assertEqual(len(m["material_breakdown"]), 1)
+        fil_row = m["material_breakdown"][0]
+        self.assertEqual(fil_row["label"], str(self.fil))
+        self.assertEqual(fil_row["grams"], Decimal("100"))
+        self.assertEqual(fil_row["money"], Decimal("1000.00"))
+
+        self.assertEqual(len(m["aggregate_breakdown"]), 1)
+        agg_row = m["aggregate_breakdown"][0]
+        self.assertEqual(agg_row["label"], "Bolsa ziploc")
+        self.assertEqual(agg_row["qty"], Decimal("2"))
+        self.assertEqual(agg_row["money"], Decimal("10.00"))
+        self.assertEqual(agg_row["unit"], "Unidad")
+
     def test_facturacion_excluye_cancelados_y_para_stock(self):
         now = timezone.now()
         self._aprobado(
@@ -1268,6 +1296,10 @@ class MetricasPanelMesDropdownTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.context["selected_date_value"], hoy.strftime("%Y-%m"))
         self.assertEqual(resp.context["facturacion"], "$ 1.000,00")
+        # Desglose desplegable de "Costo de producción": el filamento usado
+        # aparece con sus gramos.
+        self.assertContains(resp, "Materiales usados")
+        self.assertContains(resp, str(self.fil))
 
     def test_date_valido_muestra_ese_mes(self):
         otro_mes = timezone.make_aware(timezone.datetime(2026, 3, 15, 10, 0))

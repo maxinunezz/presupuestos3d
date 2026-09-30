@@ -178,6 +178,12 @@ def build_metrics(period: str, now: datetime = None) -> dict:
     # por corrida, agregados al costo completo), pero por filamento/agregado.
     fil_money = defaultdict(lambda: ZERO)
     agg_money = defaultdict(lambda: ZERO)
+    # Mismo desglose pero en cantidad física (no $), para el detalle
+    # desplegable de "Costo de producción": gramos por filamento y cantidad
+    # por agregado (con su unidad de medida).
+    fil_grams_map = defaultdict(lambda: ZERO)
+    agg_qty_map = defaultdict(lambda: ZERO)
+    agg_unit_map = {}
     for p in cur_approved:
         cli_money[p.client_name] += p.total
         for it in p.items.all():
@@ -202,12 +208,32 @@ def build_metrics(period: str, now: datetime = None) -> dict:
                 for fline in pieza.filament_lines.all():
                     avg_cost_one = fline.line_cost / ppg * units
                     fil_money[str(fline.filament)] += qty * avg_cost_one
+                    avg_grams_one = fline.grams_used / ppg * units
+                    fil_grams_map[str(fline.filament)] += qty * avg_grams_one
             for aline in producto.aggregate_lines.all():
                 agg_money[aline.aggregate.name] += qty * aline.line_cost
+                agg_qty_map[aline.aggregate.name] += qty * aline.quantity
+                agg_unit_map[aline.aggregate.name] = aline.aggregate.get_unit_display()
 
     top_productos_qty = by_qty.most_common(10)
     top3_material = sorted(fil_money.items(), key=lambda kv: kv[1], reverse=True)[:3]
     top3_aggregates = sorted(agg_money.items(), key=lambda kv: kv[1], reverse=True)[:3]
+    # Desglose COMPLETO (no top-3) para el detalle desplegable de "Costo de
+    # producción": todos los filamentos con sus gramos, todos los agregados
+    # con su cantidad y unidad.
+    material_breakdown = [
+        {"label": label, "money": money, "grams": fil_grams_map[label]}
+        for label, money in sorted(fil_money.items(), key=lambda kv: kv[1], reverse=True)
+    ]
+    aggregate_breakdown = [
+        {
+            "label": label,
+            "money": money,
+            "qty": agg_qty_map[label],
+            "unit": agg_unit_map.get(label, ""),
+        }
+        for label, money in sorted(agg_money.items(), key=lambda kv: kv[1], reverse=True)
+    ]
     top_productos_money = sorted(by_money.items(), key=lambda kv: kv[1], reverse=True)[:10]
     top_clientes = sorted(cli_money.items(), key=lambda kv: kv[1], reverse=True)[:10]
 
@@ -385,6 +411,8 @@ def build_metrics(period: str, now: datetime = None) -> dict:
         "cost_aggregates": cost_aggregates,
         "top3_material": top3_material,
         "top3_aggregates": top3_aggregates,
+        "material_breakdown": material_breakdown,
+        "aggregate_breakdown": aggregate_breakdown,
         "costo_produccion": costo_produccion,
         "gastos_operativos": gastos_operativos,
         "gastos_extraordinarios": gastos_extraordinarios,
@@ -416,6 +444,13 @@ def _hours(value) -> str:
 
 def _days(value) -> str:
     return "—" if value is None else gettext("%(n).1f días") % {"n": value}
+
+
+def _qty(value) -> str:
+    """Cantidad sin decimales de sobra (12 en vez de 12.00, 1.5 si hace falta)."""
+    value = Decimal(value or 0).quantize(Decimal("0.01"))
+    text = f"{value:.2f}".rstrip("0").rstrip(".")
+    return text or "0"
 
 
 def _period_range_str(m) -> str:
@@ -713,6 +748,25 @@ def template_context(m: dict) -> dict:
                 "horas": _hours(r["horas"]),
             }
             for r in m["uso_maquinas"]
+        ],
+        # Detalle desplegable del costo de producción: todo el material,
+        # agregados y máquinas usados en el período (no solo el top 3).
+        "material_breakdown": [
+            {
+                "label": row["label"],
+                "money": _money(row["money"]),
+                "grams": f'{row["grams"]:.0f} g',
+            }
+            for row in m["material_breakdown"]
+        ],
+        "aggregate_breakdown": [
+            {
+                "label": row["label"],
+                "money": _money(row["money"]),
+                "qty": _qty(row["qty"]),
+                "unit": row["unit"],
+            }
+            for row in m["aggregate_breakdown"]
         ],
         # Gráficos (JSON)
         "fact_chart_json": json.dumps(fact_chart),

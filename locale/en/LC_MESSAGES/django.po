@@ -101,7 +101,7 @@ msgid "Si el stock baja de este valor, salta la alerta de bajo stock (la campani
 msgstr "If stock drops below this value, the low-stock alert (the bell) is triggered. Use the SAME unit as the aggregate: if it is measured in units, enter units (e.g. balls → 20); if it is measured in grams, enter grams (e.g. rings → 200). Set 0 to disable alerts for this aggregate."
 
 msgid "Agregado"
-msgstr "Aggregate"
+msgstr "Add-on"
 
 msgid "Agregados"
 msgstr "Add-ons"
@@ -1570,6 +1570,33 @@ msgstr "Net profit (− operating expenses)"
 
 msgid "Composición del costo de producción"
 msgstr "Production cost breakdown"
+
+msgid "Ver desglose completo: materiales, agregados y máquinas del período"
+msgstr "View full breakdown: materials, add-ons and machines for the period"
+
+msgid "Materiales usados"
+msgstr "Materials used"
+
+msgid "Gramos"
+msgstr "Grams"
+
+msgid "Costo"
+msgstr "Cost"
+
+msgid "Sin consumo de material en el período."
+msgstr "No material used in the period."
+
+msgid "Agregados usados"
+msgstr "Add-ons used"
+
+msgid "Sin consumo de agregados en el período."
+msgstr "No add-ons used in the period."
+
+msgid "Máquinas usadas"
+msgstr "Machines used"
+
+msgid "Sin producción terminada en el período."
+msgstr "No finished production in the period."
 
 msgid "Resultado"
 msgstr "Result"
