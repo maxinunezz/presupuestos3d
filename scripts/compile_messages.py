@@ -739,6 +739,7 @@ BUDGETS = {
     '− gastos operativos y extraordinarios': '− operating and extraordinary expenses',
     'Beneficio neto final (− gastos operativos y extraordinarios)':
         'Final net profit (− operating and extraordinary expenses)',
+    'Beneficio neto − gastos extraordinarios': 'Net profit − extraordinary expenses',
     # Panel de ventas (cobros)
     'Estado de venta': 'Sale status',
     "Si el cliente ya pagó este pedido. Es independiente del estado de producción (un pedido puede estar Aprobado o Completado y seguir Pendiente de pago).":
@@ -1226,6 +1227,8 @@ BLOCKTRANS = {
         'Income − production · %(margen_bruto_pct)s margin',
     '− gastos operativos · %(margen_neto_pct)s de margen':
         '− operating expenses · %(margen_neto_pct)s margin',
+    'Beneficio bruto − gastos operativos · %(margen_neto_pct)s de margen':
+        'Gross profit − operating expenses · %(margen_neto_pct)s margin',
     (
         'Foto del inventario a HOY, no del período: cuánto dinero hay inmovilizado en\n'
         '    stock, valuado a costo actual. No es una venta ni un gasto, es capital\n'

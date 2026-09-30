@@ -1688,6 +1688,9 @@ msgstr "− operating and extraordinary expenses"
 msgid "Beneficio neto final (− gastos operativos y extraordinarios)"
 msgstr "Final net profit (− operating and extraordinary expenses)"
 
+msgid "Beneficio neto − gastos extraordinarios"
+msgstr "Net profit − extraordinary expenses"
+
 msgid "Estado de venta"
 msgstr "Sale status"
 
@@ -2439,6 +2442,9 @@ msgstr "Income − production · %(margen_bruto_pct)s margin"
 
 msgid "− gastos operativos · %(margen_neto_pct)s de margen"
 msgstr "− operating expenses · %(margen_neto_pct)s margin"
+
+msgid "Beneficio bruto − gastos operativos · %(margen_neto_pct)s de margen"
+msgstr "Gross profit − operating expenses · %(margen_neto_pct)s margin"
 
 msgid "Foto del inventario a HOY, no del período: cuánto dinero hay inmovilizado en
     stock, valuado a costo actual. No es una venta ni un gasto, es capital

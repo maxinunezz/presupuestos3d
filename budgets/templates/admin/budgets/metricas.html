@@ -35,9 +35,9 @@
 </div>
 <div class="mx-kpis mx-kpis--resultado mx-kpis--resultado-row">
     <div class="kpi mx-positivo"><span class="n">{{ beneficio_bruto }}</span><span class="l">{% translate "Beneficio bruto" %}</span><span class="s">{% blocktranslate %}Ingresos − producción · {{ margen_bruto_pct }} de margen{% endblocktranslate %}</span></div>
-    <div class="kpi mx-positivo"><span class="n">{{ beneficio_neto }}</span><span class="l">{% translate "Beneficio neto" %}</span><span class="s">{% blocktranslate %}− gastos operativos · {{ margen_neto_pct }} de margen{% endblocktranslate %}</span></div>
+    <div class="kpi mx-positivo"><span class="n">{{ beneficio_neto }}</span><span class="l">{% translate "Beneficio neto" %}</span><span class="s">{% blocktranslate %}Beneficio bruto − gastos operativos · {{ margen_neto_pct }} de margen{% endblocktranslate %}</span></div>
     {% if hay_extraordinarios %}
-    <div class="kpi mx-positivo"><span class="n">{{ beneficio_neto_final }}</span><span class="l">{% translate "Beneficio neto final" %}</span><span class="s">{% translate "− gastos operativos y extraordinarios" %}</span></div>
+    <div class="kpi mx-positivo"><span class="n">{{ beneficio_neto_final }}</span><span class="l">{% translate "Beneficio neto final" %}</span><span class="s">{% translate "Beneficio neto − gastos extraordinarios" %}</span></div>
     {% endif %}
 </div>
 {% if hay_extraordinarios %}

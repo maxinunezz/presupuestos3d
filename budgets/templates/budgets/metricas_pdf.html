@@ -11,9 +11,9 @@
     <tr><td class="label">{% translate "Gastos extraordinarios" %}<br/><span class="extra">{% translate "Informativo, no afecta el beneficio neto" %}</span></td><td class="value">{{ gastos_extraordinarios }}</td></tr>
     {% endif %}
     <tr><td class="label">{% translate "Beneficio bruto" %}<br/><span class="extra">{% blocktranslate %}Ingresos − producción · {{ margen_bruto_pct }} de margen{% endblocktranslate %}</span></td><td class="value">{{ beneficio_bruto }}</td></tr>
-    <tr><td class="label">{% translate "Beneficio neto" %}<br/><span class="extra">{% blocktranslate %}− gastos operativos · {{ margen_neto_pct }} de margen{% endblocktranslate %}</span></td><td class="value">{{ beneficio_neto }}</td></tr>
+    <tr><td class="label">{% translate "Beneficio neto" %}<br/><span class="extra">{% blocktranslate %}Beneficio bruto − gastos operativos · {{ margen_neto_pct }} de margen{% endblocktranslate %}</span></td><td class="value">{{ beneficio_neto }}</td></tr>
     {% if hay_extraordinarios %}
-    <tr><td class="label">{% translate "Beneficio neto final" %}<br/><span class="extra">{% translate "− gastos operativos y extraordinarios" %}</span></td><td class="value">{{ beneficio_neto_final }}</td></tr>
+    <tr><td class="label">{% translate "Beneficio neto final" %}<br/><span class="extra">{% translate "Beneficio neto − gastos extraordinarios" %}</span></td><td class="value">{{ beneficio_neto_final }}</td></tr>
     {% endif %}
 </table>
 

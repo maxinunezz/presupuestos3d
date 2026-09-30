@@ -17,8 +17,10 @@
     /* KPIs de producción (mismo verde que "Producción" en el Panel de métricas). */
     .tb-kpis--prod .kpi { background: #15803d; }
 
-    .tb-section { margin-top: 28px; font-size: 22px; font-weight: bold; }
-    .tb-section--prod { border-bottom: 3px solid #16a34a; padding-bottom: 4px; }
+    /* padding-bottom (no solo margin-top) para que el título no quede pegado
+       a la línea de color — mismo patrón que .mx-section en Métricas. */
+    .tb-section { margin: 28px 0 8px; font-size: 22px; font-weight: bold; padding-bottom: 4px; }
+    .tb-section--prod { border-bottom: 3px solid #16a34a; }
 
     .tb-grid { display: flex; flex-wrap: wrap; gap: 20px; margin-top: 14px; margin-bottom: 8px; }
     .tb-card {

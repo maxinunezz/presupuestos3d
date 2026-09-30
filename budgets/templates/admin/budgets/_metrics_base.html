@@ -47,11 +47,18 @@
     }
     a.mx-month-option:hover { background: #333; }
     a.mx-month-option.active { background: #fff; color: #111; }
+    /* Botones de export: solo ícono (sin texto) para no ocupar tanto ancho en
+       la barra — el título vía atributo title/aria-label alcanza, son acciones
+       secundarias y su color (verde/rojo) ya las distingue. */
     .mx-excel, .mx-pdf {
-        padding: 8px 18px; border-radius: 6px; text-decoration: none; font-size: 13px; font-weight: 600; color: #fff;
+        display: flex; align-items: center; justify-content: center;
+        width: 38px; height: 38px; border-radius: 6px; color: #fff; flex: none;
     }
+    .mx-excel svg, .mx-pdf svg { width: 19px; height: 19px; }
     .mx-excel { margin-left: auto; background: #16a34a; }
+    .mx-excel:hover { background: #128a3e; }
     .mx-pdf { background: #b91c1c; }
+    .mx-pdf:hover { background: #991915; }
 
     .mx-section {
         margin: 26px 0 8px; font-size: 22px; font-weight: bold;
@@ -164,8 +171,14 @@
     </script>
     {% endif %}
     <span class="mx-range">{{ range_str }}</span>
-    <a class="mx-excel" href="?period={{ period }}{% if period == "month" %}&date={{ selected_date_value }}{% endif %}&export=xlsx">⬇ {% translate "Descargar Excel" %}</a>
-    <a class="mx-pdf" href="?period={{ period }}{% if period == "month" %}&date={{ selected_date_value }}{% endif %}&export=pdf">⬇ {% translate "Descargar PDF" %}</a>
+    <a class="mx-excel" title="{% translate 'Descargar Excel' %}" aria-label="{% translate 'Descargar Excel' %}"
+       href="?period={{ period }}{% if period == "month" %}&date={{ selected_date_value }}{% endif %}&export=xlsx">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="M8 13h2"/><path d="M14 13h2"/><path d="M8 17h2"/><path d="M14 17h2"/></svg>
+    </a>
+    <a class="mx-pdf" title="{% translate 'Descargar PDF' %}" aria-label="{% translate 'Descargar PDF' %}"
+       href="?period={{ period }}{% if period == "month" %}&date={{ selected_date_value }}{% endif %}&export=pdf">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="M12 18v-6"/><path d="m9.5 15.5 2.5 2.5 2.5-2.5"/></svg>
+    </a>
 </div>
 
 {% block mx_body %}{% endblock %}
