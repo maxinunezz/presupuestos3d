@@ -94,3 +94,22 @@ def render_presupuesto_pdf(presupuesto) -> bytes:
 
 def presupuesto_pdf_filename(presupuesto) -> str:
     return f"presupuesto_{presupuesto.pk}.pdf"
+
+
+def render_metrics_pdf(template_name: str, context: dict) -> bytes:
+    """Devuelve los bytes del PDF de un panel de métricas (Panel de métricas,
+    Panel de ventas o Panel de costos). `context` ya viene armado por
+    `budgets.metrics.template_context()` más el título del panel."""
+    from xhtml2pdf import pisa
+
+    html = render_to_string(template_name, context)
+    buffer = BytesIO()
+    result = pisa.CreatePDF(src=html, dest=buffer, encoding="utf-8")
+    if result.err:
+        raise RuntimeError("No se pudo generar el PDF del panel de métricas.")
+    return buffer.getvalue()
+
+
+def metrics_pdf_filename(slug: str, period: str) -> str:
+    today = timezone.localdate().isoformat()
+    return f"{slug}_{period}_{today}.pdf"

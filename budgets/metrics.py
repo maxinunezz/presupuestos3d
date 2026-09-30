@@ -21,7 +21,7 @@ from decimal import Decimal
 from django.utils import timezone
 from django.utils.translation import gettext, gettext_lazy as _
 
-from .models import Presupuesto
+from .models import Pieza, Presupuesto, Producto, Socio
 from .pdf import format_money
 
 # Cuántos períodos hacia atrás se grafican en la serie de facturación.
@@ -328,6 +328,35 @@ def build_metrics(period: str, now: datetime = None) -> dict:
     low_stock = sum(1 for f in Filament.objects.filter(is_active=True) if f.is_low_stock)
     low_stock += sum(1 for a in Aggregate.objects.filter(is_active=True) if a.is_low_stock)
 
+    # --- Valor del inventario (foto actual, no depende del período) ---
+    # Materia prima: filamentos + agregados en stock, a su costo actual.
+    valor_inv_materia_prima = sum(
+        (f.stock_grams * f.cost_per_gram for f in Filament.objects.filter(is_active=True)),
+        ZERO,
+    )
+    valor_inv_materia_prima += sum(
+        (a.stock_quantity * a.cost_per_unit for a in Aggregate.objects.filter(is_active=True)),
+        ZERO,
+    )
+    # Terminados: productos armados (stock_quantity a unit_cost_avg) + piezas
+    # sueltas ya impresas (stock_quantity a su costo de material+máquina por
+    # unidad, prorrateado sobre la corrida; sin mano de obra/agregados, que
+    # son a nivel producto y todavía no se aplicaron a una pieza suelta).
+    valor_inv_terminados = sum(
+        (
+            p.stock_quantity * p.unit_cost_avg
+            for p in Producto.objects.filter(is_active=True, stock_quantity__gt=0)
+        ),
+        ZERO,
+    )
+    for pieza in Pieza.objects.filter(stock_quantity__gt=0).select_related("producto"):
+        ppg = pieza.pieces_per_gcode or 1
+        material_unit = pieza.material_cost_per_run / ppg
+        hours_unit = (Decimal(pieza.print_time_minutes or 0) / Decimal("60")) / ppg
+        machine_unit = hours_unit * pieza.producto.machine_cost_per_hour
+        valor_inv_terminados += pieza.stock_quantity * (material_unit + machine_unit)
+    valor_inv_total = valor_inv_materia_prima + valor_inv_terminados
+
     # =====================  D) RESULTADO (Ingresos/Costos/Gastos/Beneficio)  =====================
     # Ingresos: la misma facturación de A) Ventas (ya excluye cancelados y
     # pedidos para stock). Costos de producción: el desglose de arriba
@@ -342,6 +371,17 @@ def build_metrics(period: str, now: datetime = None) -> dict:
     beneficio_bruto = facturacion - costo_produccion
     beneficio_neto = beneficio_bruto - gastos_operativos
     beneficio_neto_final = beneficio_neto - gastos_extraordinarios
+    margen_bruto_pct = (beneficio_bruto / facturacion * 100) if facturacion else None
+    margen_neto_pct = (beneficio_neto / facturacion * 100) if facturacion else None
+
+    # --- Distribución de ingresos entre socios ---
+    # Reparto simple del Beneficio neto del período según el % de cada socio
+    # activo (sin arrastre entre períodos: no es una cuenta corriente).
+    distribucion_ingresos = [
+        {"name": s.name, "percentage": s.percentage, "monto": beneficio_neto * s.percentage / 100}
+        for s in Socio.objects.filter(is_active=True)
+    ]
+    socios_pct_total = sum((s["percentage"] for s in distribucion_ingresos), ZERO)
 
     # =====================  E) PANEL DE VENTAS (cobros)  =====================
     # Mismo universo que A) Ventas (cur_approved: ventas reales del período, ya
@@ -406,6 +446,9 @@ def build_metrics(period: str, now: datetime = None) -> dict:
         "consumo_valor": consumo_valor,
         "margen_pct": margen_pct,
         "low_stock": low_stock,
+        "valor_inv_materia_prima": valor_inv_materia_prima,
+        "valor_inv_terminados": valor_inv_terminados,
+        "valor_inv_total": valor_inv_total,
         # Resultado (Ingresos/Costos/Gastos/Beneficio)
         "cost_material": cost_material,
         "cost_labor": cost_labor,
@@ -422,6 +465,10 @@ def build_metrics(period: str, now: datetime = None) -> dict:
         "beneficio_bruto": beneficio_bruto,
         "beneficio_neto": beneficio_neto,
         "beneficio_neto_final": beneficio_neto_final,
+        "margen_bruto_pct": margen_bruto_pct,
+        "margen_neto_pct": margen_neto_pct,
+        "distribucion_ingresos": distribucion_ingresos,
+        "socios_pct_total": socios_pct_total,
         # Panel de ventas (cobros)
         "por_estado_venta": por_estado_venta,
         "por_medio_pago": por_medio_pago,
@@ -539,11 +586,24 @@ def export_xlsx(m: dict):
         (gettext("Gastos operativos"), _money(m["gastos_operativos"])),
         (gettext("Gastos extraordinarios (informativo)"), _money(m["gastos_extraordinarios"])),
         (gettext("Beneficio bruto (ingresos − producción)"), _money(m["beneficio_bruto"])),
+        (gettext("Margen bruto (%)"), _pct(m["margen_bruto_pct"])),
         (gettext("Beneficio neto (− gastos operativos)"), _money(m["beneficio_neto"])),
+        (gettext("Margen neto (%)"), _pct(m["margen_neto_pct"])),
         (
             gettext("Beneficio neto final (− gastos operativos y extraordinarios)"),
             _money(m["beneficio_neto_final"]),
         ),
+        ("", ""),
+        (gettext("VALOR DEL INVENTARIO (foto actual)"), ""),
+        (gettext("Materia prima (filamentos y agregados)"), _money(m["valor_inv_materia_prima"])),
+        (gettext("Productos y piezas terminados"), _money(m["valor_inv_terminados"])),
+        (gettext("Total"), _money(m["valor_inv_total"])),
+        ("", ""),
+        (gettext("DISTRIBUCIÓN DE INGRESOS (reparto del beneficio neto del período)"), ""),
+    ]
+    for row in m["distribucion_ingresos"]:
+        rows.append((f'  {row["name"]} ({row["percentage"]}%)', _money(row["monto"])))
+    rows += [
         ("", ""),
         (gettext("PANEL DE VENTAS (cobros)"), ""),
         (gettext("Cobrado"), _money(m["total_cobrado"])),
@@ -714,6 +774,23 @@ def template_context(m: dict) -> dict:
         "beneficio_neto_positivo": m["beneficio_neto"] >= 0,
         "beneficio_neto_final": _money(m["beneficio_neto_final"]),
         "beneficio_neto_final_positivo": m["beneficio_neto_final"] >= 0,
+        "margen_bruto_pct": _pct(m["margen_bruto_pct"]),
+        "margen_neto_pct": _pct(m["margen_neto_pct"]),
+        # Valor del inventario (foto actual)
+        "valor_inv_materia_prima": _money(m["valor_inv_materia_prima"]),
+        "valor_inv_terminados": _money(m["valor_inv_terminados"]),
+        "valor_inv_total": _money(m["valor_inv_total"]),
+        # Distribución de ingresos entre socios (reparto del beneficio neto)
+        "distribucion_ingresos": [
+            {
+                "name": row["name"],
+                "percentage": f'{row["percentage"]:.2f}'.rstrip("0").rstrip("."),
+                "monto": _money(row["monto"]),
+            }
+            for row in m["distribucion_ingresos"]
+        ],
+        "socios_pct_total": f'{m["socios_pct_total"]:.2f}'.rstrip("0").rstrip("."),
+        "socios_pct_incompleto": m["socios_pct_total"] != 100 and bool(m["distribucion_ingresos"]),
         # Tablas
         "top_productos_qty": [{"name": n, "qty": q} for n, q in m["top_productos_qty"]],
         "top_productos_money": [

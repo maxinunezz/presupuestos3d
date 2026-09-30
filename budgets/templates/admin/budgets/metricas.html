@@ -1,21 +1,24 @@
 {% extends "admin/budgets/_metrics_base.html" %}
 {% load i18n %}
-{# Panel de métricas: resultado (beneficio bruto/neto/neto final). Producción #}
+{# Panel de métricas: resultado (beneficio bruto/neto/neto final, con margen %), #}
+{# valor del inventario a HOY (foto, no del período) y distribución de ingresos #}
+{# entre socios (reparto del beneficio neto según el modelo Socio). Producción #}
 {# (piezas/horas/uso de máquinas) vive en el Tablero de producción; costos de #}
-{# producción e inventario/compras en el Panel de costos; ventas y el estado #}
-{# de cobro en el Panel de ventas — todas enlazadas abajo para no duplicar #}
-{# contenido. #}
+{# producción e inventario/compras del PERÍODO en el Panel de costos; ventas y #}
+{# el estado de cobro en el Panel de ventas — todas enlazadas abajo para no #}
+{# duplicar contenido. #}
 
 {% block mx_intro %}
-{% translate "Resultado del negocio por período: ingresos, costos de producción, gastos operativos y beneficio." %}
+{% translate "Resultado del negocio por período: ingresos, costos de producción, gastos operativos, beneficio (con margen %), valor del inventario y reparto entre socios." %}
 <a href="{% url 'admin:budgets_metricasventas_changelist' %}">→ {% translate "Ver Panel de ventas (facturación, conversión, cobros)" %}</a>
 <a href="{% url 'admin:budgets_panelcostos_changelist' %}">→ {% translate "Ver Panel de costos (composición del costo de producción e inventario)" %}</a>
+<a href="{% url 'admin:gastos_panelgastos_changelist' %}">→ {% translate "Ver Panel de gastos (desglose de gastos operativos por categoría)" %}</a>
 <a href="{% url 'admin:production_tablero_changelist' %}">→ {% translate "Ver Tablero de producción (piezas impresas, horas, uso por máquina)" %}</a>
 {% endblock %}
 
 {% block mx_body %}
 <!-- ===================== D) RESULTADO ===================== -->
-<div class="mx-section mx-section--resultado">📊 {% translate "Resultado" %}</div>
+<div class="mx-section mx-section--resultado">{% translate "Resultado" %}</div>
 <p class="mx-intro">
     {% blocktranslate %}Ingresos (facturación real del período, sin cancelados ni pedidos para
     stock) menos costos de producción menos gastos operativos (del Panel de gastos, por fecha
@@ -23,14 +26,14 @@
     beneficio neto para no distorsionarlo; se muestran aparte, informativos.{% endblocktranslate %}
 </p>
 <div class="mx-kpis mx-kpis--resultado">
-    <div class="kpi mx-ingresos"><span class="n">{{ facturacion }}</span><span class="l">{% translate "Ingresos" %}</span></div>
-    <div class="kpi mx-produccion"><span class="n">{{ costo_produccion }}</span><span class="l">{% translate "Costos de producción" %}</span></div>
-    <div class="kpi mx-negativo"><span class="n">{{ gastos_operativos }}</span><span class="l">{% translate "Gastos operativos" %}</span></div>
+    <div class="kpi mx-ingresos"><span class="n">{{ facturacion }}</span><span class="l">{% translate "Ingresos" %}</span><span class="s">{% blocktranslate %}Facturación de los {{ n_aprobados }} pedidos aprobados del período (sin cancelados ni pedidos para stock){% endblocktranslate %}</span></div>
+    <div class="kpi mx-produccion"><span class="n">{{ costo_produccion }}</span><span class="l">{% translate "Costos de producción" %}</span><span class="s">{% translate "Material, mano de obra, máquina y agregados de lo vendido · ver desglose en Panel de costos" %}</span></div>
+    <div class="kpi mx-negativo"><span class="n">{{ gastos_operativos }}</span><span class="l">{% translate "Gastos operativos" %}</span><span class="s">{% translate "Gastos de estructura del período (por fecha del gasto), sin extraordinarios · ver desglose en Panel de gastos" %}</span></div>
     {% if hay_extraordinarios %}
     <div class="kpi mx-ext"><span class="n">{{ gastos_extraordinarios }}</span><span class="l">{% translate "Gastos extraordinarios" %}</span><span class="s">{% translate "Informativo, no afecta el beneficio neto" %}</span></div>
     {% endif %}
-    <div class="kpi mx-positivo"><span class="n">{{ beneficio_bruto }}</span><span class="l">{% translate "Beneficio bruto" %}</span><span class="s">{% translate "Ingresos − producción" %}</span></div>
-    <div class="kpi mx-positivo"><span class="n">{{ beneficio_neto }}</span><span class="l">{% translate "Beneficio neto" %}</span><span class="s">{% translate "− gastos operativos" %}</span></div>
+    <div class="kpi mx-positivo"><span class="n">{{ beneficio_bruto }}</span><span class="l">{% translate "Beneficio bruto" %}</span><span class="s">{% blocktranslate %}Ingresos − producción · {{ margen_bruto_pct }} de margen{% endblocktranslate %}</span></div>
+    <div class="kpi mx-positivo"><span class="n">{{ beneficio_neto }}</span><span class="l">{% translate "Beneficio neto" %}</span><span class="s">{% blocktranslate %}− gastos operativos · {{ margen_neto_pct }} de margen{% endblocktranslate %}</span></div>
     {% if hay_extraordinarios %}
     <div class="kpi mx-positivo"><span class="n">{{ beneficio_neto_final }}</span><span class="l">{% translate "Beneficio neto final" %}</span><span class="s">{% translate "− gastos operativos y extraordinarios" %}</span></div>
     {% endif %}
@@ -43,6 +46,44 @@
     negocio anda bien, porque un gasto puntual grande puede hundirlo un mes sin que eso signifique
     un problema de fondo.{% endblocktranslate %}
 </p>
+{% endif %}
+
+<!-- ===================== VALOR DEL INVENTARIO ===================== -->
+<div class="mx-section mx-section--inv">{% translate "Valor del inventario" %}</div>
+<p class="mx-intro">
+    {% blocktranslate %}Foto del inventario a HOY, no del período: cuánto dinero hay inmovilizado en
+    stock, valuado a costo actual. No es una venta ni un gasto, es capital
+    guardado en materia prima y en productos/piezas ya fabricados.{% endblocktranslate %}
+</p>
+<div class="mx-kpis mx-kpis--inv">
+    <div class="kpi"><span class="n">{{ valor_inv_materia_prima }}</span><span class="l">{% translate "Materia prima" %}</span><span class="s">{% translate "Filamentos + agregados" %}</span></div>
+    <div class="kpi"><span class="n">{{ valor_inv_terminados }}</span><span class="l">{% translate "Productos y piezas terminados" %}</span><span class="s">{% translate "Ya fabricados, a la espera de venderse/armarse" %}</span></div>
+    <div class="kpi"><span class="n">{{ valor_inv_total }}</span><span class="l">{% translate "Total inmovilizado" %}</span></div>
+</div>
+
+<!-- ===================== DISTRIBUCIÓN DE INGRESOS ===================== -->
+<div class="mx-section mx-section--resultado">{% translate "Distribución de ingresos" %}</div>
+<p class="mx-intro">
+    {% blocktranslate %}Reparto del <b>Beneficio neto</b> del período entre los socios, según el % que
+    tiene cargado cada uno. Es un reparto simple del período actual, no una cuenta corriente
+    acumulada entre socios.{% endblocktranslate %}
+</p>
+{% if distribucion_ingresos %}
+<div class="mx-card" style="max-width: 500px;">
+    <table class="mx">
+        <thead><tr><th>{% translate "Socio" %}</th><th class="num">%</th><th class="num">{% translate "Le corresponde" %}</th></tr></thead>
+        <tbody>
+            {% for row in distribucion_ingresos %}
+            <tr><td>{{ row.name }}</td><td class="num">{{ row.percentage }}%</td><td class="num">{{ row.monto }}</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% if socios_pct_incompleto %}
+    <p class="mx-intro">{% blocktranslate %}Los porcentajes cargados suman {{ socios_pct_total }}%, no 100%: revisá los socios activos.{% endblocktranslate %}</p>
+    {% endif %}
+</div>
+{% else %}
+<p class="mx-intro">{% blocktranslate %}No hay socios activos cargados. Agregalos desde "Socios" en el admin para ver el reparto acá.{% endblocktranslate %}</p>
 {% endif %}
 {% endblock %}
 

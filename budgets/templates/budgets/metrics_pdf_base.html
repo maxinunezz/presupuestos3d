@@ -1,0 +1,49 @@
+{% load i18n %}
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+    {# xhtml2pdf no soporta flex/grid: todo el layout de acá es con tablas. #}
+    {# Tampoco fragmentar fondos de bloque con <ul>/<li> o hijos con padding #}
+    {# (ver CLAUDE.md) — por eso las "kpi" van en filas de tabla, no en divs. #}
+    @page { size: A4; margin: 1.6cm; }
+    body { font-family: Helvetica, Arial, sans-serif; color: #1a1a1a; font-size: 10.5pt; }
+
+    .header { text-align: center; border-bottom: 3px solid #111; padding-bottom: 12px; margin-bottom: 18px; }
+    .business-name { font-size: 22pt; font-weight: bold; color: #111; letter-spacing: 1px; }
+    .doc-title { font-size: 15pt; font-weight: bold; color: #111; margin-top: 4px; }
+    .doc-range { font-size: 10pt; color: #555; margin-top: 2px; }
+
+    .section { font-size: 12.5pt; font-weight: bold; color: #111; margin: 18px 0 8px; border-bottom: 2px solid #111; padding-bottom: 3px; }
+    .note { color: #555; font-size: 9pt; margin: 2px 0 10px; }
+
+    table.kpis { width: 100%; border-collapse: collapse; margin-bottom: 6px; }
+    table.kpis td { padding: 6px 9px; border: 1px solid #ddd; }
+    table.kpis td.label { color: #444; width: 55%; }
+    table.kpis td.value { text-align: right; font-weight: bold; color: #111; }
+    table.kpis td.extra { display: block; font-weight: normal; color: #777; font-size: 8.5pt; }
+
+    table.mx { width: 100%; border-collapse: collapse; margin-top: 4px; margin-bottom: 12px; }
+    table.mx th { background-color: #111; color: #fff; text-align: left; padding: 6px 9px; font-size: 9pt; text-transform: uppercase; }
+    table.mx td { padding: 6px 9px; border-bottom: 1px solid #ddd; font-size: 9.5pt; }
+    table.mx td.num, table.mx th.num { text-align: right; }
+    table.mx td.empty { color: #888; font-style: italic; }
+
+    .footer { margin-top: 30px; font-size: 8.5pt; color: #777; border-top: 1px solid #ddd; padding-top: 8px; text-align: center; }
+</style>
+</head>
+<body>
+    <div class="header">
+        <div class="business-name">3darg</div>
+        <div class="doc-title">{{ dashboard_title }}</div>
+        <div class="doc-range">{{ period_label }} &middot; {{ range_str }}</div>
+    </div>
+
+    {% block pdf_body %}{% endblock %}
+
+    <div class="footer">
+        {% blocktranslate %}Generado el {{ generated_at }}{% endblocktranslate %} &middot; 3darg
+    </div>
+</body>
+</html>

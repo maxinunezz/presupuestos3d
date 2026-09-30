@@ -378,6 +378,7 @@ GASTOS = {
         '    expenses with the approved sales of the same period.',
     'Ver': 'View',
     'Descargar Excel': 'Download Excel',
+    'Descargar PDF': 'Download PDF',
     'Acumulado del año': 'Year to date',
     'Gastos por categoría': 'Expenses by category',
     'Desglose por categoría': 'Breakdown by category',
@@ -788,6 +789,12 @@ BUDGETS = {
         'Business result by period: revenue, production costs, operating expenses and profit.',
     'Ver Panel de costos (composición del costo de producción e inventario)':
         'View Costs panel (production cost breakdown and inventory)',
+    'Ver Panel de gastos (desglose de gastos operativos por categoría)':
+        'View Expenses panel (operating expenses breakdown by category)',
+    'Material, mano de obra, máquina y agregados de lo vendido · ver desglose en Panel de costos':
+        'Material, labor, machine and add-ons of what was sold · see breakdown in Costs panel',
+    'Gastos de estructura del período (por fecha del gasto), sin extraordinarios · ver desglose en Panel de gastos':
+        'Structural expenses for the period (by expense date), excluding extraordinary ones · see breakdown in Expenses panel',
     'Ver Panel de métricas (resultado)': 'View Metrics panel (result)',
     'Composición del costo de producción por período: material, mano de obra, máquina y agregados, promedio de lo aprobado. Inventario y compras abajo. Sin ventas ni resultado.':
         'Production cost breakdown by period: material, labor, machine and add-ons, average of what was approved. Inventory and purchases below. No sales or result.',
@@ -796,6 +803,37 @@ BUDGETS = {
     'Cobros': 'Payments',
     'De la Facturación de arriba, cuánto ya se cobró y cuánto sigue pendiente, según el estado de cobro y el método de pago cargados desde el listado de Ventas.':
         'Of the Billing above, how much has already been collected and how much is still pending, based on the payment status and payment method loaded from the Sales listing.',
+    # Panel de métricas: margen % en Resultado, "Valor del inventario" (foto
+    # actual) y "Distribución de ingresos" (reparto del beneficio neto entre
+    # los socios, modelo Socio nuevo).
+    'Resultado del negocio por período: ingresos, costos de producción, gastos operativos, beneficio (con margen %%), valor del inventario y reparto entre socios.':
+        'Business result by period: revenue, production costs, operating expenses, profit (with margin %%), inventory value and partner split.',
+    'Valor del inventario': 'Inventory value',
+    'Materia prima': 'Raw material',
+    'Filamentos + agregados': 'Filaments + add-ons',
+    'Productos y piezas terminados': 'Finished products and pieces',
+    'Ya fabricados, a la espera de venderse/armarse': 'Already made, waiting to be sold/assembled',
+    'Total inmovilizado': 'Total tied up',
+    'Distribución de ingresos': 'Income distribution',
+    'Socio': 'Partner',
+    'Le corresponde': 'Share',
+    # budgets/models.py — modelo Socio
+    'Nombre': 'Name',
+    'Porcentaje de participación': 'Profit share percentage',
+    '% del beneficio neto del período que le corresponde a este socio.':
+        '%% of the period\'s net profit that goes to this partner.',
+    'Activo': 'Active',
+    'Los socios inactivos no aparecen en la Distribución de ingresos.':
+        'Inactive partners do not appear in the Income distribution.',
+    'Socios': 'Partners',
+    # Export a Excel: margen %, valor del inventario y distribución de ingresos
+    'Margen bruto (%)': 'Gross margin (%)',
+    'Margen neto (%)': 'Net margin (%)',
+    'VALOR DEL INVENTARIO (foto actual)': 'INVENTORY VALUE (current snapshot)',
+    'Materia prima (filamentos y agregados)': 'Raw material (filaments and add-ons)',
+    'Total': 'Total',
+    'DISTRIBUCIÓN DE INGRESOS (reparto del beneficio neto del período)':
+        'INCOME DISTRIBUTION (split of the period\'s net profit)',
 }
 
 PRODUCTION = {
@@ -1182,6 +1220,41 @@ BLOCKTRANS = {
         'Of the Income above, how much has already been collected and how much is still\n'
         '    pending, based on the payment status and payment method loaded in the Sales panel.'
     ),
+    # budgets/metricas.html — margen %, valor del inventario, distribución de
+    # ingresos entre socios.
+    'Ingresos − producción · %(margen_bruto_pct)s de margen':
+        'Income − production · %(margen_bruto_pct)s margin',
+    '− gastos operativos · %(margen_neto_pct)s de margen':
+        '− operating expenses · %(margen_neto_pct)s margin',
+    (
+        'Foto del inventario a HOY, no del período: cuánto dinero hay inmovilizado en\n'
+        '    stock, valuado a costo actual. No es una venta ni un gasto, es capital\n'
+        '    guardado en materia prima y en productos/piezas ya fabricados.'
+    ): (
+        "Snapshot of inventory as of TODAY, not the period: how much money is tied up\n"
+        "    in stock, valued at current cost. It is not a sale or an expense, it's capital\n"
+        "    held in raw material and in already-made products/pieces."
+    ),
+    (
+        'Reparto del <b>Beneficio neto</b> del período entre los socios, según el %% que\n'
+        '    tiene cargado cada uno. Es un reparto simple del período actual, no una cuenta corriente\n'
+        '    acumulada entre socios.'
+    ): (
+        "Split of the period's <b>Net profit</b> among the partners, according to the %%\n"
+        "    each one has assigned. It's a simple split of the current period, not an accumulated\n"
+        "    running balance between partners."
+    ),
+    'Los porcentajes cargados suman %(socios_pct_total)s%%, no 100%%: revisá los socios activos.':
+        "The percentages loaded add up to %(socios_pct_total)s%%, not 100%%: check the active partners.",
+    'No hay socios activos cargados. Agregalos desde "Socios" en el admin para ver el reparto acá.':
+        'No active partners loaded. Add them from "Partners" in the admin to see the split here.',
+    # budgets/templates/budgets/*_pdf.html — export a PDF de los paneles de
+    # métricas (versión corta de los textos de arriba, para la hoja impresa).
+    'Generado el %(generated_at)s': 'Generated on %(generated_at)s',
+    'Facturación de los %(n_aprobados)s pedidos aprobados del período (sin cancelados ni pedidos para stock)':
+        'Billing from the %(n_aprobados)s orders approved in the period (excluding cancelled and stock orders)',
+    'Foto del inventario a HOY, no del período.': 'Snapshot of inventory as of TODAY, not the period.',
+    'No hay socios activos cargados.': 'No active partners loaded.',
 }
 
 # OVERRIDES: resuelven choques de la misma cadena entre apps (un msgid =

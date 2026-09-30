@@ -1,6 +1,7 @@
 import math
 from decimal import ROUND_HALF_UP, Decimal
 
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models, transaction
 from django.utils import timezone
 from django.utils.translation import gettext, gettext_lazy as _
@@ -1759,3 +1760,36 @@ class PresupuestoItem(models.Model):
     def line_profit(self) -> Decimal:
         """Beneficio de esta línea: lo que se cobra menos el costo promedio."""
         return (self.line_total - self.line_cost).quantize(Decimal("0.01"))
+
+
+class Socio(models.Model):
+    """
+    Un socio del negocio, con su % de participación sobre el beneficio neto del
+    período. Alimenta la "Distribución de ingresos" del Panel de métricas: cada
+    socio activo se lleva `percentage`% del beneficio neto del período actual.
+    Reparto simple (no acumula entre períodos ni lleva cuenta corriente de
+    retiros/aportes).
+    """
+
+    name = models.CharField(_("Nombre"), max_length=100)
+    percentage = models.DecimalField(
+        _("Porcentaje de participación"),
+        max_digits=5,
+        decimal_places=2,
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+        help_text=_("% del beneficio neto del período que le corresponde a este socio."),
+    )
+    is_active = models.BooleanField(
+        _("Activo"),
+        default=True,
+        help_text=_("Los socios inactivos no aparecen en la Distribución de ingresos."),
+    )
+    order = models.PositiveIntegerField(_("Orden"), default=0)
+
+    class Meta:
+        verbose_name = _("Socio")
+        verbose_name_plural = _("Socios")
+        ordering = ["order", "name"]
+
+    def __str__(self):
+        return f"{self.name} ({self.percentage}%)"

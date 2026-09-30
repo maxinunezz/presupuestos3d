@@ -75,7 +75,7 @@
     table.total-queue { width: 100%; border-collapse: collapse; background: #fff; margin-top: 8px; }
     table.total-queue th { background: #111; color: #fff; text-align: left; padding: 8px 10px; font-size: 12px; text-transform: uppercase; }
     table.total-queue td { padding: 8px 10px; border-bottom: 1px solid #e0e0e0; font-size: 13px; color: #1a1a1a; background: #fff; }
-    .section-title { margin-top: 26px; font-size: 17px; font-weight: bold; }
+    .section-title { margin-top: 26px; font-size: 22px; font-weight: bold; }
     .warn-box { background: #fdecea; border: 1px solid #f3b9b2; border-radius: 6px; padding: 10px 14px; margin: 14px 0; color: #b3261e; }
 </style>
 
@@ -92,7 +92,7 @@
 </div>
 {% endif %}
 
-<div class="section-title">🖨️ {% translate "Cola por máquina" %}</div>
+<div class="section-title">{% translate "Cola por máquina" %}</div>
 <div class="machines">
     {% for m in machines %}
     <div class="machine-card">
@@ -157,7 +157,7 @@
 </div>
 {% endif %}
 
-<div class="section-title">📋 {% translate "Cola total" %}</div>
+<div class="section-title">{% translate "Cola total" %}</div>
 <table class="total-queue">
     <thead>
         <tr>
@@ -204,7 +204,7 @@
     </tbody>
 </table>
 
-<div class="section-title">🗂️ {% translate "Últimos impresos por máquina" %}</div>
+<div class="section-title">{% translate "Últimos impresos por máquina" %}</div>
 <div class="recent-machines">
     {% for m in machines %}
     <div class="recent-card">

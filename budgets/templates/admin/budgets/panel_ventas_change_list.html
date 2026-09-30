@@ -9,7 +9,7 @@
 {% block content %}
 {% if cobros %}
 <div class="pv-cobros">
-    <h2>🧾 {% translate "Cobros" %}</h2>
+    <h2>{% translate "Cobros" %}</h2>
     <p class="pv-cobros-intro">
         {% translate "De la facturación de los pedidos listados abajo (según los filtros aplicados), cuánto ya se cobró y cuánto sigue pendiente." %}
     </p>
@@ -43,6 +43,6 @@
     </div>
 </div>
 {% endif %}
-<h2 class="pv-ventas-title">🛒 {% translate "Ventas" %}</h2>
+<h2 class="pv-ventas-title">{% translate "Ventas" %}</h2>
 {{ block.super }}
 {% endblock %}

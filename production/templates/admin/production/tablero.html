@@ -17,7 +17,7 @@
     /* KPIs de producción (mismo verde que "Producción" en el Panel de métricas). */
     .tb-kpis--prod .kpi { background: #15803d; }
 
-    .tb-section { margin-top: 28px; font-size: 17px; font-weight: bold; }
+    .tb-section { margin-top: 28px; font-size: 22px; font-weight: bold; }
     .tb-section--prod { border-bottom: 3px solid #16a34a; padding-bottom: 4px; }
 
     .tb-grid { display: flex; flex-wrap: wrap; gap: 20px; margin-top: 14px; margin-bottom: 8px; }
@@ -85,7 +85,7 @@
     html[data-theme="dark"] .runs-progress { color: #aaa; }
 </style>
 
-<div class="tb-section tb-section--prod">🖨️ {% translate "Producción del mes" %}</div>
+<div class="tb-section tb-section--prod">{% translate "Producción del mes" %}</div>
 <div class="tb-kpis tb-kpis--prod">
     <div class="kpi"><span class="n">{{ piezas_impresas }}</span><span class="l">{% translate "Piezas impresas" %}</span></div>
     <div class="kpi"><span class="n">{{ horas_impresas }}</span><span class="l">{% translate "Horas impresas" %}</span></div>
@@ -122,7 +122,7 @@
     <div class="kpi"><span class="n">{{ in_production_count }}</span><span class="l">{% translate "pedidos en producción" %}</span></div>
 </div>
 
-<div class="tb-section">🖨️ {% translate "Qué se está imprimiendo" %}</div>
+<div class="tb-section">{% translate "Qué se está imprimiendo" %}</div>
 <div class="now-grid">
     {% for m in machines %}
     <div class="now-card{% if m.current.overdue %} overdue{% endif %}">
@@ -166,7 +166,7 @@
 </div>
 
 {% if inactive_machines %}
-<div class="tb-section">🔧 {% translate "Máquinas fuera de servicio" %}</div>
+<div class="tb-section">{% translate "Máquinas fuera de servicio" %}</div>
 <div class="now-grid">
     {% for m in inactive_machines %}
     <div class="now-card inactive">
@@ -184,7 +184,7 @@
 {% endif %}
 
 {% if unassigned %}
-<div class="tb-section">⚠️ {% translate "Trabajos sin máquina asignada" %}</div>
+<div class="tb-section">{% translate "Trabajos sin máquina asignada" %}</div>
 <div class="buy-box">
     <p style="color:#b3261e; margin:12px 0 4px;">
         {% translate 'Estos trabajos no tienen impresora asignada (sin máquina o máquina inactiva). Asignales una desde "Trabajos de producción" para que entren en la cola.' %}
@@ -208,7 +208,7 @@
 </div>
 {% endif %}
 
-<div class="tb-section">📦 {% translate "Próximas entregas" %}</div>
+<div class="tb-section">{% translate "Próximas entregas" %}</div>
 <table class="tb">
     <thead>
         <tr><th>#</th><th>{% translate "Cliente" %}</th><th>{% translate "Estado" %}</th><th>{% translate "Entrega estimada" %}</th></tr>
@@ -227,7 +227,7 @@
     </tbody>
 </table>
 
-<div class="tb-section">🛒 {% translate "Comprar materia prima" %}</div>
+<div class="tb-section">{% translate "Comprar materia prima" %}</div>
 {% if buy_filaments or buy_aggregates %}
 <div class="buy-box">
     <p style="color:#b3261e; margin:12px 0 4px;">

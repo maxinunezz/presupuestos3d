@@ -1,0 +1,44 @@
+{% extends "budgets/metrics_pdf_base.html" %}
+{% load i18n %}
+
+{% block pdf_body %}
+<div class="section">{% translate "Resultado" %}</div>
+<table class="kpis">
+    <tr><td class="label">{% translate "Ingresos" %}<br/><span class="extra">{% blocktranslate %}Facturación de los {{ n_aprobados }} pedidos aprobados del período (sin cancelados ni pedidos para stock){% endblocktranslate %}</span></td><td class="value">{{ facturacion }}</td></tr>
+    <tr><td class="label">{% translate "Costos de producción" %}<br/><span class="extra">{% translate "Material, mano de obra, máquina y agregados de lo vendido · ver desglose en Panel de costos" %}</span></td><td class="value">{{ costo_produccion }}</td></tr>
+    <tr><td class="label">{% translate "Gastos operativos" %}<br/><span class="extra">{% translate "Gastos de estructura del período (por fecha del gasto), sin extraordinarios · ver desglose en Panel de gastos" %}</span></td><td class="value">{{ gastos_operativos }}</td></tr>
+    {% if hay_extraordinarios %}
+    <tr><td class="label">{% translate "Gastos extraordinarios" %}<br/><span class="extra">{% translate "Informativo, no afecta el beneficio neto" %}</span></td><td class="value">{{ gastos_extraordinarios }}</td></tr>
+    {% endif %}
+    <tr><td class="label">{% translate "Beneficio bruto" %}<br/><span class="extra">{% blocktranslate %}Ingresos − producción · {{ margen_bruto_pct }} de margen{% endblocktranslate %}</span></td><td class="value">{{ beneficio_bruto }}</td></tr>
+    <tr><td class="label">{% translate "Beneficio neto" %}<br/><span class="extra">{% blocktranslate %}− gastos operativos · {{ margen_neto_pct }} de margen{% endblocktranslate %}</span></td><td class="value">{{ beneficio_neto }}</td></tr>
+    {% if hay_extraordinarios %}
+    <tr><td class="label">{% translate "Beneficio neto final" %}<br/><span class="extra">{% translate "− gastos operativos y extraordinarios" %}</span></td><td class="value">{{ beneficio_neto_final }}</td></tr>
+    {% endif %}
+</table>
+
+<div class="section">{% translate "Valor del inventario" %}</div>
+<p class="note">{% translate "Foto del inventario a HOY, no del período." %}</p>
+<table class="kpis">
+    <tr><td class="label">{% translate "Materia prima" %}<br/><span class="extra">{% translate "Filamentos + agregados" %}</span></td><td class="value">{{ valor_inv_materia_prima }}</td></tr>
+    <tr><td class="label">{% translate "Productos y piezas terminados" %}</td><td class="value">{{ valor_inv_terminados }}</td></tr>
+    <tr><td class="label">{% translate "Total inmovilizado" %}</td><td class="value">{{ valor_inv_total }}</td></tr>
+</table>
+
+<div class="section">{% translate "Distribución de ingresos" %}</div>
+{% if distribucion_ingresos %}
+<table class="mx">
+    <thead><tr><th>{% translate "Socio" %}</th><th class="num">%</th><th class="num">{% translate "Le corresponde" %}</th></tr></thead>
+    <tbody>
+        {% for row in distribucion_ingresos %}
+        <tr><td>{{ row.name }}</td><td class="num">{{ row.percentage }}%</td><td class="num">{{ row.monto }}</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% if socios_pct_incompleto %}
+<p class="note">{% blocktranslate %}Los porcentajes cargados suman {{ socios_pct_total }}%, no 100%: revisá los socios activos.{% endblocktranslate %}</p>
+{% endif %}
+{% else %}
+<p class="note">{% translate "No hay socios activos cargados." %}</p>
+{% endif %}
+{% endblock %}

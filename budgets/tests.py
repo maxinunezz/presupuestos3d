@@ -17,6 +17,7 @@ from .models import (
     PresupuestoItem,
     Producto,
     ProductoAggregateLine,
+    Socio,
 )
 
 
@@ -1046,6 +1047,131 @@ class MetricasResultadoTests(TestCase):
         # ...pero sí se refleja en el beneficio neto final, informativo.
         self.assertEqual(m["beneficio_neto"] - Decimal("5000"), m["beneficio_neto_final"])
 
+    def test_margen_bruto_y_neto_porcentual(self):
+        now = timezone.now()
+        self._aprobado(
+            sale_price=Decimal("1000"),
+            grams=Decimal("10"),
+            hours=Decimal("1"),
+            machine_rate=Decimal("10"),
+            when=now,
+        )
+        Gasto.objects.create(
+            fecha=timezone.localdate(now),
+            categoria=CategoriaGasto.objects.get_or_create(nombre="IT")[0],
+            concepto="Hosting",
+            monto=Decimal("100"),
+        )
+        m = build_metrics("month", now=now)
+        # material 10g*$10=100, máquina 1h*$10=10 -> costo_produccion=110,
+        # beneficio_bruto=890 (89%), beneficio_neto=790 (79%).
+        self.assertEqual(m["margen_bruto_pct"], m["beneficio_bruto"] / m["facturacion"] * 100)
+        self.assertEqual(m["margen_neto_pct"], m["beneficio_neto"] / m["facturacion"] * 100)
+        self.assertAlmostEqual(float(m["margen_bruto_pct"]), 89.0, places=2)
+        self.assertAlmostEqual(float(m["margen_neto_pct"]), 79.0, places=2)
+
+    def test_margen_pct_es_none_sin_facturacion(self):
+        m = build_metrics("month", now=timezone.now())
+        self.assertIsNone(m["margen_bruto_pct"])
+        self.assertIsNone(m["margen_neto_pct"])
+
+
+class ValorDeInventarioTests(TestCase):
+    """'Valor del inventario' del Panel de métricas: foto a HOY (no del
+    período) de materia prima + productos/piezas terminados, a costo."""
+
+    def test_materia_prima(self):
+        Filament.objects.create(
+            brand="M",
+            material_type=Filament.MaterialType.PLA,
+            color="C",
+            cost_per_kg=Decimal("10000"),  # $10/g
+            stock_grams=Decimal("500"),
+        )
+        Aggregate.objects.create(
+            name="Bolsa",
+            cost_per_unit=Decimal("5"),
+            stock_quantity=Decimal("20"),
+        )
+        m = build_metrics("month")
+        # 500g * $10/g = 5000 ; 20 * $5 = 100
+        self.assertEqual(m["valor_inv_materia_prima"], Decimal("5100"))
+
+    def test_productos_terminados(self):
+        p = make_producto(
+            sale_price=Decimal("1000"),
+            machine_cost_per_hour=Decimal("0"),
+            labor_cost_per_hour=Decimal("0"),
+        )
+        Producto.objects.filter(pk=p.pk).update(stock_quantity=3)
+        p.refresh_from_db()
+        m = build_metrics("month")
+        self.assertEqual(m["valor_inv_terminados"], 3 * p.unit_cost_avg)
+        self.assertEqual(m["valor_inv_total"], m["valor_inv_materia_prima"] + m["valor_inv_terminados"])
+
+    def test_piezas_sueltas_en_stock(self):
+        fil = Filament.objects.create(
+            brand="M",
+            material_type=Filament.MaterialType.PLA,
+            color="C",
+            cost_per_kg=Decimal("10000"),  # $10/g
+            stock_grams=Decimal("100000"),
+        )
+        p = make_producto(machine_cost_per_hour=Decimal("100"))
+        pieza = add_pieza(p, fil, grams=Decimal("50"), print_hours=Decimal("1"))
+        Pieza.objects.filter(pk=pieza.pk).update(stock_quantity=2)
+        m = build_metrics("month")
+        # material: 50g*$10=500 ; máquina: 1h*$100=100 -> 600 por unidad * 2
+        self.assertEqual(m["valor_inv_terminados"], Decimal("1200.00"))
+
+
+class DistribucionIngresosTests(TestCase):
+    """'Distribución de ingresos': reparto simple del beneficio neto del
+    período entre los socios activos, según su % cargado en el modelo Socio."""
+
+    def _aprobado_simple(self, sale_price, when=None):
+        fil = Filament.objects.create(
+            brand="M",
+            material_type=Filament.MaterialType.PLA,
+            color="C",
+            cost_per_kg=Decimal("0"),
+            stock_grams=Decimal("100000"),
+        )
+        p = make_producto(sale_price=sale_price, machine_cost_per_hour=Decimal("0"))
+        add_pieza(p, fil, grams=Decimal("0"), print_hours=Decimal("0"))
+        pres = Presupuesto.objects.create(client_name="Cliente")
+        PresupuestoItem.objects.create(presupuesto=pres, producto=p, quantity=1)
+        when = when or timezone.now()
+        Presupuesto.objects.filter(pk=pres.pk).update(
+            status=Presupuesto.Status.APPROVED, approved_at=when
+        )
+
+    def test_reparto_segun_porcentaje(self):
+        now = timezone.now()
+        self._aprobado_simple(Decimal("1000"), when=now)
+        Socio.objects.create(name="Lucas", percentage=Decimal("60"))
+        Socio.objects.create(name="Maxi", percentage=Decimal("40"))
+        m = build_metrics("month", now=now)
+        self.assertEqual(m["beneficio_neto"], Decimal("1000.00"))
+        dist = {row["name"]: row["monto"] for row in m["distribucion_ingresos"]}
+        self.assertEqual(dist["Lucas"], Decimal("600.000"))
+        self.assertEqual(dist["Maxi"], Decimal("400.000"))
+        self.assertEqual(m["socios_pct_total"], Decimal("100"))
+
+    def test_socio_inactivo_no_aparece(self):
+        now = timezone.now()
+        self._aprobado_simple(Decimal("1000"), when=now)
+        Socio.objects.create(name="Lucas", percentage=Decimal("100"), is_active=True)
+        Socio.objects.create(name="Ex socio", percentage=Decimal("50"), is_active=False)
+        m = build_metrics("month", now=now)
+        names = [row["name"] for row in m["distribucion_ingresos"]]
+        self.assertEqual(names, ["Lucas"])
+
+    def test_sin_socios_lista_vacia(self):
+        m = build_metrics("month", now=timezone.now())
+        self.assertEqual(m["distribucion_ingresos"], [])
+        self.assertEqual(m["socios_pct_total"], Decimal("0"))
+
 
 class PresupuestoCobroDefaultsTests(TestCase):
     """Los campos nuevos de cobro tienen los defaults esperados y no rompen
@@ -1416,6 +1542,22 @@ class MetricasVentasPaginaTests(TestCase):
         # Pero sigue teniendo lo propio de este panel.
         self.assertContains(resp, "Beneficio neto")
 
+    def test_panel_de_metricas_muestra_valor_inventario_y_distribucion(self):
+        resp = self.client.get(self.url_metricas, {"period": "month"})
+        self.assertContains(resp, "Valor del inventario")
+        self.assertContains(resp, "Materia prima")
+        self.assertContains(resp, "Distribución de ingresos")
+        # Sin socios cargados: mensaje explicativo en vez de la tabla.
+        self.assertContains(resp, "No hay socios activos cargados")
+
+    def test_panel_de_metricas_muestra_tabla_de_socios(self):
+        Socio.objects.create(name="Lucas", percentage=Decimal("55"))
+        Socio.objects.create(name="Maxi", percentage=Decimal("30"))
+        resp = self.client.get(self.url_metricas, {"period": "month"})
+        self.assertContains(resp, "Lucas")
+        self.assertContains(resp, "Maxi")
+        self.assertNotContains(resp, "No hay socios activos cargados")
+
     def test_panel_de_ventas_tiene_top_clientes_por_cantidad(self):
         self._aprobado(Decimal("1000"))
         resp = self.client.get(self.url_ventas, {"period": "month"})
@@ -1465,6 +1607,92 @@ class PanelCostosPaginaTests(TestCase):
         self.assertNotContains(resp, "Facturación aprobada")
         self.assertNotContains(resp, "Piezas impresas")
         self.assertNotContains(resp, "Beneficio neto")
+
+
+class MetricsPanelsExportTests(TestCase):
+    """Cada panel de Métricas (Panel de métricas, Panel de ventas, Panel de
+    costos) se puede descargar en Excel (?export=xlsx, ya existía) y en PDF
+    (?export=pdf, nuevo): ambos reusan el mismo motor de KPIs, así que alcanza
+    con probar que cada endpoint devuelve el content-type correcto y algo de
+    contenido real, sin repetir toda la lógica de cálculo (ya cubierta por los
+    tests de cada panel)."""
+
+    PANELS = [
+        ("admin:budgets_metricas_changelist", "panel_de_metricas"),
+        ("admin:budgets_metricasventas_changelist", "panel_de_ventas"),
+        ("admin:budgets_panelcostos_changelist", "panel_de_costos"),
+    ]
+
+    def setUp(self):
+        User = get_user_model()
+        User.objects.create_superuser("admin", password="x")
+        self.client.login(username="admin", password="x")
+        fil = Filament.objects.create(
+            brand="M",
+            material_type=Filament.MaterialType.PLA,
+            color="C",
+            cost_per_kg=Decimal("10000"),
+            stock_grams=Decimal("1000000"),
+        )
+        p = make_producto(sale_price=Decimal("1000"), machine_cost_per_hour=Decimal("10"))
+        add_pieza(p, fil, Decimal("10"), print_hours=Decimal("1"))
+        pres = Presupuesto.objects.create(client_name="Cliente")
+        PresupuestoItem.objects.create(presupuesto=pres, producto=p, quantity=1)
+        pres.approve()
+
+    def test_export_xlsx_en_cada_panel(self):
+        for url_name, _slug in self.PANELS:
+            with self.subTest(url_name=url_name):
+                resp = self.client.get(reverse(url_name), {"period": "month", "export": "xlsx"})
+                self.assertEqual(resp.status_code, 200)
+                self.assertEqual(
+                    resp["Content-Type"],
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+                self.assertIn("attachment", resp["Content-Disposition"])
+                self.assertTrue(len(resp.content) > 0)
+
+    def test_export_pdf_en_cada_panel(self):
+        for url_name, slug in self.PANELS:
+            with self.subTest(url_name=url_name):
+                resp = self.client.get(reverse(url_name), {"period": "month", "export": "pdf"})
+                self.assertEqual(resp.status_code, 200)
+                self.assertEqual(resp["Content-Type"], "application/pdf")
+                self.assertIn("attachment", resp["Content-Disposition"])
+                self.assertIn(slug, resp["Content-Disposition"])
+                # Cabecera %PDF: confirma que xhtml2pdf generó un PDF válido.
+                self.assertTrue(resp.content.startswith(b"%PDF"))
+
+    def test_botones_de_descarga_en_la_pagina(self):
+        for url_name, _slug in self.PANELS:
+            with self.subTest(url_name=url_name):
+                resp = self.client.get(reverse(url_name), {"period": "month"})
+                self.assertContains(resp, "export=xlsx")
+                self.assertContains(resp, "export=pdf")
+
+    def test_panel_de_metricas_explica_ingresos_costos_y_gastos(self):
+        """Las tarjetas de Ingresos/Costos de producción/Gastos operativos
+        llevan subtexto explicando de dónde sale cada número (mismo patrón
+        que ya tenían las de Beneficio), y el panel linkea al Panel de
+        gastos — agregado para que el dueño no tenga que preguntar qué son
+        estos números ni si hay alguna diferencia con el Panel de gastos."""
+        resp = self.client.get(
+            reverse("admin:budgets_metricas_changelist"), {"period": "month"}
+        )
+        self.assertContains(resp, "pedidos aprobados del período")
+        self.assertContains(
+            resp, "Material, mano de obra, máquina y agregados de lo vendido"
+        )
+        self.assertContains(resp, "Gastos de estructura del período")
+        self.assertContains(resp, reverse("admin:gastos_panelgastos_changelist"))
+
+    def test_pdf_de_metricas_tambien_explica_ingresos_costos_y_gastos(self):
+        resp = self.client.get(
+            reverse("admin:budgets_metricas_changelist"),
+            {"period": "month", "export": "pdf"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.content.startswith(b"%PDF"))
 
 
 class PanelVentasCobrosTests(TestCase):

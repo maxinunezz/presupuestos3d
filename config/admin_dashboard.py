@@ -49,6 +49,7 @@ _SECTIONS = [
             ("budgets", "MetricasVentas"),
             ("budgets", "PanelCostos"),
             ("gastos", "PanelGastos"),
+            ("budgets", "Socio"),
         ],
     ),
     (

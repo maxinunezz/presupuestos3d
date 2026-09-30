@@ -126,12 +126,19 @@ media/           # uploads locales (.3mf/gcode) — efímero en prod
   de cobro y por método de pago, sobre los pedidos listados según los filtros
   aplicados) — se movió ahí desde el Panel de ventas de Métricas, porque el
   estado de cobro y el método de pago se cargan justo en esta página.
-- Proxy de admin: **Metricas** ("Panel de métricas": solo resultado, ver
-  abajo), **MetricasVentas** ("Panel de ventas": enfoque puramente comercial
+- Proxy de admin: **Metricas** ("Panel de métricas": resultado + margen % +
+  valor del inventario + distribución de ingresos entre socios, ver abajo),
+  **MetricasVentas** ("Panel de ventas": enfoque puramente comercial
   —volumen y eficiencia de ventas, sin costos de producción ni rentabilidad—,
   separado de Métricas para no amontonar todo en un único dashboard
   larguísimo — ver abajo) y **PanelCostos** ("Panel de costos": composición
   del costo de producción e inventario/compras — ver abajo).
+- **Socio**: un socio del negocio (`name`, `percentage` 0-100, `is_active`,
+  `order`). CRUD normal en el admin (no es un proxy de solo lectura), sección
+  "Métricas". Alimenta la "Distribución de ingresos" del Panel de métricas:
+  cada socio activo se lleva `percentage`% del `beneficio_neto` del período
+  actual. Reparto simple — no acumula entre períodos ni lleva cuenta
+  corriente de retiros/aportes por socio.
 
 ### production
 - **Maquina**: una impresora. `is_active`, `supports_multicolor` (la Bambu Lab
@@ -289,12 +296,31 @@ compras de insumos, que van por inventory). Sirve para el resultado operativo.
   inventario, costos, resultado) sin importar qué página los va a
   mostrar; es la vista de admin la que decide qué mostrar. Tres páginas en el
   admin, todas con el mismo motor:
-  - **Panel de métricas** (proxy `Metricas`, sección "Métricas"): **solo
-    resultado** — ingresos, costos de producción, gastos operativos y
-    beneficio (bruto/neto/neto final). Producción (piezas/horas/uso de
-    máquinas) vive en el Tablero de producción; costos de producción e
-    inventario/compras en el Panel de costos; ventas y cobros en el Panel de
-    ventas/Ventas — todo enlazado desde acá para no duplicar contenido.
+  - **Panel de métricas** (proxy `Metricas`, sección "Métricas"): **resultado
+    + valor del inventario + distribución de ingresos** — ingresos, costos de
+    producción, gastos operativos y beneficio (bruto/neto/neto final), cada
+    beneficio con su **margen %** (`margen_bruto_pct`/`margen_neto_pct` =
+    beneficio / facturación). Debajo, **"Valor del inventario"**: foto a HOY
+    (no del período) de cuánto dinero está inmovilizado en stock — materia
+    prima (filamentos + agregados a costo actual) y productos/piezas
+    terminados (a `unit_cost_avg`/costo de material+máquina por unidad),
+    mostrados por separado y sumados. Al final, **"Distribución de
+    ingresos"**: reparto simple del `beneficio_neto` del período entre los
+    `Socio` activos según su `percentage` (sin cuenta corriente acumulada;
+    avisa si los porcentajes cargados no suman 100%). Producción
+    (piezas/horas/uso de máquinas) vive en el Tablero de producción; costos
+    de producción e inventario/compras **del período** en el Panel de
+    costos; ventas y cobros en el Panel de ventas/Ventas — todo enlazado
+    desde acá para no duplicar contenido. Las tarjetas de Ingresos/Costos de
+    producción/Gastos operativos llevan un subtexto explicando de dónde sale
+    cada número (mismo patrón que ya tenían las de Beneficio), y el intro
+    linkea también al Panel de gastos — para que se entienda sin tener que
+    leer código que "Gastos operativos" acá es el mismo número que en el
+    Panel de gastos (misma función `gastos_operativos_total()`, sin
+    extraordinarios), solo que un período con pocos o ningún gasto operativo
+    cargado puede dar un margen % que parece enorme/negativo si la
+    facturación del período también es baja — no es un bug, es la fórmula
+    beneficio/facturación con números chicos.
   - **Panel de ventas** (proxy `MetricasVentas`, sección "Métricas"):
     **enfoque puramente comercial** — responde "¿cómo estamos vendiendo y qué
     tan eficiente es el equipo comercial?", sin ningún indicador de
@@ -325,11 +351,20 @@ compras de insumos, que van por inventory). Sirve para el resultado operativo.
   período/mes/export, y el `<script>` que instancia Chart.js) vía bloques
   `mx_intro`/`mx_body`/`mx_charts`; `metricas.html`, `metricas_ventas.html` y
   `panel_costos.html` solo definen su propio contenido. `admin.py` comparte la
-  lógica de `changelist_view` (parseo de período/mes, export a xlsx) en una
-  base común `_MetricsDashboardAdmin`, con `MetricasAdmin`/
+  lógica de `changelist_view` (parseo de período/mes, export a xlsx/pdf) en
+  una base común `_MetricsDashboardAdmin`, con `MetricasAdmin`/
   `MetricasVentasAdmin`/`PanelCostosAdmin` como subclases finas (solo cambian
-  `change_list_template`/`dashboard_title`). Export a Excel (openpyxl) desde
-  las tres páginas.
+  `change_list_template`/`dashboard_title`/`pdf_template`/`pdf_slug`). Las
+  tres páginas se pueden descargar en **Excel** (openpyxl, `export_xlsx()`,
+  botón verde "Descargar Excel") y en **PDF** (xhtml2pdf/pisa,
+  `render_metrics_pdf()`, botón rojo "Descargar PDF"), ambos vía
+  `?export=xlsx`/`?export=pdf` en la URL del panel. El PDF usa un template
+  propio por panel (`budgets/templates/budgets/metricas_pdf.html`,
+  `metricas_ventas_pdf.html`, `panel_costos_pdf.html`, todos heredando de
+  `metrics_pdf_base.html`): una versión imprimible simplificada (tablas, sin
+  el chrome del admin ni Chart.js, que xhtml2pdf no ejecuta), reusando el
+  mismo `template_context()` que ya arma la página HTML y el Excel. Ver
+  `budgets/pdf.py` (`render_metrics_pdf`, `metrics_pdf_filename`).
   Por separado, el **Tablero de producción** (proxy `Tablero`, primero en la
   sección "Producción", justo arriba de Cola de producción) también reusa
   `build_metrics()`/`template_context()` (llamado directo desde

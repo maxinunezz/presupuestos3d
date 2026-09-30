@@ -1,0 +1,53 @@
+{% extends "budgets/metrics_pdf_base.html" %}
+{% load i18n %}
+
+{% block pdf_body %}
+<div class="section">{% translate "Ventas" %}</div>
+<table class="kpis">
+    <tr><td class="label">{% translate "Presupuestos aprobados" %}</td><td class="value">{{ n_aprobados }}</td></tr>
+    <tr><td class="label">{% translate "Facturación aprobada" %}</td><td class="value">{{ facturacion }}</td></tr>
+    <tr><td class="label">{% translate "Ticket promedio" %}</td><td class="value">{{ ticket }}</td></tr>
+    <tr><td class="label">{% translate "Conversión" %}<br/><span class="extra">{{ conversion_detail }}</span></td><td class="value">{{ conversion }}</td></tr>
+    <tr><td class="label">{% translate "Venta diaria promedio" %}</td><td class="value">{{ venta_diaria_promedio }}</td></tr>
+</table>
+
+<div class="section">{% translate "Productos más vendidos ($)" %}</div>
+<table class="mx">
+    <thead><tr><th>{% translate "Producto" %}</th><th class="num">{% translate "Facturación" %}</th></tr></thead>
+    <tbody>
+        {% for r in top_productos_money %}
+        <tr><td>{{ r.name }}</td><td class="num">{{ r.money }}</td></tr>
+        {% empty %}<tr><td colspan="2" class="empty">{% translate "Sin ventas en el período." %}</td></tr>{% endfor %}
+    </tbody>
+</table>
+
+<div class="section">{% translate "Productos más vendidos (cantidad)" %}</div>
+<table class="mx">
+    <thead><tr><th>{% translate "Producto" %}</th><th class="num">{% translate "Cant." %}</th></tr></thead>
+    <tbody>
+        {% for r in top_productos_qty %}
+        <tr><td>{{ r.name }}</td><td class="num">{{ r.qty }}</td></tr>
+        {% empty %}<tr><td colspan="2" class="empty">{% translate "Sin ventas en el período." %}</td></tr>{% endfor %}
+    </tbody>
+</table>
+
+<div class="section">{% translate "Top clientes ($)" %}</div>
+<table class="mx">
+    <thead><tr><th>{% translate "Cliente" %}</th><th class="num">{% translate "Facturación" %}</th></tr></thead>
+    <tbody>
+        {% for r in top_clientes %}
+        <tr><td>{{ r.name }}</td><td class="num">{{ r.money }}</td></tr>
+        {% empty %}<tr><td colspan="2" class="empty">{% translate "Sin ventas en el período." %}</td></tr>{% endfor %}
+    </tbody>
+</table>
+
+<div class="section">{% translate "Top clientes (cantidad)" %}</div>
+<table class="mx">
+    <thead><tr><th>{% translate "Cliente" %}</th><th class="num">{% translate "Cant." %}</th></tr></thead>
+    <tbody>
+        {% for r in top_clientes_qty %}
+        <tr><td>{{ r.name }}</td><td class="num">{{ r.qty }}</td></tr>
+        {% empty %}<tr><td colspan="2" class="empty">{% translate "Sin ventas en el período." %}</td></tr>{% endfor %}
+    </tbody>
+</table>
+{% endblock %}

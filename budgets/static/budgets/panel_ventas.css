@@ -44,7 +44,7 @@
 }
 .pv-cobros h2 {
     margin: 0 0 4px;
-    font-size: 16px;
+    font-size: 22px;
     border-bottom: 3px solid #0891b2;
     padding-bottom: 4px;
 }
@@ -131,7 +131,7 @@ table.pv-cobros-table th.num {
    arriba, para separar visualmente el resumen de cobros del listado en sí. */
 .pv-ventas-title {
     margin: 22px 0 10px;
-    font-size: 16px;
+    font-size: 22px;
     border-bottom: 3px solid #111;
     padding-bottom: 4px;
 }

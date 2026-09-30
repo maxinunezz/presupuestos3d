@@ -15,7 +15,7 @@
 
 {% block mx_body %}
 <!-- ===================== COSTOS DE PRODUCCIÓN ===================== -->
-<div class="mx-section mx-section--costos">🏭 {% translate "Costos de producción" %}</div>
+<div class="mx-section mx-section--costos">{% translate "Costos de producción" %}</div>
 <p class="mx-intro">
     {% blocktranslate %}Del período actual, sobre lo aprobado. Es el costo PROMEDIO de cada
     producto: prorratea material y máquina asumiendo que las sobrantes de cada corrida se
@@ -76,7 +76,7 @@
 </div>
 
 <!-- ===================== INVENTARIO Y COSTOS ===================== -->
-<div class="mx-section mx-section--inv">📦 {% translate "Inventario y costos" %}</div>
+<div class="mx-section mx-section--inv">{% translate "Inventario y costos" %}</div>
 <div class="mx-kpis mx-kpis--inv">
     <div class="kpi"><span class="n">{{ gasto_compras }}</span><span class="l">{% translate "Gasto en compras" %}</span><span class="s">{% blocktranslate %}{{ n_compras }} compra/s{% endblocktranslate %}</span></div>
     <div class="kpi"><span class="n">{{ consumo_valor }}</span><span class="l">{% translate "Consumo de material ($)" %}</span></div>

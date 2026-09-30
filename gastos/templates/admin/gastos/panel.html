@@ -23,7 +23,7 @@
     }
 
     .gx-section {
-        margin: 26px 0 8px; font-size: 16px; font-weight: bold;
+        margin: 26px 0 8px; font-size: 22px; font-weight: bold;
         border-bottom: 3px solid #111; padding-bottom: 4px;
     }
     .gx-section--rec { border-bottom-color: #7c3aed; }
@@ -157,7 +157,7 @@
 </div>
 
 <!-- ===================== Recurrentes (run-rate) ===================== -->
-<div class="gx-section gx-section--rec">🔁 {% translate "Compromiso mensual recurrente" %}</div>
+<div class="gx-section gx-section--rec">{% translate "Compromiso mensual recurrente" %}</div>
 <div class="gx-kpis gx-kpis--rec">
     <div class="kpi"><span class="n">{{ run_rate_mensual }}</span><span class="l">{% translate "Compromiso por mes" %}</span></div>
     <div class="kpi"><span class="n">{{ run_rate_anual }}</span><span class="l">{% translate "Proyección anual" %}</span></div>
@@ -179,7 +179,7 @@
 </div>
 
 <!-- ===================== Extraordinarios (informativo) ===================== -->
-<div class="gx-section gx-section--ext">🎒 {% translate "Gastos extraordinarios (informativo)" %}</div>
+<div class="gx-section gx-section--ext">{% translate "Gastos extraordinarios (informativo)" %}</div>
 <p class="gx-intro">
     {% blocktranslate %}Gastos puntuales y no representativos del período (viajes, imprevistos).
     No entran en el resultado operativo de arriba.{% endblocktranslate %}
@@ -203,7 +203,7 @@
 </div>
 
 <!-- ===================== Topes ===================== -->
-<div class="gx-section gx-section--top">🎯 {% translate "Control de topes por categoría" %}</div>
+<div class="gx-section gx-section--top">{% translate "Control de topes por categoría" %}</div>
 <div class="gx-grid">
     <div class="gx-card">
         <table class="gx">

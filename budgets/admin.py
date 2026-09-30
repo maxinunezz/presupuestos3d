@@ -29,12 +29,15 @@ from .models import (
     PresupuestoNotApprovableError,
     Producto,
     ProductoAggregateLine,
+    Socio,
     StockPiezas,
     StockProductos,
 )
 from .pdf import (
     format_money,
+    metrics_pdf_filename,
     presupuesto_pdf_filename,
+    render_metrics_pdf,
     render_presupuesto_pdf,
 )
 
@@ -557,6 +560,13 @@ class ProductoAggregateLineInline(admin.TabularInline):
     @admin.display(description=_("Costo de línea"))
     def line_cost_display(self, obj):
         return f"${obj.line_cost}" if obj.pk else "-"
+
+
+@admin.register(Socio)
+class SocioAdmin(admin.ModelAdmin):
+    list_display = ("name", "percentage", "is_active", "order")
+    list_editable = ("percentage", "is_active", "order")
+    ordering = ("order", "name")
 
 
 @admin.register(Producto)
@@ -1298,10 +1308,16 @@ class _MetricsDashboardAdmin(admin.ModelAdmin):
     navegación por período (semana/mes/año + dropdown de mes) y el export a
     Excel; solo cambian el template (qué secciones muestran) y el título.
 
-    Las subclases definen `change_list_template` y `dashboard_title`.
+    Las subclases definen `change_list_template` y `dashboard_title`. El
+    export a PDF (además del de Excel) también es compartido: cada subclase
+    define `pdf_template` (el template imprimible propio, sin el chrome del
+    admin ni Chart.js — xhtml2pdf no soporta JS) y `pdf_slug` (para el nombre
+    del archivo descargado).
     """
 
     dashboard_title = ""
+    pdf_template = ""
+    pdf_slug = "panel"
 
     def has_add_permission(self, request):
         return False
@@ -1345,6 +1361,22 @@ class _MetricsDashboardAdmin(admin.ModelAdmin):
                     "spreadsheetml.sheet"
                 ),
             )
+            response["Content-Disposition"] = f'attachment; filename="{fname}"'
+            return response
+
+        # Descarga del PDF imprimible (mismos datos que la página, sin el
+        # chrome del admin ni los gráficos de Chart.js).
+        if request.GET.get("export") == "pdf":
+            ctx = {
+                "dashboard_title": self.dashboard_title,
+                "generated_at": timezone.localtime(timezone.now()).strftime(
+                    "%d/%m/%Y %H:%M"
+                ),
+                **template_context(metrics),
+            }
+            pdf_bytes = render_metrics_pdf(self.pdf_template, ctx)
+            response = HttpResponse(pdf_bytes, content_type="application/pdf")
+            fname = metrics_pdf_filename(self.pdf_slug, metrics["period"])
             response["Content-Disposition"] = f'attachment; filename="{fname}"'
             return response
 
@@ -1400,6 +1432,8 @@ class MetricasAdmin(_MetricsDashboardAdmin):
 
     change_list_template = "admin/budgets/metricas.html"
     dashboard_title = _("Panel de métricas")
+    pdf_template = "budgets/metricas_pdf.html"
+    pdf_slug = "panel_de_metricas"
 
 
 @admin.register(MetricasVentas)
@@ -1414,6 +1448,8 @@ class MetricasVentasAdmin(_MetricsDashboardAdmin):
 
     change_list_template = "admin/budgets/metricas_ventas.html"
     dashboard_title = _("Panel de ventas")
+    pdf_template = "budgets/metricas_ventas_pdf.html"
+    pdf_slug = "panel_de_ventas"
 
 
 @admin.register(PanelCostos)
@@ -1427,3 +1463,5 @@ class PanelCostosAdmin(_MetricsDashboardAdmin):
 
     change_list_template = "admin/budgets/panel_costos.html"
     dashboard_title = _("Panel de costos")
+    pdf_template = "budgets/panel_costos_pdf.html"
+    pdf_slug = "panel_de_costos"

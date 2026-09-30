@@ -47,13 +47,14 @@
     }
     a.mx-month-option:hover { background: #333; }
     a.mx-month-option.active { background: #fff; color: #111; }
-    .mx-excel {
-        margin-left: auto; padding: 8px 18px; background: #16a34a; color: #fff; border-radius: 6px;
-        text-decoration: none; font-size: 13px; font-weight: 600;
+    .mx-excel, .mx-pdf {
+        padding: 8px 18px; border-radius: 6px; text-decoration: none; font-size: 13px; font-weight: 600; color: #fff;
     }
+    .mx-excel { margin-left: auto; background: #16a34a; }
+    .mx-pdf { background: #b91c1c; }
 
     .mx-section {
-        margin: 26px 0 8px; font-size: 16px; font-weight: bold;
+        margin: 26px 0 8px; font-size: 22px; font-weight: bold;
         border-bottom: 3px solid var(--border-color, #111); padding-bottom: 4px;
     }
     /* Cada bloque con su color para guiar la vista. */
@@ -154,6 +155,7 @@
     {% endif %}
     <span class="mx-range">{{ range_str }}</span>
     <a class="mx-excel" href="?period={{ period }}{% if period == "month" %}&date={{ selected_date_value }}{% endif %}&export=xlsx">⬇ {% translate "Descargar Excel" %}</a>
+    <a class="mx-pdf" href="?period={{ period }}{% if period == "month" %}&date={{ selected_date_value }}{% endif %}&export=pdf">⬇ {% translate "Descargar PDF" %}</a>
 </div>
 
 {% block mx_body %}{% endblock %}

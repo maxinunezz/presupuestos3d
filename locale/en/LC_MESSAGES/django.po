@@ -676,6 +676,9 @@ msgstr "View"
 msgid "Descargar Excel"
 msgstr "Download Excel"
 
+msgid "Descargar PDF"
+msgstr "Download PDF"
+
 msgid "Acumulado del año"
 msgstr "Year to date"
 
@@ -1784,6 +1787,15 @@ msgstr "Business result by period: revenue, production costs, operating expenses
 msgid "Ver Panel de costos (composición del costo de producción e inventario)"
 msgstr "View Costs panel (production cost breakdown and inventory)"
 
+msgid "Ver Panel de gastos (desglose de gastos operativos por categoría)"
+msgstr "View Expenses panel (operating expenses breakdown by category)"
+
+msgid "Material, mano de obra, máquina y agregados de lo vendido · ver desglose en Panel de costos"
+msgstr "Material, labor, machine and add-ons of what was sold · see breakdown in Costs panel"
+
+msgid "Gastos de estructura del período (por fecha del gasto), sin extraordinarios · ver desglose en Panel de gastos"
+msgstr "Structural expenses for the period (by expense date), excluding extraordinary ones · see breakdown in Expenses panel"
+
 msgid "Ver Panel de métricas (resultado)"
 msgstr "View Metrics panel (result)"
 
@@ -1801,6 +1813,63 @@ msgstr "Payments"
 
 msgid "De la Facturación de arriba, cuánto ya se cobró y cuánto sigue pendiente, según el estado de cobro y el método de pago cargados desde el listado de Ventas."
 msgstr "Of the Billing above, how much has already been collected and how much is still pending, based on the payment status and payment method loaded from the Sales listing."
+
+msgid "Resultado del negocio por período: ingresos, costos de producción, gastos operativos, beneficio (con margen %%), valor del inventario y reparto entre socios."
+msgstr "Business result by period: revenue, production costs, operating expenses, profit (with margin %%), inventory value and partner split."
+
+msgid "Valor del inventario"
+msgstr "Inventory value"
+
+msgid "Materia prima"
+msgstr "Raw material"
+
+msgid "Filamentos + agregados"
+msgstr "Filaments + add-ons"
+
+msgid "Productos y piezas terminados"
+msgstr "Finished products and pieces"
+
+msgid "Ya fabricados, a la espera de venderse/armarse"
+msgstr "Already made, waiting to be sold/assembled"
+
+msgid "Total inmovilizado"
+msgstr "Total tied up"
+
+msgid "Distribución de ingresos"
+msgstr "Income distribution"
+
+msgid "Socio"
+msgstr "Partner"
+
+msgid "Le corresponde"
+msgstr "Share"
+
+msgid "Porcentaje de participación"
+msgstr "Profit share percentage"
+
+msgid "% del beneficio neto del período que le corresponde a este socio."
+msgstr "%% of the period's net profit that goes to this partner."
+
+msgid "Los socios inactivos no aparecen en la Distribución de ingresos."
+msgstr "Inactive partners do not appear in the Income distribution."
+
+msgid "Socios"
+msgstr "Partners"
+
+msgid "Margen bruto (%)"
+msgstr "Gross margin (%)"
+
+msgid "Margen neto (%)"
+msgstr "Net margin (%)"
+
+msgid "VALOR DEL INVENTARIO (foto actual)"
+msgstr "INVENTORY VALUE (current snapshot)"
+
+msgid "Materia prima (filamentos y agregados)"
+msgstr "Raw material (filaments and add-ons)"
+
+msgid "DISTRIBUCIÓN DE INGRESOS (reparto del beneficio neto del período)"
+msgstr "INCOME DISTRIBUTION (split of the period's net profit)"
 
 msgid "de"
 msgstr "from"
@@ -2364,6 +2433,44 @@ msgid "De los Ingresos de arriba, cuánto ya se cobró y cuánto sigue pendiente
     según el estado de cobro y el método de pago cargados en el Panel de ventas."
 msgstr "Of the Income above, how much has already been collected and how much is still
     pending, based on the payment status and payment method loaded in the Sales panel."
+
+msgid "Ingresos − producción · %(margen_bruto_pct)s de margen"
+msgstr "Income − production · %(margen_bruto_pct)s margin"
+
+msgid "− gastos operativos · %(margen_neto_pct)s de margen"
+msgstr "− operating expenses · %(margen_neto_pct)s margin"
+
+msgid "Foto del inventario a HOY, no del período: cuánto dinero hay inmovilizado en
+    stock, valuado a costo actual. No es una venta ni un gasto, es capital
+    guardado en materia prima y en productos/piezas ya fabricados."
+msgstr "Snapshot of inventory as of TODAY, not the period: how much money is tied up
+    in stock, valued at current cost. It is not a sale or an expense, it's capital
+    held in raw material and in already-made products/pieces."
+
+msgid "Reparto del <b>Beneficio neto</b> del período entre los socios, según el %% que
+    tiene cargado cada uno. Es un reparto simple del período actual, no una cuenta corriente
+    acumulada entre socios."
+msgstr "Split of the period's <b>Net profit</b> among the partners, according to the %%
+    each one has assigned. It's a simple split of the current period, not an accumulated
+    running balance between partners."
+
+msgid "Los porcentajes cargados suman %(socios_pct_total)s%%, no 100%%: revisá los socios activos."
+msgstr "The percentages loaded add up to %(socios_pct_total)s%%, not 100%%: check the active partners."
+
+msgid "No hay socios activos cargados. Agregalos desde \"Socios\" en el admin para ver el reparto acá."
+msgstr "No active partners loaded. Add them from \"Partners\" in the admin to see the split here."
+
+msgid "Generado el %(generated_at)s"
+msgstr "Generated on %(generated_at)s"
+
+msgid "Facturación de los %(n_aprobados)s pedidos aprobados del período (sin cancelados ni pedidos para stock)"
+msgstr "Billing from the %(n_aprobados)s orders approved in the period (excluding cancelled and stock orders)"
+
+msgid "Foto del inventario a HOY, no del período."
+msgstr "Snapshot of inventory as of TODAY, not the period."
+
+msgid "No hay socios activos cargados."
+msgstr "No active partners loaded."
 
 msgid "Presupuesto"
 msgstr "Budget"

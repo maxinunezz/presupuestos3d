@@ -1,0 +1,51 @@
+{% extends "budgets/metrics_pdf_base.html" %}
+{% load i18n %}
+
+{% block pdf_body %}
+<div class="section">{% translate "Costos de producción" %}</div>
+<table class="kpis">
+    <tr><td class="label">{% translate "Material (con merma)" %}</td><td class="value">{{ cost_material }}</td></tr>
+    <tr><td class="label">{% translate "Mano de obra" %}</td><td class="value">{{ cost_labor }}</td></tr>
+    <tr><td class="label">{% translate "Costo de máquina" %}<br/><span class="extra">{{ cost_machine_hours }}</span></td><td class="value">{{ cost_machine }}</td></tr>
+    <tr><td class="label">{% translate "Agregados" %}</td><td class="value">{{ cost_aggregates }}</td></tr>
+    <tr><td class="label">{% translate "Total costo de producción" %}</td><td class="value">{{ costo_produccion }}</td></tr>
+</table>
+
+<div class="section">{% translate "Materiales usados" %}</div>
+<table class="mx">
+    <thead><tr><th>{% translate "Filamento" %}</th><th class="num">{% translate "Gramos" %}</th><th class="num">{% translate "Costo" %}</th></tr></thead>
+    <tbody>
+        {% for row in material_breakdown %}
+        <tr><td>{{ row.label }}</td><td class="num">{{ row.grams }}</td><td class="num">{{ row.money }}</td></tr>
+        {% empty %}<tr><td colspan="3" class="empty">{% translate "Sin consumo de material en el período." %}</td></tr>{% endfor %}
+    </tbody>
+</table>
+
+<div class="section">{% translate "Agregados usados" %}</div>
+<table class="mx">
+    <thead><tr><th>{% translate "Agregado" %}</th><th class="num">{% translate "Cantidad" %}</th><th class="num">{% translate "Costo" %}</th></tr></thead>
+    <tbody>
+        {% for row in aggregate_breakdown %}
+        <tr><td>{{ row.label }}</td><td class="num">{{ row.qty }} {{ row.unit }}</td><td class="num">{{ row.money }}</td></tr>
+        {% empty %}<tr><td colspan="3" class="empty">{% translate "Sin consumo de agregados en el período." %}</td></tr>{% endfor %}
+    </tbody>
+</table>
+
+<div class="section">{% translate "Máquinas usadas" %}</div>
+<table class="mx">
+    <thead><tr><th>{% translate "Máquina" %}</th><th class="num">{% translate "Trabajos" %}</th><th class="num">{% translate "Horas" %}</th></tr></thead>
+    <tbody>
+        {% for row in uso_maquinas %}
+        <tr><td>{{ row.name }}</td><td class="num">{{ row.jobs }}</td><td class="num">{{ row.horas }}</td></tr>
+        {% empty %}<tr><td colspan="3" class="empty">{% translate "Sin producción terminada en el período." %}</td></tr>{% endfor %}
+    </tbody>
+</table>
+
+<div class="section">{% translate "Inventario y costos" %}</div>
+<table class="kpis">
+    <tr><td class="label">{% translate "Gasto en compras" %}<br/><span class="extra">{% blocktranslate %}{{ n_compras }} compra/s{% endblocktranslate %}</span></td><td class="value">{{ gasto_compras }}</td></tr>
+    <tr><td class="label">{% translate "Consumo de material ($)" %}</td><td class="value">{{ consumo_valor }}</td></tr>
+    <tr><td class="label">{% translate "Filamento consumido" %}</td><td class="value">{{ fil_grams }}</td></tr>
+    <tr><td class="label">{% translate "Insumos bajo stock mínimo" %}</td><td class="value">{{ low_stock }}</td></tr>
+</table>
+{% endblock %}
