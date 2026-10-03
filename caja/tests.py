@@ -15,6 +15,7 @@ from budgets.models import (
 )
 from gastos.models import CategoriaGasto, Gasto, MedioPagoGasto
 from inventory.models import Filament
+from production.models import Herramienta, HerramientaCategoria
 
 from .models import CuentaCaja, MovimientoCaja
 
@@ -359,4 +360,68 @@ class GastoAutogeneraMovimientoCajaTests(TestCase):
         )
         self.assertFalse(
             MovimientoCaja.objects.filter(gasto=gasto, origen_automatico=True).exists()
+        )
+
+
+class HerramientaAutogeneraMovimientoCajaTests(TestCase):
+    """`Herramienta.medio_pago` usa directamente los códigos de
+    `Presupuesto.MedioPago` (mismo mecanismo que `Presupuesto`), a
+    diferencia de `Gasto` que mapea por nombre desde un FK libre."""
+
+    def setUp(self):
+        self.categoria = HerramientaCategoria.objects.get_or_create(nombre="Maquinaria")[0]
+        self.cuenta = CuentaCaja.objects.create(
+            nombre="Efectivo",
+            saldo_inicial=Decimal("0"),
+            fecha_saldo_inicial=timezone.localdate() - timedelta(days=1),
+            medio_pago_default=Presupuesto.MedioPago.EFECTIVO,
+        )
+
+    def test_crea_egreso_borrador_con_medio_de_caja_inmediata(self):
+        herramienta = Herramienta.objects.create(
+            nombre="Termoformadora",
+            categoria=self.categoria,
+            costo_adquisicion=Decimal("1000"),
+            medio_pago=Presupuesto.MedioPago.EFECTIVO,
+        )
+        movs = MovimientoCaja.objects.filter(herramienta=herramienta, origen_automatico=True)
+        self.assertEqual(movs.count(), 1)
+        mov = movs.first()
+        self.assertEqual(mov.tipo, MovimientoCaja.Tipo.EGRESO)
+        self.assertEqual(mov.estado, MovimientoCaja.Estado.BORRADOR)
+        self.assertEqual(mov.monto, Decimal("1000"))
+        self.assertEqual(mov.cuenta, self.cuenta)
+
+        # Idempotente.
+        herramienta.save()
+        self.assertEqual(
+            MovimientoCaja.objects.filter(
+                herramienta=herramienta, origen_automatico=True
+            ).count(),
+            1,
+        )
+
+    def test_no_crea_nada_con_tarjeta(self):
+        herramienta = Herramienta.objects.create(
+            nombre="Sacabocados",
+            categoria=self.categoria,
+            costo_adquisicion=Decimal("50"),
+            medio_pago=Presupuesto.MedioPago.TARJETA,
+        )
+        self.assertFalse(
+            MovimientoCaja.objects.filter(
+                herramienta=herramienta, origen_automatico=True
+            ).exists()
+        )
+
+    def test_no_crea_nada_sin_medio_de_pago(self):
+        herramienta = Herramienta.objects.create(
+            nombre="Sin medio",
+            categoria=self.categoria,
+            costo_adquisicion=Decimal("50"),
+        )
+        self.assertFalse(
+            MovimientoCaja.objects.filter(
+                herramienta=herramienta, origen_automatico=True
+            ).exists()
         )

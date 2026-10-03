@@ -2344,6 +2344,129 @@ msgstr "Mark this order as printed?"
 msgid "Este trabajo está Imprimiendo. ¿Confirmás cambiarlo de máquina? Las corridas que ya se hicieron van a quedar a nombre de la máquina anterior."
 msgstr "This job is Printing. Are you sure you want to change its machine? The runs already done will stay credited to the previous machine."
 
+msgid "Categoría de herramienta"
+msgstr "Tool category"
+
+msgid "Categorías de herramienta"
+msgstr "Tool categories"
+
+msgid "Ej: Termoformadora de mesa, Sacabocados manual."
+msgstr "E.g.: Tabletop thermoformer, Manual hole punch."
+
+msgid "Número de serie"
+msgstr "Serial number"
+
+msgid "Ubicación"
+msgstr "Location"
+
+msgid "Fecha de compra"
+msgstr "Purchase date"
+
+msgid "Costo de adquisición ($)"
+msgstr "Acquisition cost ($)"
+
+msgid "Comprobante / factura"
+msgstr "Receipt / invoice"
+
+msgid "Referencia del comprobante (ej: \"Factura A 0001-00001234\"). No se adjunta archivo: lo subido a /media no persiste en producción (Vercel es serverless)."
+msgstr "Reference for the receipt (e.g.: \"Invoice A 0001-00001234\"). No file is attached: anything uploaded to /media does not persist in production (Vercel is serverless)."
+
+msgid "Cómo se pagó. Efectivo/Transferencia/Mercado Pago/Ualá generan un borrador en el Panel de caja para revisar y confirmar; Tarjeta y cuotas se cargan a mano."
+msgstr "How it was paid. Cash/Bank transfer/Mercado Pago/Ualá generate a draft in the Cash panel to review and confirm; Card and installments are always entered by hand."
+
+msgid "Mercado Pago"
+msgstr "Mercado Pago"
+
+msgid "Ualá"
+msgstr "Ualá"
+
+msgid "Si se compró en cuotas, qué número de cuota es este pago puntual (se carga igual que un Gasto: una cuota por pago real)."
+msgstr "If it was bought in installments, which installment number this particular payment is (entered the same way as an Expense: one installment per real payment)."
+
+msgid "Se deprecia"
+msgstr "Depreciates"
+
+msgid "Activalo solo si este bien tiene valor de reventa y tiene sentido depreciarlo (ej: una termoformadora). Dejalo apagado para herramientas sin valor de reventa (ej: un sacabocados)."
+msgstr "Turn it on only if this asset has resale value and it makes sense to depreciate it (e.g. a thermoformer). Leave it off for tools with no resale value (e.g. a hole punch)."
+
+msgid "Vida útil (meses)"
+msgstr "Useful life (months)"
+
+msgid "Requerido si \"Se deprecia\" está activo."
+msgstr "Required if \"Depreciates\" is on."
+
+msgid "Valor residual ($)"
+msgstr "Residual value ($)"
+
+msgid "Valor estimado al final de la vida útil (puede ser 0)."
+msgstr "Estimated value at the end of its useful life (can be 0)."
+
+msgid "Fecha de baja"
+msgstr "Retirement date"
+
+msgid "Motivo de baja"
+msgstr "Retirement reason"
+
+msgid "Precio de venta ($)"
+msgstr "Sale price ($)"
+
+msgid "Si se vendió, cuánto se cobró por ella."
+msgstr "If sold, how much it was sold for."
+
+msgid "En reparación"
+msgstr "Under repair"
+
+msgid "De baja"
+msgstr "Retired"
+
+msgid "Vendida"
+msgstr "Sold"
+
+msgid "Herramienta / bien de uso"
+msgstr "Tool / fixed asset"
+
+msgid "Herramientas"
+msgstr "Tools"
+
+msgid "Completá la vida útil (en meses) para depreciar este bien."
+msgstr "Fill in the useful life (in months) to depreciate this asset."
+
+msgid "Compra herramienta #%(pk)s — %(nombre)s"
+msgstr "Tool purchase #%(pk)s — %(nombre)s"
+
+msgid "Costo ($)"
+msgstr "Cost ($)"
+
+msgid "Proveedor / técnico"
+msgstr "Supplier / technician"
+
+msgid "Mantenimiento"
+msgstr "Maintenance"
+
+msgid "Mantenimientos"
+msgstr "Maintenance records"
+
+msgid "Depreciación mensual"
+msgstr "Monthly depreciation"
+
+msgid "Valor contable neto"
+msgstr "Net book value"
+
+msgid "Identificación"
+msgstr "Identification"
+
+msgid "Adquisición"
+msgstr "Acquisition"
+
+msgid "Depreciación (opcional)"
+msgstr "Depreciation (optional)"
+
+msgid "Activá \"Se deprecia\" solo si este bien tiene valor de reventa y tiene sentido depreciarlo (ej: una termoformadora). Para herramientas sin valor de reventa (ej: un sacabocados), dejalo apagado."
+msgstr "Turn on \"Depreciates\" only if this asset has resale value and it makes sense to depreciate it (e.g. a thermoformer). For tools with no resale value (e.g. a hole punch), leave it off."
+
+msgid "Baja / venta"
+msgstr "Retirement / sale"
+
 msgid "Cuenta de caja"
 msgstr "Cash account"
 
@@ -2407,11 +2530,14 @@ msgstr "Whether the system generated it (as opposed to entered by hand)."
 msgid "Presupuesto"
 msgstr "Budget"
 
+msgid "Herramienta"
+msgstr "Tool"
+
 msgid "El monto tiene que ser mayor a cero."
 msgstr "The amount must be greater than zero."
 
-msgid "Un movimiento de caja puede estar vinculado a lo sumo a un solo documento de origen (Presupuesto, Compra o Gasto)."
-msgstr "A cash movement can be linked to at most one source document (Budget, Purchase or Expense)."
+msgid "Un movimiento de caja puede estar vinculado a lo sumo a un solo documento de origen (Presupuesto, Compra, Gasto o Herramienta)."
+msgstr "A cash movement can be linked to at most one source document (Budget, Purchase, Expense or Tool)."
 
 msgid "Caja"
 msgstr "Cash"

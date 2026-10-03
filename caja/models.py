@@ -173,8 +173,9 @@ class MovimientoCaja(models.Model):
     )
 
     # Trazabilidad opcional hacia el documento de origen. Como máximo UNO de
-    # estos tres puede estar seteado (validado en clean()). Referencias por
-    # string: `caja` depende de `budgets`/`inventory`/`gastos`, no al revés.
+    # estos cuatro puede estar seteado (validado en clean()). Referencias por
+    # string: `caja` depende de `budgets`/`inventory`/`gastos`/`production`,
+    # no al revés.
     presupuesto = models.ForeignKey(
         "budgets.Presupuesto",
         verbose_name=_("Presupuesto"),
@@ -199,6 +200,14 @@ class MovimientoCaja(models.Model):
         on_delete=models.SET_NULL,
         related_name="movimientos_caja",
     )
+    herramienta = models.ForeignKey(
+        "production.Herramienta",
+        verbose_name=_("Herramienta"),
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="movimientos_caja",
+    )
 
     created_at = models.DateTimeField(_("Creado"), auto_now_add=True)
     updated_at = models.DateTimeField(_("Actualizado"), auto_now=True)
@@ -218,13 +227,18 @@ class MovimientoCaja(models.Model):
             raise ValidationError(
                 {"monto": _("El monto tiene que ser mayor a cero.")}
             )
-        vinculos = [self.presupuesto_id, self.compra_id, self.gasto_id]
+        vinculos = [
+            self.presupuesto_id,
+            self.compra_id,
+            self.gasto_id,
+            self.herramienta_id,
+        ]
         if sum(1 for v in vinculos if v) > 1:
             raise ValidationError(
                 _(
                     "Un movimiento de caja puede estar vinculado a lo sumo a "
-                    "un solo documento de origen (Presupuesto, Compra o "
-                    "Gasto)."
+                    "un solo documento de origen (Presupuesto, Compra, Gasto "
+                    "o Herramienta)."
                 )
             )
 
@@ -234,9 +248,10 @@ class MovimientoCaja(models.Model):
     ):
         """
         Crea (y guarda) un `MovimientoCaja` en estado Borrador generado por
-        el sistema. `origen_kwargs` puede traer `presupuesto=`, `compra=` o
-        `gasto=` (a lo sumo uno). Llama `full_clean()` antes de guardar para
-        no saltear las validaciones de `clean()` al crear por código.
+        el sistema. `origen_kwargs` puede traer `presupuesto=`, `compra=`,
+        `gasto=` o `herramienta=` (a lo sumo uno). Llama `full_clean()` antes
+        de guardar para no saltear las validaciones de `clean()` al crear
+        por código.
         """
         mov = cls(
             cuenta=cuenta,

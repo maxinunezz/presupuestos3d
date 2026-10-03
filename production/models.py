@@ -1,6 +1,7 @@
 from decimal import Decimal
 
 from django.db import models
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 
@@ -830,3 +831,345 @@ class Tablero(ProductionJob):
         proxy = True
         verbose_name = _("Tablero de producción")
         verbose_name_plural = _("Tablero de producción")
+
+
+class HerramientaCategoria(models.Model):
+    """
+    Categoría de herramienta/bien de uso (Maquinaria, Herramienta manual,
+    Mobiliario, Electrónica, Otro...). Editable desde el admin, mismo patrón
+    que `inventory.AggregateCategory`/`gastos.CategoriaGasto`: se agregan o
+    editan categorías nuevas sin programar ni migrar nada. Borrar una
+    categoría en uso está bloqueado (`on_delete=PROTECT` en `Herramienta`)
+    para no perder la clasificación de lo ya cargado con ella.
+    """
+
+    nombre = models.CharField(_("Nombre"), max_length=50, unique=True)
+
+    class Meta:
+        verbose_name = _("Categoría de herramienta")
+        verbose_name_plural = _("Categorías de herramienta")
+        ordering = ["nombre"]
+
+    def __str__(self):
+        return self.nombre
+
+
+def _default_herramienta_categoria():
+    """
+    Categoría que se preselecciona al cargar una Herramienta nueva: "Otro" si
+    existe, si no la primera que haya. Devuelve None si todavía no hay
+    ninguna categoría cargada.
+    """
+    return (
+        HerramientaCategoria.objects.filter(nombre="Otro")
+        .values_list("id", flat=True)
+        .first()
+        or HerramientaCategoria.objects.order_by("id").values_list("id", flat=True).first()
+    )
+
+
+class Herramienta(models.Model):
+    """
+    Un bien de uso / herramienta del taller que NO es una impresora (ver
+    `Maquina` para eso): termoformadora, soldador, mobiliario, herramienta
+    manual, etc. Vive en su propia sección "Herramientas", aislada de
+    Métricas/Panel de costos por ahora (no entra en ningún cálculo de costos
+    de producción ni en la depreciación de Máquinas).
+
+    La depreciación es OPCIONAL por artículo (`se_deprecia`): una
+    termoformadora puede depreciarse linealmente a lo largo de su vida útil,
+    pero una herramienta manual sin valor de reventa (ej. un sacabocados) no
+    necesita cargarle nada de eso.
+
+    Autogenera un borrador de `MovimientoCaja` (EGRESO) al comprarla, mismo
+    mecanismo que `Presupuesto`/`Gasto`: solo si el medio de pago es de
+    "caja inmediata" (Efectivo/Transferencia/Mercado Pago/Ualá) y hay una
+    única `CuentaCaja` configurada para ese medio. Tarjeta y cuotas siempre
+    se cargan a mano (la plata no sale ese mismo día).
+    """
+
+    class Estado(models.TextChoices):
+        ACTIVA = "ACTIVA", _("Activa")
+        REPARACION = "REPARACION", _("En reparación")
+        BAJA = "BAJA", _("De baja")
+        VENDIDA = "VENDIDA", _("Vendida")
+
+    class MedioPago(models.TextChoices):
+        EFECTIVO = "EFECTIVO", _("Efectivo")
+        TRANSFERENCIA = "TRANSFERENCIA", _("Transferencia")
+        MERCADOPAGO = "MERCADOPAGO", _("Mercado Pago")
+        UALA = "UALA", _("Ualá")
+        TARJETA = "TARJETA", _("Tarjeta")
+        OTRO = "OTRO", _("Otro")
+
+    # Mismos medios "de caja inmediata" que `Presupuesto`/`Gasto`: la plata
+    # sale el mismo día, así que son los únicos que disparan la
+    # autogeneración de un borrador de `MovimientoCaja`.
+    CAJA_INMEDIATA_MEDIOS_PAGO = {
+        MedioPago.EFECTIVO,
+        MedioPago.TRANSFERENCIA,
+        MedioPago.MERCADOPAGO,
+        MedioPago.UALA,
+    }
+
+    # --- Identificación ---
+    nombre = models.CharField(
+        _("Nombre"),
+        max_length=150,
+        help_text=_("Ej: Termoformadora de mesa, Sacabocados manual."),
+    )
+    categoria = models.ForeignKey(
+        HerramientaCategoria,
+        verbose_name=_("Categoría"),
+        on_delete=models.PROTECT,
+        related_name="herramientas",
+        default=_default_herramienta_categoria,
+    )
+    numero_serie = models.CharField(_("Número de serie"), max_length=100, blank=True)
+    ubicacion = models.CharField(_("Ubicación"), max_length=150, blank=True)
+
+    # --- Adquisición ---
+    fecha_compra = models.DateField(_("Fecha de compra"), default=timezone.localdate)
+    proveedor = models.CharField(_("Proveedor"), max_length=150, blank=True)
+    costo_adquisicion = models.DecimalField(
+        _("Costo de adquisición ($)"),
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal("0"),
+    )
+    comprobante = models.CharField(
+        _("Comprobante / factura"),
+        max_length=150,
+        blank=True,
+        help_text=_(
+            "Referencia del comprobante (ej: \"Factura A 0001-00001234\"). No "
+            "se adjunta archivo: lo subido a /media no persiste en producción "
+            "(Vercel es serverless)."
+        ),
+    )
+    medio_pago = models.CharField(
+        _("Medio de pago"),
+        max_length=20,
+        choices=MedioPago.choices,
+        blank=True,
+        default="",
+        help_text=_(
+            "Cómo se pagó. Efectivo/Transferencia/Mercado Pago/Ualá generan "
+            "un borrador en el Panel de caja para revisar y confirmar; "
+            "Tarjeta y cuotas se cargan a mano."
+        ),
+    )
+    cuota_actual = models.PositiveSmallIntegerField(
+        _("Cuota actual"),
+        null=True,
+        blank=True,
+        help_text=_(
+            "Si se compró en cuotas, qué número de cuota es este pago puntual "
+            "(se carga igual que un Gasto: una cuota por pago real)."
+        ),
+    )
+    cuotas_totales = models.PositiveSmallIntegerField(
+        _("Cuotas totales"), null=True, blank=True
+    )
+
+    # --- Depreciación (opcional) ---
+    se_deprecia = models.BooleanField(
+        _("Se deprecia"),
+        default=False,
+        help_text=_(
+            "Activalo solo si este bien tiene valor de reventa y tiene "
+            "sentido depreciarlo (ej: una termoformadora). Dejalo apagado "
+            "para herramientas sin valor de reventa (ej: un sacabocados)."
+        ),
+    )
+    vida_util_meses = models.PositiveIntegerField(
+        _("Vida útil (meses)"),
+        null=True,
+        blank=True,
+        help_text=_("Requerido si \"Se deprecia\" está activo."),
+    )
+    valor_residual = models.DecimalField(
+        _("Valor residual ($)"),
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal("0"),
+        help_text=_("Valor estimado al final de la vida útil (puede ser 0)."),
+    )
+
+    # --- Estado / baja ---
+    estado = models.CharField(
+        _("Estado"), max_length=15, choices=Estado.choices, default=Estado.ACTIVA
+    )
+    fecha_baja = models.DateField(_("Fecha de baja"), null=True, blank=True)
+    motivo_baja = models.CharField(_("Motivo de baja"), max_length=200, blank=True)
+    precio_venta = models.DecimalField(
+        _("Precio de venta ($)"),
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text=_("Si se vendió, cuánto se cobró por ella."),
+    )
+
+    notas = models.TextField(_("Notas"), blank=True)
+    created_at = models.DateTimeField(_("Creada"), auto_now_add=True)
+    updated_at = models.DateTimeField(_("Actualizada"), auto_now=True)
+
+    class Meta:
+        verbose_name = _("Herramienta / bien de uso")
+        verbose_name_plural = _("Herramientas")
+        ordering = ["nombre"]
+
+    def __str__(self):
+        return self.nombre
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+
+        super().clean()
+        if self.se_deprecia and not self.vida_util_meses:
+            raise ValidationError(
+                {
+                    "vida_util_meses": _(
+                        "Completá la vida útil (en meses) para depreciar este bien."
+                    )
+                }
+            )
+        if bool(self.cuotas_totales) != bool(self.cuota_actual):
+            raise ValidationError(
+                _(
+                    "Completá tanto \"Cuota actual\" como \"Cuotas totales\", o "
+                    "dejá los dos vacíos."
+                )
+            )
+        if (
+            self.cuotas_totales
+            and self.cuota_actual
+            and self.cuota_actual > self.cuotas_totales
+        ):
+            raise ValidationError(
+                _("La \"Cuota actual\" no puede ser mayor que las \"Cuotas totales\".")
+            )
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        self._autogenerar_movimiento_caja()
+
+    def _autogenerar_movimiento_caja(self):
+        """
+        Igual mecanismo que `Presupuesto`/`Gasto`: si el medio de pago es de
+        "caja inmediata" y hay una única `CuentaCaja` configurada para ese
+        medio, crea un borrador de `MovimientoCaja` (EGRESO) para revisar y
+        confirmar desde el Panel de caja. No se genera si no hay ninguna
+        cuenta configurada (o hay más de una, ambiguo): en ese caso se carga
+        a mano. Import diferido para evitar un ciclo (`caja` depende de
+        `production`, no al revés). Idempotente: no duplica el borrador
+        automático de una misma herramienta.
+        """
+        if self.medio_pago not in self.CAJA_INMEDIATA_MEDIOS_PAGO:
+            return
+
+        from caja.models import CuentaCaja, MovimientoCaja
+
+        if MovimientoCaja.objects.filter(
+            herramienta=self, origen_automatico=True
+        ).exists():
+            return
+
+        cuentas = CuentaCaja.objects.filter(
+            medio_pago_default=self.medio_pago, is_active=True
+        )
+        if cuentas.count() != 1:
+            return
+
+        from django.utils.translation import gettext
+
+        MovimientoCaja.crear_borrador_automatico(
+            cuenta=cuentas.first(),
+            tipo=MovimientoCaja.Tipo.EGRESO,
+            monto=self.costo_adquisicion,
+            fecha=self.fecha_compra,
+            concepto=gettext("Compra herramienta #%(pk)s — %(nombre)s")
+            % {"pk": self.pk, "nombre": self.nombre},
+            herramienta=self,
+        )
+
+    # ---- Depreciación ----
+
+    @property
+    def meses_transcurridos(self) -> int:
+        """
+        Meses enteros transcurridos desde la compra hasta hoy (o hasta la
+        fecha de baja, si ya se dio de baja). Nunca negativo.
+        """
+        fin = self.fecha_baja or timezone.localdate()
+        if fin < self.fecha_compra:
+            return 0
+        meses = (fin.year - self.fecha_compra.year) * 12 + (
+            fin.month - self.fecha_compra.month
+        )
+        if fin.day < self.fecha_compra.day:
+            meses -= 1
+        return max(meses, 0)
+
+    @property
+    def depreciacion_mensual(self) -> Decimal:
+        """Depreciación lineal mensual: (costo − valor residual) / vida útil."""
+        if not self.se_deprecia or not self.vida_util_meses:
+            return Decimal("0")
+        base = Decimal(self.costo_adquisicion or 0) - Decimal(self.valor_residual or 0)
+        if base <= 0:
+            return Decimal("0")
+        return (base / Decimal(self.vida_util_meses)).quantize(Decimal("0.01"))
+
+    @property
+    def depreciacion_acumulada(self) -> Decimal:
+        """Depreciación mensual × meses transcurridos, topeada al valor depreciable."""
+        if not self.se_deprecia:
+            return Decimal("0")
+        base = Decimal(self.costo_adquisicion or 0) - Decimal(self.valor_residual or 0)
+        if base <= 0:
+            return Decimal("0")
+        acumulada = self.depreciacion_mensual * Decimal(self.meses_transcurridos)
+        return min(acumulada, base).quantize(Decimal("0.01"))
+
+    @property
+    def valor_contable_neto(self) -> Decimal:
+        """Costo de adquisición menos depreciación acumulada."""
+        neto = Decimal(self.costo_adquisicion or 0) - self.depreciacion_acumulada
+        return neto.quantize(Decimal("0.01"))
+
+    @property
+    def esta_totalmente_depreciada(self) -> bool:
+        if not self.se_deprecia or not self.vida_util_meses:
+            return False
+        return self.meses_transcurridos >= self.vida_util_meses
+
+
+class MantenimientoHerramienta(models.Model):
+    """
+    Registro histórico de un mantenimiento/reparación de una Herramienta
+    (inline de solo carga, sin automatismos). No genera movimiento de caja
+    automático: si implicó un pago real, se carga como Gasto aparte.
+    """
+
+    herramienta = models.ForeignKey(
+        Herramienta,
+        verbose_name=_("Herramienta"),
+        on_delete=models.CASCADE,
+        related_name="mantenimientos",
+    )
+    fecha = models.DateField(_("Fecha"), default=timezone.localdate)
+    descripcion = models.CharField(_("Descripción"), max_length=255)
+    costo = models.DecimalField(
+        _("Costo ($)"), max_digits=10, decimal_places=2, default=Decimal("0"), blank=True
+    )
+    proveedor = models.CharField(_("Proveedor / técnico"), max_length=150, blank=True)
+
+    class Meta:
+        verbose_name = _("Mantenimiento")
+        verbose_name_plural = _("Mantenimientos")
+        ordering = ["-fecha"]
+
+    def __str__(self):
+        return f"{self.fecha} — {self.descripcion}"

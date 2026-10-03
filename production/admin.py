@@ -14,7 +14,15 @@ from django.utils.translation import gettext_lazy as _
 
 from config.formatting import format_hours
 
-from .models import HistorialImpresion, Maquina, ProductionJob, Tablero
+from .models import (
+    HerramientaCategoria,
+    Herramienta,
+    HistorialImpresion,
+    MantenimientoHerramienta,
+    Maquina,
+    ProductionJob,
+    Tablero,
+)
 from .scheduler import compute_schedule, material_forecast, persist_schedule
 
 # Los campos de cantidad/precio (DecimalField) aceptan tanto coma como punto
@@ -1152,3 +1160,114 @@ class TableroAdmin(admin.ModelAdmin):
             **(extra_context or {}),
         }
         return TemplateResponse(request, self.change_list_template, context)
+
+
+@admin.register(HerramientaCategoria)
+class HerramientaCategoriaAdmin(admin.ModelAdmin):
+    """
+    Categorías de herramienta/bien de uso (Maquinaria, Herramienta manual,
+    Mobiliario, etc.). Se agregan/editan acá mismo, sin tocar nada de
+    programación. Borrar una categoría que ya tenga Herramientas cargadas
+    está bloqueado para no perder esa clasificación: hay que reasignarlas
+    primero a otra categoría.
+    """
+
+    list_display = ("nombre",)
+    search_fields = ("nombre",)
+
+
+class MantenimientoHerramientaInline(admin.TabularInline):
+    """Historial de mantenimientos/reparaciones de la herramienta."""
+
+    model = MantenimientoHerramienta
+    extra = 0
+    fields = ("fecha", "descripcion", "costo", "proveedor")
+    formfield_overrides = DECIMAL_LOCALIZE
+
+
+@admin.register(Herramienta)
+class HerramientaAdmin(admin.ModelAdmin):
+    """
+    Bienes de uso / herramientas del taller que no son impresoras (ver
+    Máquinas). Página propia "Herramientas", aislada de Métricas/Panel de
+    costos por ahora: la depreciación que se muestra acá es solo
+    informativa, no entra en ningún cálculo de costos de producción.
+    """
+
+    list_display = (
+        "nombre",
+        "categoria",
+        "estado",
+        "fecha_compra",
+        "costo_adquisicion",
+        "se_deprecia",
+        "depreciacion_acumulada_display",
+        "valor_contable_neto_display",
+    )
+    list_filter = ("categoria", "estado", "se_deprecia")
+    search_fields = ("nombre", "numero_serie", "proveedor")
+    inlines = [MantenimientoHerramientaInline]
+    formfield_overrides = DECIMAL_LOCALIZE
+    readonly_fields = (
+        "depreciacion_mensual_display",
+        "depreciacion_acumulada_display",
+        "valor_contable_neto_display",
+        "created_at",
+        "updated_at",
+    )
+    fieldsets = (
+        (
+            _("Identificación"),
+            {"fields": ("nombre", "categoria", "numero_serie", "ubicacion")},
+        ),
+        (
+            _("Adquisición"),
+            {
+                "fields": (
+                    "fecha_compra",
+                    "proveedor",
+                    "costo_adquisicion",
+                    "comprobante",
+                    "medio_pago",
+                    "cuota_actual",
+                    "cuotas_totales",
+                )
+            },
+        ),
+        (
+            _("Depreciación (opcional)"),
+            {
+                "fields": (
+                    "se_deprecia",
+                    "vida_util_meses",
+                    "valor_residual",
+                    "depreciacion_mensual_display",
+                    "depreciacion_acumulada_display",
+                    "valor_contable_neto_display",
+                ),
+                "description": _(
+                    "Activá \"Se deprecia\" solo si este bien tiene valor de "
+                    "reventa y tiene sentido depreciarlo (ej: una "
+                    "termoformadora). Para herramientas sin valor de reventa "
+                    "(ej: un sacabocados), dejalo apagado."
+                ),
+            },
+        ),
+        (
+            _("Baja / venta"),
+            {"fields": ("estado", "fecha_baja", "motivo_baja", "precio_venta")},
+        ),
+        (_("Notas"), {"fields": ("notas", "created_at", "updated_at")}),
+    )
+
+    @admin.display(description=_("Depreciación mensual"))
+    def depreciacion_mensual_display(self, obj):
+        return f"$ {obj.depreciacion_mensual:,.2f}"
+
+    @admin.display(description=_("Depreciación acumulada"))
+    def depreciacion_acumulada_display(self, obj):
+        return f"$ {obj.depreciacion_acumulada:,.2f}"
+
+    @admin.display(description=_("Valor contable neto"))
+    def valor_contable_neto_display(self, obj):
+        return f"$ {obj.valor_contable_neto:,.2f}"

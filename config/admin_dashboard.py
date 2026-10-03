@@ -29,7 +29,11 @@ orden por uno pensado para el flujo real de trabajo:
   "Métricas") pasó a encabezar la sección, seguido de "Movimientos de
   stock" (el historial completo) y recién después lo operativo (Compras,
   Filamentos, Agregados y sus categorías), dejando "Ajustes manuales de
-  stock" al final por ser lo que menos se toca del día a día.
+  stock" al final por ser lo que menos se toca del día a día. Dentro de
+  "Producción", "Herramientas" (bienes de uso que no son impresoras: ej.
+  termoformadora, mobiliario) y su categoría editable quedan al final,
+  debajo de "Máquinas (impresoras)": se tocan poco y no hacen a la
+  actividad principal del negocio.
 - Al final "Configuración" (usuarios, grupos, tokens de API): administración
   del sistema, no del negocio.
 
@@ -75,6 +79,8 @@ _SECTIONS = [
             ("production", "ColaProduccion"),
             ("production", "ProductionJob"),
             ("production", "Maquina"),
+            ("production", "Herramienta"),
+            ("production", "HerramientaCategoria"),
         ],
     ),
     (

@@ -3,6 +3,7 @@ from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
+from django.db.models import ProtectedError
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -10,7 +11,15 @@ from django.utils import timezone
 from budgets.models import Pieza, PiezaFilamentLine, Presupuesto, Producto
 from inventory.models import Filament, StockMovement
 
-from .models import HistorialImpresion, Maquina, ProductionJob, TramoImpresion
+from .models import (
+    Herramienta,
+    HerramientaCategoria,
+    HistorialImpresion,
+    MantenimientoHerramienta,
+    Maquina,
+    ProductionJob,
+    TramoImpresion,
+)
 from .scheduler import next_loadable, rebalance_idle_machines, recommend_machine
 
 
@@ -1002,6 +1011,165 @@ class MachineChangeValidationTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.job.refresh_from_db()
         self.assertEqual(self.job.machine_id, self.a1n2.id)
+
+
+class HerramientaDepreciacionTests(TestCase):
+    """Depreciación lineal opcional por artículo: mensual = (costo - residual)
+    / vida útil, acumulada topeada al valor depreciable, y neto = costo -
+    acumulada. Aislada en su propia sección: no la ejercita ningún test de
+    Métricas/Panel de costos."""
+
+    def setUp(self):
+        self.categoria = HerramientaCategoria.objects.create(nombre="Equipos")
+
+    def make_herramienta(self, **kwargs):
+        defaults = dict(
+            nombre="Termoformadora",
+            categoria=self.categoria,
+            costo_adquisicion=Decimal("120000"),
+            fecha_compra=timezone.localdate(),
+        )
+        defaults.update(kwargs)
+        return Herramienta.objects.create(**defaults)
+
+    def test_se_deprecia_false_da_todo_cero(self):
+        h = self.make_herramienta(se_deprecia=False)
+        self.assertEqual(h.depreciacion_mensual, Decimal("0"))
+        self.assertEqual(h.depreciacion_acumulada, Decimal("0"))
+        self.assertEqual(h.valor_contable_neto, h.costo_adquisicion)
+        self.assertFalse(h.esta_totalmente_depreciada)
+
+    def test_depreciacion_mensual_lineal(self):
+        h = self.make_herramienta(
+            se_deprecia=True, vida_util_meses=12, valor_residual=Decimal("12000")
+        )
+        # (120000 - 12000) / 12 = 9000
+        self.assertEqual(h.depreciacion_mensual, Decimal("9000.00"))
+
+    def test_valor_residual_mayor_o_igual_al_costo_da_cero(self):
+        h = self.make_herramienta(
+            se_deprecia=True, vida_util_meses=12, valor_residual=Decimal("120000")
+        )
+        self.assertEqual(h.depreciacion_mensual, Decimal("0"))
+        self.assertEqual(h.depreciacion_acumulada, Decimal("0"))
+
+    def test_meses_transcurridos_mismo_dia_es_cero(self):
+        h = self.make_herramienta(fecha_compra=timezone.localdate())
+        self.assertEqual(h.meses_transcurridos, 0)
+
+    def test_meses_transcurridos_fecha_futura_nunca_negativo(self):
+        import datetime
+
+        h = self.make_herramienta(
+            fecha_compra=timezone.localdate() + datetime.timedelta(days=30)
+        )
+        self.assertEqual(h.meses_transcurridos, 0)
+
+    def test_meses_transcurridos_usa_fecha_baja_si_hay(self):
+        compra = timezone.localdate().replace(day=1)
+        h = self.make_herramienta(
+            fecha_compra=compra.replace(year=compra.year - 1),
+            fecha_baja=compra,
+            estado=Herramienta.Estado.BAJA,
+        )
+        self.assertEqual(h.meses_transcurridos, 12)
+
+    def test_depreciacion_acumulada_topeada_al_valor_depreciable(self):
+        compra = timezone.localdate().replace(day=1)
+        h = self.make_herramienta(
+            fecha_compra=compra.replace(year=compra.year - 5),
+            se_deprecia=True,
+            vida_util_meses=12,
+            valor_residual=Decimal("12000"),
+        )
+        # Pasaron muchos más meses que la vida útil: la acumulada no puede
+        # superar la base depreciable (120000 - 12000 = 108000).
+        self.assertTrue(h.esta_totalmente_depreciada)
+        self.assertEqual(h.depreciacion_acumulada, Decimal("108000.00"))
+        self.assertEqual(h.valor_contable_neto, Decimal("12000.00"))
+
+    def test_valor_contable_neto_sin_depreciar_es_el_costo_completo(self):
+        h = self.make_herramienta(se_deprecia=True, vida_util_meses=12)
+        self.assertEqual(h.valor_contable_neto, h.costo_adquisicion)
+
+
+class HerramientaCleanValidationTests(TestCase):
+    def setUp(self):
+        self.categoria = HerramientaCategoria.objects.create(nombre="Equipos")
+
+    def make_herramienta(self, **kwargs):
+        defaults = dict(
+            nombre="Termoformadora",
+            categoria=self.categoria,
+            costo_adquisicion=Decimal("1000"),
+        )
+        defaults.update(kwargs)
+        return Herramienta(**defaults)
+
+    def test_se_deprecia_sin_vida_util_falla(self):
+        h = self.make_herramienta(se_deprecia=True, vida_util_meses=None)
+        with self.assertRaises(ValidationError):
+            h.clean()
+
+    def test_se_deprecia_con_vida_util_pasa(self):
+        h = self.make_herramienta(se_deprecia=True, vida_util_meses=24)
+        h.clean()  # no lanza
+
+    def test_cuota_actual_sin_cuotas_totales_falla(self):
+        h = self.make_herramienta(cuota_actual=1, cuotas_totales=None)
+        with self.assertRaises(ValidationError):
+            h.clean()
+
+    def test_cuotas_totales_sin_cuota_actual_falla(self):
+        h = self.make_herramienta(cuota_actual=None, cuotas_totales=6)
+        with self.assertRaises(ValidationError):
+            h.clean()
+
+    def test_cuota_actual_mayor_que_cuotas_totales_falla(self):
+        h = self.make_herramienta(cuota_actual=7, cuotas_totales=6)
+        with self.assertRaises(ValidationError):
+            h.clean()
+
+    def test_cuotas_consistentes_pasa(self):
+        h = self.make_herramienta(cuota_actual=2, cuotas_totales=6)
+        h.clean()  # no lanza
+
+
+class HerramientaCategoriaTests(TestCase):
+    """Categoría editable igual que `AggregateCategory`/`CategoriaGasto`:
+    borrar una en uso está bloqueado para no perder la clasificación de lo
+    ya cargado con ella."""
+
+    def test_no_se_puede_borrar_una_categoria_en_uso(self):
+        categoria = HerramientaCategoria.objects.create(nombre="Equipos")
+        Herramienta.objects.create(
+            nombre="Termoformadora",
+            categoria=categoria,
+            costo_adquisicion=Decimal("1000"),
+        )
+        with self.assertRaises(ProtectedError):
+            categoria.delete()
+
+    def test_se_puede_borrar_una_categoria_sin_uso(self):
+        categoria = HerramientaCategoria.objects.create(nombre="Sin uso")
+        categoria.delete()
+        self.assertFalse(HerramientaCategoria.objects.filter(nombre="Sin uso").exists())
+
+
+class MantenimientoHerramientaTests(TestCase):
+    def test_se_puede_cargar_un_mantenimiento(self):
+        categoria = HerramientaCategoria.objects.create(nombre="Equipos")
+        herramienta = Herramienta.objects.create(
+            nombre="Termoformadora",
+            categoria=categoria,
+            costo_adquisicion=Decimal("1000"),
+        )
+        MantenimientoHerramienta.objects.create(
+            herramienta=herramienta,
+            descripcion="Cambio de resistencia",
+            costo=Decimal("5000"),
+        )
+        self.assertEqual(herramienta.mantenimientos.count(), 1)
 
 
 class TableroProduccionKpisTests(TestCase):

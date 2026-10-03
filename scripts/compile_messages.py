@@ -1121,6 +1121,84 @@ PRODUCTION = {
         'This job is Printing. Are you sure you want to change its '
         'machine? The runs already done will stay credited to the '
         'previous machine.',
+    # production/models.py — HerramientaCategoria / Herramienta / MantenimientoHerramienta
+    'Categoría de herramienta': 'Tool category',
+    'Categorías de herramienta': 'Tool categories',
+    'Ej: Termoformadora de mesa, Sacabocados manual.':
+        'E.g.: Tabletop thermoformer, Manual hole punch.',
+    'Categoría': 'Category',
+    'Número de serie': 'Serial number',
+    'Ubicación': 'Location',
+    'Fecha de compra': 'Purchase date',
+    'Costo de adquisición ($)': 'Acquisition cost ($)',
+    'Comprobante / factura': 'Receipt / invoice',
+    'Referencia del comprobante (ej: "Factura A 0001-00001234"). No '
+    'se adjunta archivo: lo subido a /media no persiste en producción '
+    '(Vercel es serverless).':
+        'Reference for the receipt (e.g.: "Invoice A 0001-00001234"). No '
+        'file is attached: anything uploaded to /media does not persist '
+        'in production (Vercel is serverless).',
+    'Medio de pago': 'Payment method',
+    'Cómo se pagó. Efectivo/Transferencia/Mercado Pago/Ualá generan '
+    'un borrador en el Panel de caja para revisar y confirmar; '
+    'Tarjeta y cuotas se cargan a mano.':
+        'How it was paid. Cash/Bank transfer/Mercado Pago/Ualá generate '
+        'a draft in the Cash panel to review and confirm; Card and '
+        'installments are always entered by hand.',
+    'Mercado Pago': 'Mercado Pago',
+    'Ualá': 'Ualá',
+    'Cuota actual': 'Current installment',
+    'Si se compró en cuotas, qué número de cuota es este pago puntual '
+    '(se carga igual que un Gasto: una cuota por pago real).':
+        'If it was bought in installments, which installment number this '
+        'particular payment is (entered the same way as an Expense: one '
+        'installment per real payment).',
+    'Cuotas totales': 'Total installments',
+    'Se deprecia': 'Depreciates',
+    'Activalo solo si este bien tiene valor de reventa y tiene sentido '
+    'depreciarlo (ej: una termoformadora). Dejalo apagado para '
+    'herramientas sin valor de reventa (ej: un sacabocados).':
+        'Turn it on only if this asset has resale value and it makes '
+        'sense to depreciate it (e.g. a thermoformer). Leave it off for '
+        'tools with no resale value (e.g. a hole punch).',
+    'Vida útil (meses)': 'Useful life (months)',
+    'Requerido si "Se deprecia" está activo.':
+        'Required if "Depreciates" is on.',
+    'Valor residual ($)': 'Residual value ($)',
+    'Valor estimado al final de la vida útil (puede ser 0).':
+        'Estimated value at the end of its useful life (can be 0).',
+    'Fecha de baja': 'Retirement date',
+    'Motivo de baja': 'Retirement reason',
+    'Precio de venta ($)': 'Sale price ($)',
+    'Si se vendió, cuánto se cobró por ella.':
+        'If sold, how much it was sold for.',
+    'En reparación': 'Under repair',
+    'De baja': 'Retired',
+    'Vendida': 'Sold',
+    'Herramienta / bien de uso': 'Tool / fixed asset',
+    'Herramientas': 'Tools',
+    'Completá la vida útil (en meses) para depreciar este bien.':
+        'Fill in the useful life (in months) to depreciate this asset.',
+    'Compra herramienta #%(pk)s — %(nombre)s':
+        'Tool purchase #%(pk)s — %(nombre)s',
+    'Costo ($)': 'Cost ($)',
+    'Proveedor / técnico': 'Supplier / technician',
+    'Mantenimiento': 'Maintenance',
+    'Mantenimientos': 'Maintenance records',
+    # production/admin.py — HerramientaAdmin
+    'Depreciación mensual': 'Monthly depreciation',
+    'Valor contable neto': 'Net book value',
+    'Identificación': 'Identification',
+    'Adquisición': 'Acquisition',
+    'Depreciación (opcional)': 'Depreciation (optional)',
+    'Activá "Se deprecia" solo si este bien tiene valor de reventa y '
+    'tiene sentido depreciarlo (ej: una termoformadora). Para '
+    'herramientas sin valor de reventa (ej: un sacabocados), dejalo '
+    'apagado.':
+        'Turn on "Depreciates" only if this asset has resale value and '
+        'it makes sense to depreciate it (e.g. a thermoformer). For '
+        'tools with no resale value (e.g. a hole punch), leave it off.',
+    'Baja / venta': 'Retirement / sale',
 }
 
 CAJA = {
@@ -1165,9 +1243,10 @@ CAJA = {
     'Presupuesto': 'Budget',
     'Compra': 'Purchase',
     'Gasto': 'Expense',
+    'Herramienta': 'Tool',
     'El monto tiene que ser mayor a cero.': 'The amount must be greater than zero.',
-    'Un movimiento de caja puede estar vinculado a lo sumo a un solo documento de origen (Presupuesto, Compra o Gasto).':
-        'A cash movement can be linked to at most one source document (Budget, Purchase or Expense).',
+    'Un movimiento de caja puede estar vinculado a lo sumo a un solo documento de origen (Presupuesto, Compra, Gasto o Herramienta).':
+        'A cash movement can be linked to at most one source document (Budget, Purchase, Expense or Tool).',
     # caja/models.py — PanelCaja
     'Caja': 'Cash',
     'Panel de caja': 'Cash panel',
