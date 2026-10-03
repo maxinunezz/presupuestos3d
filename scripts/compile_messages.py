@@ -835,6 +835,11 @@ BUDGETS = {
     'Total': 'Total',
     'DISTRIBUCIÓN DE INGRESOS (reparto del beneficio neto del período)':
         'INCOME DISTRIBUTION (split of the period\'s net profit)',
+    # Fecha de cobro (Presupuesto) — dispara la autogeneración de un
+    # MovimientoCaja borrador (ver app `caja`).
+    'Fecha de cobro': 'Payment date',
+    'Cuándo entró realmente la plata (puede ser bien distinta de la fecha de aprobación). Se completa sola al marcar "Pagado" si está vacía, pero se puede ajustar a mano. La usa el Panel de caja para medir cobros reales por fecha, no por aprobación.':
+        'When the money actually came in (can be quite different from the approval date). It is filled in automatically when marked as "Paid" if it is empty, but it can be adjusted by hand. The Cash flow panel uses it to measure real payments by date, not by approval.',
 }
 
 PRODUCTION = {
@@ -1118,6 +1123,86 @@ PRODUCTION = {
         'previous machine.',
 }
 
+CAJA = {
+    # caja/models.py — CuentaCaja
+    'Nombre': 'Name',
+    'Cuenta de caja': 'Cash account',
+    'Cuentas de caja': 'Cash accounts',
+    'Saldo inicial': 'Starting balance',
+    'Monto real que esta cuenta tenía al momento de arrancar a usarla en el sistema, para no empezar en $0 artificial.':
+        'The real amount this account had when it started being used in the system, so it does not start at an artificial $0.',
+    'Fecha del saldo inicial': 'Starting balance date',
+    'Desde cuándo vale el saldo inicial. Los movimientos confirmados se suman desde esta fecha en adelante.':
+        'Since when the starting balance is valid. Confirmed movements are added from this date onward.',
+    'Medio de pago que recibe': 'Payment method it receives',
+    'Si esta cuenta recibe los cobros/pagos de un medio de pago puntual (ej: Efectivo, Mercado Pago), configuralo acá para que el sistema arme solo el borrador de caja al marcar un presupuesto como Pagado con ese medio. Dejalo vacío si esta cuenta no recibe autogeneración.':
+        'If this account receives payments made with a specific payment method (e.g. Cash, Mercado Pago), configure it here so the system builds the cash draft automatically when a budget is marked as Paid with that method. Leave it empty if this account does not get autogeneration.',
+    'Activa': 'Active',
+    'Orden': 'Order',
+    # caja/models.py — MovimientoCaja
+    'Movimiento de caja': 'Cash movement',
+    'Movimientos de caja': 'Cash movements',
+    'Cuenta': 'Account',
+    'Fecha': 'Date',
+    'Fecha real del movimiento de plata (no la fecha del documento de origen, si tiene uno).':
+        'The real date the money moved (not the date of the source document, if it has one).',
+    'Tipo': 'Type',
+    'Ingreso': 'Income',
+    'Egreso': 'Expense',
+    'Monto': 'Amount',
+    'Siempre positivo; el signo lo da el tipo (Ingreso/Egreso).':
+        'Always positive; the sign is given by the type (Income/Expense).',
+    'Concepto': 'Concept',
+    'Estado': 'Status',
+    'Borrador': 'Draft',
+    'Confirmado': 'Confirmed',
+    'Descartado': 'Discarded',
+    'Los movimientos cargados a mano nacen Confirmados. Los que genera el sistema automáticamente nacen en Borrador, para revisarlos y confirmarlos antes de que afecten el saldo real.':
+        'Movements entered by hand start out Confirmed. Those generated automatically by the system start as Draft, so they can be reviewed and confirmed before affecting the real balance.',
+    'Generado automáticamente': 'Automatically generated',
+    'Si lo generó el sistema (a diferencia de cargado a mano).':
+        'Whether the system generated it (as opposed to entered by hand).',
+    'Presupuesto': 'Budget',
+    'Compra': 'Purchase',
+    'Gasto': 'Expense',
+    'El monto tiene que ser mayor a cero.': 'The amount must be greater than zero.',
+    'Un movimiento de caja puede estar vinculado a lo sumo a un solo documento de origen (Presupuesto, Compra o Gasto).':
+        'A cash movement can be linked to at most one source document (Budget, Purchase or Expense).',
+    # caja/models.py — PanelCaja
+    'Caja': 'Cash',
+    'Panel de caja': 'Cash panel',
+    # caja/admin.py
+    'Saldo actual': 'Current balance',
+    'Confirmar seleccionados': 'Confirm selected',
+    'Movimiento #%(pk)s: %(error)s': 'Movement #%(pk)s: %(error)s',
+    '%(n)s movimiento(s) confirmado(s).': '%(n)s movement(s) confirmed.',
+    'Descartar seleccionados': 'Discard selected',
+    '%(n)s movimiento(s) descartado(s).': '%(n)s movement(s) discarded.',
+    # caja/templates/admin/caja/panel_caja.html
+    'Este es el libro diario de caja <b>real</b>: cuándo entra y sale la plata de verdad, movimiento a movimiento, por cuenta. Es distinto del devengado que mide el':
+        'This is the <b>real</b> cash daybook: when money actually comes in and out, movement by movement, by account. It is different from the accrual basis measured by the',
+    '(costo de lo consumido, facturación por fecha de aprobación).':
+        '(cost of what was consumed, billing by approval date).',
+    'Descargar Excel': 'Download Excel',
+    'Ingresos reales del período': 'Actual income for the period',
+    'Egresos reales del período': 'Actual expenses for the period',
+    'Saldo del período': 'Period balance',
+    'Ingresos − Egresos': 'Income − Expenses',
+    'Pendientes de confirmar': 'Pending confirmation',
+    'Ver bandeja de revisión': 'See review inbox',
+    '%(n_ingresos)s movimientos confirmados': '%(n_ingresos)s confirmed movements',
+    '%(n_egresos)s movimientos confirmados': '%(n_egresos)s confirmed movements',
+    'Saldo por cuenta (hoy)': 'Balance by account (today)',
+    'No hay cuentas de caja activas cargadas.': 'No active cash accounts loaded.',
+    'Total': 'Total',
+    'Movimientos del período': 'Movements for the period',
+    'No hay movimientos confirmados en este período.': 'No confirmed movements in this period.',
+    # caja/metrics.py — export a Excel
+    'Panel de caja 3darg — %(period)s (%(range)s)': 'Cash panel 3darg — %(period)s (%(range)s)',
+    # gastos/models.py — autogeneración de MovimientoCaja al pagar un Gasto
+    'Gasto #%(pk)s — %(concepto)s': 'Expense #%(pk)s — %(concepto)s',
+}
+
 # Cadenas de {% blocktranslate %}: el msgid real que arma Django usa
 # %(var)s para las variables y DUPLICA el % literal (%%). Estas claves se
 # verificaron extrayendo el msgid exacto con django ...template.templatize.
@@ -1267,7 +1352,7 @@ OVERRIDES = {
 }
 
 _EN = {}
-for _d in (COMMON, INVENTORY, GASTOS, BUDGETS, PRODUCTION, BLOCKTRANS, OVERRIDES):
+for _d in (COMMON, INVENTORY, GASTOS, BUDGETS, PRODUCTION, CAJA, BLOCKTRANS, OVERRIDES):
     _EN.update(_d)
 
 TRANSLATIONS = {'en': _EN}

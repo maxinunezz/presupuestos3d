@@ -1,9 +1,31 @@
+import unicodedata
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
-from django.utils.translation import gettext_lazy as _
+from django.utils.translation import gettext, gettext_lazy as _
+
+# Autogeneración de MovimientoCaja (app `caja`) al guardar un Gasto pagado
+# con un medio de "caja inmediata". `Gasto.medio_pago` es un FK a
+# `MedioPagoGasto` (nombre libre, lo da de alta el usuario), no el mismo
+# TextChoices fijo que usa `Presupuesto.MedioPago` — así que mapeamos por
+# nombre normalizado (sin acentos, minúsculas) al código de
+# `Presupuesto.MedioPago` que usa `CuentaCaja.medio_pago_default`. Nombres
+# que no figuren acá (Tarjeta, cuotas, Otro...) nunca autogeneran nada.
+_NOMBRE_A_CODIGO_MEDIO_PAGO = {
+    "efectivo": "EFECTIVO",
+    "transferencia": "TRANSFERENCIA",
+    "mercado pago": "MERCADOPAGO",
+    "mercadopago": "MERCADOPAGO",
+    "uala": "UALA",
+}
+
+
+def _normalizar(texto: str) -> str:
+    texto = unicodedata.normalize("NFKD", texto or "")
+    texto = texto.encode("ascii", "ignore").decode("ascii")
+    return texto.strip().lower()
 
 
 class CategoriaGasto(models.Model):
@@ -209,6 +231,45 @@ class Gasto(models.Model):
 
     def __str__(self):
         return f"{self.categoria} · {self.concepto} (${self.monto})"
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        self._autogenerar_movimiento_caja()
+
+    def _autogenerar_movimiento_caja(self):
+        """
+        Si el medio de pago de este gasto es de "caja inmediata" (Efectivo,
+        Transferencia, Mercado Pago o Ualá — tarjeta y cuotas SIEMPRE se
+        cargan a mano) y hay una única `CuentaCaja` configurada para ese
+        medio, crea un borrador de `MovimientoCaja` (EGRESO) para que el
+        dueño lo revise y confirme desde el Panel de caja. Import diferido
+        para evitar un ciclo (`caja` depende de `gastos`, no al revés).
+        Idempotente: no duplica el borrador automático de un mismo gasto.
+        """
+        if not self.medio_pago_id:
+            return
+        codigo = _NOMBRE_A_CODIGO_MEDIO_PAGO.get(_normalizar(self.medio_pago.nombre))
+        if not codigo:
+            return
+
+        from caja.models import CuentaCaja, MovimientoCaja
+
+        if MovimientoCaja.objects.filter(gasto=self, origen_automatico=True).exists():
+            return
+
+        cuentas = CuentaCaja.objects.filter(medio_pago_default=codigo, is_active=True)
+        if cuentas.count() != 1:
+            return
+
+        MovimientoCaja.crear_borrador_automatico(
+            cuenta=cuentas.first(),
+            tipo=MovimientoCaja.Tipo.EGRESO,
+            monto=self.monto,
+            fecha=self.fecha,
+            concepto=gettext("Gasto #%(pk)s — %(concepto)s")
+            % {"pk": self.pk, "concepto": self.concepto},
+            gasto=self,
+        )
 
     def clean(self):
         super().clean()

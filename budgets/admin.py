@@ -342,6 +342,7 @@ class PanelVentasAdmin(admin.ModelAdmin):
         "status",
         "estado_venta",
         "medio_pago",
+        "fecha_cobro",
         "beneficio_display",
         "material_display",
         "labor_display",
@@ -350,7 +351,7 @@ class PanelVentasAdmin(admin.ModelAdmin):
     )
     list_filter = ("estado_venta", "medio_pago", "status")
     search_fields = ("client_name", "description", "items__producto__name")
-    list_editable = ("estado_venta", "medio_pago")
+    list_editable = ("estado_venta", "medio_pago", "fecha_cobro")
     ordering = ("-approved_at",)
     change_list_template = "admin/budgets/panel_ventas_change_list.html"
 
@@ -1465,3 +1466,5 @@ class PanelCostosAdmin(_MetricsDashboardAdmin):
     dashboard_title = _("Panel de costos")
     pdf_template = "budgets/panel_costos_pdf.html"
     pdf_slug = "panel_de_costos"
+
+

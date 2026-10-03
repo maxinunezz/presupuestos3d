@@ -63,6 +63,7 @@ INSTALLED_APPS = [
     'budgets',
     'production',
     'gastos',
+    'caja',
 ]
 
 MIDDLEWARE = [

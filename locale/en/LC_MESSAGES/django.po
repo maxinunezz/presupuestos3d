@@ -1874,6 +1874,12 @@ msgstr "Raw material (filaments and add-ons)"
 msgid "DISTRIBUCIÓN DE INGRESOS (reparto del beneficio neto del período)"
 msgstr "INCOME DISTRIBUTION (split of the period's net profit)"
 
+msgid "Fecha de cobro"
+msgstr "Payment date"
+
+msgid "Cuándo entró realmente la plata (puede ser bien distinta de la fecha de aprobación). Se completa sola al marcar \"Pagado\" si está vacía, pero se puede ajustar a mano. La usa el Panel de caja para medir cobros reales por fecha, no por aprobación."
+msgstr "When the money actually came in (can be quite different from the approval date). It is filled in automatically when marked as \"Paid\" if it is empty, but it can be adjusted by hand. The Cash flow panel uses it to measure real payments by date, not by approval."
+
 msgid "de"
 msgstr "from"
 
@@ -2338,6 +2344,147 @@ msgstr "Mark this order as printed?"
 msgid "Este trabajo está Imprimiendo. ¿Confirmás cambiarlo de máquina? Las corridas que ya se hicieron van a quedar a nombre de la máquina anterior."
 msgstr "This job is Printing. Are you sure you want to change its machine? The runs already done will stay credited to the previous machine."
 
+msgid "Cuenta de caja"
+msgstr "Cash account"
+
+msgid "Cuentas de caja"
+msgstr "Cash accounts"
+
+msgid "Saldo inicial"
+msgstr "Starting balance"
+
+msgid "Monto real que esta cuenta tenía al momento de arrancar a usarla en el sistema, para no empezar en $0 artificial."
+msgstr "The real amount this account had when it started being used in the system, so it does not start at an artificial $0."
+
+msgid "Fecha del saldo inicial"
+msgstr "Starting balance date"
+
+msgid "Desde cuándo vale el saldo inicial. Los movimientos confirmados se suman desde esta fecha en adelante."
+msgstr "Since when the starting balance is valid. Confirmed movements are added from this date onward."
+
+msgid "Medio de pago que recibe"
+msgstr "Payment method it receives"
+
+msgid "Si esta cuenta recibe los cobros/pagos de un medio de pago puntual (ej: Efectivo, Mercado Pago), configuralo acá para que el sistema arme solo el borrador de caja al marcar un presupuesto como Pagado con ese medio. Dejalo vacío si esta cuenta no recibe autogeneración."
+msgstr "If this account receives payments made with a specific payment method (e.g. Cash, Mercado Pago), configure it here so the system builds the cash draft automatically when a budget is marked as Paid with that method. Leave it empty if this account does not get autogeneration."
+
+msgid "Movimiento de caja"
+msgstr "Cash movement"
+
+msgid "Movimientos de caja"
+msgstr "Cash movements"
+
+msgid "Cuenta"
+msgstr "Account"
+
+msgid "Fecha real del movimiento de plata (no la fecha del documento de origen, si tiene uno)."
+msgstr "The real date the money moved (not the date of the source document, if it has one)."
+
+msgid "Ingreso"
+msgstr "Income"
+
+msgid "Egreso"
+msgstr "Expense"
+
+msgid "Siempre positivo; el signo lo da el tipo (Ingreso/Egreso)."
+msgstr "Always positive; the sign is given by the type (Income/Expense)."
+
+msgid "Confirmado"
+msgstr "Confirmed"
+
+msgid "Descartado"
+msgstr "Discarded"
+
+msgid "Los movimientos cargados a mano nacen Confirmados. Los que genera el sistema automáticamente nacen en Borrador, para revisarlos y confirmarlos antes de que afecten el saldo real."
+msgstr "Movements entered by hand start out Confirmed. Those generated automatically by the system start as Draft, so they can be reviewed and confirmed before affecting the real balance."
+
+msgid "Generado automáticamente"
+msgstr "Automatically generated"
+
+msgid "Si lo generó el sistema (a diferencia de cargado a mano)."
+msgstr "Whether the system generated it (as opposed to entered by hand)."
+
+msgid "Presupuesto"
+msgstr "Budget"
+
+msgid "El monto tiene que ser mayor a cero."
+msgstr "The amount must be greater than zero."
+
+msgid "Un movimiento de caja puede estar vinculado a lo sumo a un solo documento de origen (Presupuesto, Compra o Gasto)."
+msgstr "A cash movement can be linked to at most one source document (Budget, Purchase or Expense)."
+
+msgid "Caja"
+msgstr "Cash"
+
+msgid "Panel de caja"
+msgstr "Cash panel"
+
+msgid "Saldo actual"
+msgstr "Current balance"
+
+msgid "Confirmar seleccionados"
+msgstr "Confirm selected"
+
+msgid "Movimiento #%(pk)s: %(error)s"
+msgstr "Movement #%(pk)s: %(error)s"
+
+msgid "%(n)s movimiento(s) confirmado(s)."
+msgstr "%(n)s movement(s) confirmed."
+
+msgid "Descartar seleccionados"
+msgstr "Discard selected"
+
+msgid "%(n)s movimiento(s) descartado(s)."
+msgstr "%(n)s movement(s) discarded."
+
+msgid "Este es el libro diario de caja <b>real</b>: cuándo entra y sale la plata de verdad, movimiento a movimiento, por cuenta. Es distinto del devengado que mide el"
+msgstr "This is the <b>real</b> cash daybook: when money actually comes in and out, movement by movement, by account. It is different from the accrual basis measured by the"
+
+msgid "(costo de lo consumido, facturación por fecha de aprobación)."
+msgstr "(cost of what was consumed, billing by approval date)."
+
+msgid "Ingresos reales del período"
+msgstr "Actual income for the period"
+
+msgid "Egresos reales del período"
+msgstr "Actual expenses for the period"
+
+msgid "Saldo del período"
+msgstr "Period balance"
+
+msgid "Ingresos − Egresos"
+msgstr "Income − Expenses"
+
+msgid "Pendientes de confirmar"
+msgstr "Pending confirmation"
+
+msgid "Ver bandeja de revisión"
+msgstr "See review inbox"
+
+msgid "%(n_ingresos)s movimientos confirmados"
+msgstr "%(n_ingresos)s confirmed movements"
+
+msgid "%(n_egresos)s movimientos confirmados"
+msgstr "%(n_egresos)s confirmed movements"
+
+msgid "Saldo por cuenta (hoy)"
+msgstr "Balance by account (today)"
+
+msgid "No hay cuentas de caja activas cargadas."
+msgstr "No active cash accounts loaded."
+
+msgid "Movimientos del período"
+msgstr "Movements for the period"
+
+msgid "No hay movimientos confirmados en este período."
+msgstr "No confirmed movements in this period."
+
+msgid "Panel de caja 3darg — %(period)s (%(range)s)"
+msgstr "Cash panel 3darg — %(period)s (%(range)s)"
+
+msgid "Gasto #%(pk)s — %(concepto)s"
+msgstr "Expense #%(pk)s — %(concepto)s"
+
 msgid "%(n_gastos)s gasto(s)"
 msgstr "%(n_gastos)s expense(s)"
 
@@ -2477,6 +2624,3 @@ msgstr "Snapshot of inventory as of TODAY, not the period."
 
 msgid "No hay socios activos cargados."
 msgstr "No active partners loaded."
-
-msgid "Presupuesto"
-msgstr "Budget"

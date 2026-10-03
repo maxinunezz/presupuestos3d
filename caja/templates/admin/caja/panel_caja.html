@@ -1,0 +1,169 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+<style>
+    .cj-intro { color: #555; font-size: 13px; margin: 6px 0 18px; }
+    html[data-theme="dark"] .cj-intro { color: #bbb; }
+    .cj-intro a { font-weight: 600; }
+
+    .cj-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 22px; }
+    .cj-tabs { display: flex; gap: 6px; }
+    a.cj-tab {
+        padding: 7px 16px; border: 1px solid #111; border-radius: 6px; text-decoration: none;
+        color: #111; font-size: 13px; font-weight: 600; background: #fff;
+    }
+    a.cj-tab.active { background: #111; color: #fff; }
+    .cj-range { color: var(--body-quiet-color, #555); font-size: 13px; font-weight: 600; }
+
+    .cj-excel {
+        display: flex; align-items: center; justify-content: center;
+        width: 38px; height: 38px; border-radius: 6px; color: #fff; flex: none;
+        margin-left: auto; background: #16a34a;
+    }
+    .cj-excel:hover { background: #128a3e; }
+    .cj-excel svg { width: 19px; height: 19px; }
+
+    .cj-kpis { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 24px; }
+    .kpi { background: #111; color: #fff; border-radius: 8px; padding: 14px 18px; min-width: 150px; flex: 1 1 160px; }
+    .kpi .n { font-size: 24px; font-weight: bold; display: block; }
+    .kpi .l { font-size: 12px; color: rgba(255, 255, 255, 0.82); }
+    .kpi .s { font-size: 11px; color: rgba(255, 255, 255, 0.6); display: block; margin-top: 2px; }
+    .kpi .s a { color: rgba(255, 255, 255, 0.85); }
+    .kpi.cj-ingresos { background: #1d4ed8; }
+    .kpi.cj-egresos { background: #b45309; }
+    .kpi.cj-saldo-pos { background: #15803d; }
+    .kpi.cj-saldo-neg { background: #b91c1c; }
+    .kpi.cj-pendientes { background: #7c3aed; }
+
+    table.cj-cuentas { width: 100%; border-collapse: collapse; margin-top: 6px; }
+    table.cj-cuentas th, table.cj-cuentas td {
+        padding: 8px 12px; border-bottom: 1px solid #333; text-align: left; font-size: 13px;
+    }
+    table.cj-cuentas th { font-weight: 600; }
+    table.cj-cuentas td.cj-monto { text-align: right; font-weight: 600; }
+    table.cj-cuentas tr.cj-total td { font-weight: bold; border-top: 2px solid #666; border-bottom: none; }
+
+    .cj-tablas { display: flex; gap: 32px; flex-wrap: wrap; align-items: flex-start; margin-top: 6px; width: 100%; }
+    .cj-tablas > div { min-width: 320px; }
+    .cj-tablas > div.cj-col-saldos { flex: 1 1 0; }
+    .cj-tablas > div.cj-col-movs { flex: 2 1 0; }
+    @media (max-width: 900px) {
+        .cj-tablas > div.cj-col-saldos, .cj-tablas > div.cj-col-movs { flex: 1 1 100%; }
+    }
+
+    table.cj-movs { width: 100%; border-collapse: collapse; }
+    table.cj-movs th, table.cj-movs td {
+        padding: 8px 12px; border-bottom: 1px solid #333; text-align: left; font-size: 13px;
+    }
+    table.cj-movs th { font-weight: 600; }
+    table.cj-movs td.cj-monto { text-align: right; font-weight: 600; white-space: nowrap; }
+    table.cj-movs td.cj-ingreso { color: #22c55e; }
+    table.cj-movs td.cj-egreso { color: #f87171; }
+    table.cj-movs-wrap { max-height: 420px; overflow-y: auto; }
+</style>
+
+<p class="cj-intro">
+    {% blocktranslate %}Este es el libro diario de caja <b>real</b>: cuándo entra y sale la plata de verdad, movimiento a movimiento, por cuenta. Es distinto del devengado que mide el{% endblocktranslate %}
+    <a href="{% url 'admin:budgets_metricas_changelist' %}">{% translate "Panel de métricas" %}</a>
+    {% translate "(costo de lo consumido, facturación por fecha de aprobación)." %}
+</p>
+
+<div class="cj-bar">
+    <div class="cj-tabs">
+        {% for p in periods %}
+        <a class="cj-tab {% if p.active %}active{% endif %}" href="?period={{ p.key }}">{{ p.label }}</a>
+        {% endfor %}
+    </div>
+    <span class="cj-range">{{ range_str }}</span>
+    <a class="cj-excel" title="{% translate 'Descargar Excel' %}" aria-label="{% translate 'Descargar Excel' %}"
+       href="?period={{ period }}&export=xlsx">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="M8 13h2"/><path d="M14 13h2"/><path d="M8 17h2"/><path d="M14 17h2"/></svg>
+    </a>
+</div>
+
+<div class="cj-kpis">
+    <div class="kpi cj-ingresos">
+        <span class="n">{{ ingresos_reales }}</span>
+        <span class="l">{% translate "Ingresos reales del período" %}</span>
+        <span class="s">{% blocktranslate %}{{ n_ingresos }} movimientos confirmados{% endblocktranslate %}</span>
+    </div>
+    <div class="kpi cj-egresos">
+        <span class="n">{{ egresos_reales }}</span>
+        <span class="l">{% translate "Egresos reales del período" %}</span>
+        <span class="s">{% blocktranslate %}{{ n_egresos }} movimientos confirmados{% endblocktranslate %}</span>
+    </div>
+    <div class="kpi {% if saldo_positivo %}cj-saldo-pos{% else %}cj-saldo-neg{% endif %}">
+        <span class="n">{{ saldo_periodo }}</span>
+        <span class="l">{% translate "Saldo del período" %}</span>
+        <span class="s">{% translate "Ingresos − Egresos" %}</span>
+    </div>
+    <div class="kpi cj-pendientes">
+        <span class="n">{{ n_pendientes }}</span>
+        <span class="l">{% translate "Pendientes de confirmar" %}</span>
+        <span class="s"><a href="{{ pendientes_url }}">{% translate "Ver bandeja de revisión" %}</a></span>
+    </div>
+</div>
+
+<div class="cj-tablas">
+    <div class="cj-col-saldos">
+        <h2>{% translate "Saldo por cuenta (hoy)" %}</h2>
+        <table class="cj-cuentas">
+            <thead>
+                <tr>
+                    <th>{% translate "Cuenta" %}</th>
+                    <th>{% translate "Saldo actual" %}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for cuenta in saldos_por_cuenta %}
+                <tr>
+                    <td>{{ cuenta.nombre }}</td>
+                    <td class="cj-monto">{{ cuenta.saldo }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="2">{% translate "No hay cuentas de caja activas cargadas." %}</td>
+                </tr>
+                {% endfor %}
+                <tr class="cj-total">
+                    <td>{% translate "Total" %}</td>
+                    <td class="cj-monto">{{ saldo_total }}</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="cj-col-movs">
+        <h2>{% translate "Movimientos del período" %}</h2>
+        <div class="cj-movs-wrap">
+            <table class="cj-movs">
+                <thead>
+                    <tr>
+                        <th>{% translate "Fecha" %}</th>
+                        <th>{% translate "Cuenta" %}</th>
+                        <th>{% translate "Concepto" %}</th>
+                        <th>{% translate "Monto" %}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for mov in movimientos %}
+                    <tr>
+                        <td>{{ mov.fecha }}</td>
+                        <td>{{ mov.cuenta }}</td>
+                        <td>{{ mov.concepto }}</td>
+                        <td class="cj-monto {% if mov.es_ingreso %}cj-ingreso{% else %}cj-egreso{% endif %}">
+                            {% if mov.es_ingreso %}+{% else %}−{% endif %}{{ mov.monto }}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4">{% translate "No hay movimientos confirmados en este período." %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

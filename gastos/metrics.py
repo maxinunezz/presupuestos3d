@@ -89,6 +89,15 @@ def gastos_extraordinarios_total(start: date, end: date) -> Decimal:
     return _gastos_total(start, end, tipo=Gasto.Tipo.EXTRAORDINARIO)
 
 
+def gastos_total(start: date, end: date) -> Decimal:
+    """Total de TODOS los gastos reales (operativos + extraordinarios) en
+    [start, end), sin filtrar por tipo: es la salida de caja real por su
+    fecha real de pago. Punto de entrada público pensado para el Panel de
+    caja (`budgets.caja`), que necesita el movimiento real de plata y no la
+    distinción operativo/extraordinario que usa el resultado operativo."""
+    return _gastos_total(start, end)
+
+
 def _ventas_total(start: date, end: date) -> Decimal:
     """Facturación aprobada (Presupuesto.total) en el rango de fechas."""
     from budgets.models import Presupuesto

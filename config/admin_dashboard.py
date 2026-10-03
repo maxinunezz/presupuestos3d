@@ -6,13 +6,19 @@ relación con cómo se usa el negocio en el día a día. Acá se reemplaza ese
 orden por uno pensado para el flujo real de trabajo:
 
 - Primero "Métricas": los paneles de solo lectura que hoy viven repartidos
-  en cada app (Panel de métricas, Panel de ventas, Panel de costos, Panel de
-  gastos) — lo primero que se mira al entrar. Los tres primeros son el mismo
-  motor de KPIs (budgets.metrics), separado en varias páginas (ventas/cobros;
-  costos de producción; inventario/resultado) para no amontonar todo en un
-  único dashboard larguísimo. "Tablero de producción" (antes acá) pasó a
-  encabezar la sección "Producción", justo arriba de "Cola de producción":
-  es donde se opera el día a día de las máquinas, no un panel de KPIs.
+  en cada app (Panel de métricas, Panel de ventas, Panel de caja, Panel de
+  costos, Panel de gastos) — lo primero que se mira al entrar. Panel de
+  métricas/ventas/costos comparten el mismo motor de KPIs (budgets.metrics),
+  separado en varias páginas (ventas/cobros; costos de producción;
+  inventario/resultado) para no amontonar todo en un único dashboard
+  larguísimo. Panel de caja (app `caja`, nueva) mide otra cosa —plata real
+  movimiento a movimiento, no devengado— pero es igual un dashboard de solo
+  lectura, así que vive acá también, justo debajo de Panel de ventas. Las
+  páginas operativas de esa app (Cuentas de caja, Movimientos de caja, donde
+  se carga/confirma el libro diario) quedan en su propia sección "Caja",
+  aparte. "Tablero de producción" (antes acá) pasó a encabezar la sección
+  "Producción", justo arriba de "Cola de producción": es donde se opera el
+  día a día de las máquinas, no un panel de KPIs.
 - Después las apps de negocio (Producción, Ventas y presupuestos, Inventario
   y compras, Gastos), y dentro de cada una: primero lo operativo (lo que se
   toca seguido), al final los catálogos/configuración (lo que se carga una
@@ -47,9 +53,18 @@ _SECTIONS = [
         [
             ("budgets", "Metricas"),
             ("budgets", "MetricasVentas"),
+            ("caja", "PanelCaja"),
             ("budgets", "PanelCostos"),
             ("gastos", "PanelGastos"),
             ("budgets", "Socio"),
+        ],
+    ),
+    (
+        "caja",
+        _("Caja"),
+        [
+            ("caja", "CuentaCaja"),
+            ("caja", "MovimientoCaja"),
         ],
     ),
     (

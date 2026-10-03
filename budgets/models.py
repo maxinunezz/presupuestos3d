@@ -693,6 +693,17 @@ class Presupuesto(models.Model):
         TARJETA = "TARJETA", _("Tarjeta")
         OTRO = "OTRO", _("Otro")
 
+    # Medios de pago de "caja inmediata": la plata entra/sale el mismo día,
+    # así que son los únicos que disparan la autogeneración de un borrador
+    # de `MovimientoCaja`. Tarjeta (débito o crédito) y cualquier cuota
+    # SIEMPRE se cargan a mano (acreditación diferida / liquidación propia).
+    CAJA_INMEDIATA_MEDIOS_PAGO = {
+        MedioPago.EFECTIVO,
+        MedioPago.TRANSFERENCIA,
+        MedioPago.MERCADOPAGO,
+        MedioPago.UALA,
+    }
+
     client_name = models.CharField(_("Cliente"), max_length=150)
     description = models.TextField(_("Notas / descripción"), blank=True)
 
@@ -745,6 +756,17 @@ class Presupuesto(models.Model):
         blank=True,
         default="",
         help_text=_("Cómo pagó (o va a pagar) el cliente. Se puede dejar vacío."),
+    )
+    fecha_cobro = models.DateField(
+        _("Fecha de cobro"),
+        null=True,
+        blank=True,
+        help_text=_(
+            "Cuándo entró realmente la plata (puede ser bien distinta de la fecha "
+            "de aprobación). Se completa sola al marcar \"Pagado\" si está vacía, "
+            "pero se puede ajustar a mano. La usa el Panel de caja para medir "
+            "cobros reales por fecha, no por aprobación."
+        ),
     )
 
     # --- Fechas por estado (reloj de producción) ---
@@ -808,6 +830,63 @@ class Presupuesto(models.Model):
 
     def __str__(self):
         return f"#{self.pk} {self.client_name} ({self.get_status_display()})"
+
+    def save(self, *args, **kwargs):
+        # Al marcar "Pagado" (desde el listado de Ventas, el detalle del
+        # presupuesto, o por código) completamos sola la fecha de cobro si
+        # todavía está vacía — así el libro de caja tiene un dato sin que
+        # haga falta cargarlo a mano en el caso más común. Si ya tiene una
+        # fecha (cargada a mano o de un guardado anterior) no la pisamos.
+        if self.estado_venta == self.EstadoVenta.PAGADO and not self.fecha_cobro:
+            self.fecha_cobro = timezone.localdate()
+            update_fields = kwargs.get("update_fields")
+            if update_fields is not None:
+                kwargs["update_fields"] = set(update_fields) | {"fecha_cobro"}
+        super().save(*args, **kwargs)
+        self._autogenerar_movimiento_caja()
+
+    def _autogenerar_movimiento_caja(self):
+        """
+        Si quedó "Pagado" con un medio de pago de caja inmediata (Efectivo,
+        Transferencia, Mercado Pago o Ualá — tarjeta y cuotas SIEMPRE se
+        cargan a mano), crea un borrador de `MovimientoCaja` (INGRESO) para
+        que el dueño lo revise y confirme desde el Panel de caja. No se
+        genera si no hay ninguna `CuentaCaja` configurada para ese medio de
+        pago (ambiguo o sin configurar): en ese caso se carga a mano. Import
+        diferido para evitar un ciclo (`caja` depende de `budgets`, no al
+        revés). Idempotente: no duplica el borrador automático de un mismo
+        presupuesto.
+        """
+        if self.estado_venta != self.EstadoVenta.PAGADO or not self.fecha_cobro:
+            return
+        if self.medio_pago not in self.CAJA_INMEDIATA_MEDIOS_PAGO:
+            return
+
+        from caja.models import CuentaCaja, MovimientoCaja
+
+        if MovimientoCaja.objects.filter(
+            presupuesto=self, origen_automatico=True
+        ).exists():
+            return
+
+        cuentas = CuentaCaja.objects.filter(
+            medio_pago_default=self.medio_pago, is_active=True
+        )
+        if cuentas.count() != 1:
+            # Sin cuenta configurada para ese medio, o ambiguo (más de una):
+            # no generamos nada, el usuario lo carga a mano.
+            return
+        cuenta = cuentas.first()
+
+        MovimientoCaja.crear_borrador_automatico(
+            cuenta=cuenta,
+            tipo=MovimientoCaja.Tipo.INGRESO,
+            monto=self.total,
+            fecha=self.fecha_cobro,
+            concepto=gettext("Cobro presupuesto #%(pk)s — %(cliente)s")
+            % {"pk": self.pk, "cliente": self.client_name},
+            presupuesto=self,
+        )
 
     # ---- Totales ----
 
@@ -1470,7 +1549,43 @@ class Presupuesto(models.Model):
             self.status = Status.CANCELLED
             self.save(update_fields=["status", "stock_reversed", "updated_at"])
 
+            self._revert_movimientos_caja()
+
         return summary
+
+    def _revert_movimientos_caja(self):
+        """
+        Al cancelar, por cada `MovimientoCaja` vinculado a este presupuesto:
+          - Si está CONFIRMADO (ya afectó el saldo real): se genera un
+            contra-asiento (tipo opuesto, mismo monto, misma cuenta) en
+            estado BORRADOR, para que el usuario lo revise y confirme — no
+            se toca el saldo real solo, automáticamente.
+          - Si está en BORRADOR (nunca se confirmó, nunca tocó el saldo
+            real): simplemente se descarta.
+        Los que ya estén DESCARTADOS no se tocan. Import diferido para
+        evitar un ciclo (`caja` depende de `budgets`, no al revés).
+        """
+        from caja.models import MovimientoCaja
+
+        for mov in list(self.movimientos_caja.all()):
+            if mov.estado == MovimientoCaja.Estado.CONFIRMADO:
+                tipo_opuesto = (
+                    MovimientoCaja.Tipo.EGRESO
+                    if mov.tipo == MovimientoCaja.Tipo.INGRESO
+                    else MovimientoCaja.Tipo.INGRESO
+                )
+                MovimientoCaja.crear_borrador_automatico(
+                    cuenta=mov.cuenta,
+                    tipo=tipo_opuesto,
+                    monto=mov.monto,
+                    fecha=timezone.localdate(),
+                    concepto=gettext("Reversa por cancelación — %(concepto)s")
+                    % {"concepto": mov.concepto},
+                    presupuesto=self,
+                )
+            elif mov.estado == MovimientoCaja.Estado.BORRADOR:
+                mov.estado = MovimientoCaja.Estado.DESCARTADO
+                mov.save(update_fields=["estado"])
 
     def _return_job_filament(self, job, summary, Filament, StockMovement):
         """Devuelve al stock el filamento que consumió un trabajo no impreso y

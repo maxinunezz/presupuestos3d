@@ -1,3 +1,4 @@
+from datetime import timedelta
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
@@ -1752,3 +1753,34 @@ class PanelVentasCobrosTests(TestCase):
         cobros = resp.context["cobros"]
         self.assertEqual(cobros["total_cobrado"], "$ 1.000,00")
         self.assertEqual(cobros["total_pendiente"], "$ 0,00")
+
+
+class FechaCobroAutocompletadaTests(TestCase):
+    """`Presupuesto.fecha_cobro` se completa sola al marcar 'Pagado' si está
+    vacía, pero no se pisa si ya tenía un valor cargado a mano."""
+
+    def test_se_autocompleta_al_marcar_pagado(self):
+        pres = Presupuesto.objects.create(client_name="Cliente")
+        self.assertIsNone(pres.fecha_cobro)
+        pres.estado_venta = Presupuesto.EstadoVenta.PAGADO
+        pres.save()
+        pres.refresh_from_db()
+        self.assertEqual(pres.fecha_cobro, timezone.localdate())
+
+    def test_no_pisa_una_fecha_ya_cargada(self):
+        fecha_manual = timezone.localdate() - timedelta(days=10)
+        pres = Presupuesto.objects.create(
+            client_name="Cliente",
+            estado_venta=Presupuesto.EstadoVenta.PAGADO,
+            fecha_cobro=fecha_manual,
+        )
+        pres.save()
+        pres.refresh_from_db()
+        self.assertEqual(pres.fecha_cobro, fecha_manual)
+
+    def test_no_se_completa_si_no_esta_pagado(self):
+        pres = Presupuesto.objects.create(client_name="Cliente")
+        pres.save()
+        pres.refresh_from_db()
+        self.assertIsNone(pres.fecha_cobro)
+
