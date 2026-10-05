@@ -686,8 +686,7 @@ class ProductoAdmin(admin.ModelAdmin):
         if not obj.pk:
             return gettext("Guardá el producto para ver el costo y el margen.")
         return mark_safe(
-            "&nbsp;&nbsp;" + gettext("Tu costo por producto:") + f" <b>${obj.unit_cost}</b>"
-            "&nbsp;&nbsp;|&nbsp;&nbsp;"
+            "&nbsp;&nbsp;"
             + gettext("Tu costo promedio por producto:")
             + f" <b>${obj.unit_cost_avg}</b>"
             "<br>&nbsp;&nbsp;"

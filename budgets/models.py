@@ -159,7 +159,9 @@ class Producto(models.Model):
     class Meta:
         verbose_name = _("Costeo de producto")
         verbose_name_plural = _("Costeo de productos")
-        ordering = ["name"]
+        # Por última modificación (el más reciente primero), no alfabético:
+        # así lo que se tocó hace poco queda arriba del listado.
+        ordering = ["-updated_at"]
 
     def __str__(self):
         return self.name
