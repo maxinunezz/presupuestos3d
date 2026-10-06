@@ -1910,3 +1910,82 @@ class Socio(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.percentage}%)"
+
+
+class PedidoOnline(models.Model):
+    """
+    Notificación de una venta confirmada en la tienda online (3darg-backend,
+    cualquier sub-marca) para que el dueño la revise y la cargue a mano como
+    `Presupuesto` si corresponde poner a producir.
+
+    A propósito NO dispara nada automático (ni Presupuesto, ni costeo, ni cola
+    de impresión) — es solo el aviso con los datos necesarios para que una
+    persona decida y cargue. Lo crea `PedidoOnlineCreateView` (API), llamado
+    desde `orders/signals.py::_notify_presupuestos3d` en 3darg-backend cuando
+    una `Order` pasa a `PAID`. El aviso "por mail" de ese mismo evento ya lo
+    manda 3darg-backend (`_send_owner_notification_email`); este modelo cubre
+    la parte "en el admin de presupuestos3d".
+    """
+
+    external_reference = models.CharField(
+        _("Referencia externa"),
+        max_length=80,
+        unique=True,
+        help_text=_(
+            "external_reference de la Order en 3darg-backend (y de la "
+            "preferencia de MercadoPago). Sirve para no duplicar el aviso si "
+            "el webhook de origen reintenta."
+        ),
+    )
+    brand_slug = models.CharField(_("Marca (slug)"), max_length=50)
+    brand_name = models.CharField(_("Marca"), max_length=150, blank=True)
+
+    customer_email = models.EmailField(_("Email del cliente"), blank=True)
+
+    items = models.JSONField(
+        _("Productos"),
+        default=list,
+        blank=True,
+        help_text=_(
+            "Snapshot de los items comprados: [{product_name, quantity, "
+            "unit_price}, ...]."
+        ),
+    )
+    total_amount = models.DecimalField(_("Total"), max_digits=12, decimal_places=2)
+    currency = models.CharField(_("Moneda"), max_length=10, default="ARS")
+
+    order_created_at = models.DateTimeField(
+        _("Fecha de la orden"),
+        null=True,
+        blank=True,
+        help_text=_("Cuándo se creó la Order en la tienda, no cuándo llegó este aviso."),
+    )
+    received_at = models.DateTimeField(_("Recibido"), auto_now_add=True)
+
+    revisado = models.BooleanField(
+        _("Revisado"),
+        default=False,
+        help_text=_("Marcalo una vez que ya lo cargaste (o decidiste no cargarlo)."),
+    )
+    presupuesto = models.ForeignKey(
+        Presupuesto,
+        verbose_name=_("Presupuesto cargado"),
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="pedidos_online",
+        help_text=_("Si lo cargaste como presupuesto, enlazalo acá (opcional)."),
+    )
+
+    raw_payload = models.JSONField(
+        _("Payload crudo"), default=dict, blank=True,
+        help_text=_("Body completo recibido de 3darg-backend, para auditoría/debug."),
+    )
+
+    class Meta:
+        verbose_name = _("Pedido online pendiente")
+        verbose_name_plural = _("Pedidos online pendientes")
+        ordering = ["-received_at"]
+
+    def __str__(self):
+        return f"{self.brand_name or self.brand_slug} - {self.external_reference}"

@@ -139,6 +139,19 @@ media/           # uploads locales (.3mf/gcode) — efímero en prod
   cada socio activo se lleva `percentage`% del `beneficio_neto` del período
   actual. Reparto simple — no acumula entre períodos ni lleva cuenta
   corriente de retiros/aportes por socio.
+- **PedidoOnline**: aviso de una venta confirmada en la tienda online
+  (3darg-backend, cualquier sub-marca). Lo crea únicamente la API
+  (`POST /api/pedidos-online/`, solo alta, `has_add_permission=False` en el
+  admin) cuando una `Order` pasa a `PAID` del otro lado — ver
+  `orders/signals.py::_notify_presupuestos3d` en 3darg-backend. Guarda
+  `external_reference` (único, idempotente ante reintentos), `brand_slug`/
+  `brand_name`, `customer_email`, `items` (snapshot producto/cantidad/precio),
+  `total_amount`, `currency`, `order_created_at`, `raw_payload`. Campos
+  `revisado` (bool) y `presupuesto` (FK opcional a `Presupuesto`) son lo único
+  editable desde el admin — para que el dueño lo marque una vez que lo cargó a
+  mano. **A propósito no genera `Presupuesto` ni descuenta inventario ni
+  encola producción solo** — es un aviso para revisar y aprobar, no un
+  disparador automático.
 
 ### production
 - **Maquina**: una impresora. `is_active`, `supports_multicolor` (la Bambu Lab
@@ -416,6 +429,14 @@ compras de insumos, que van por inventory). Sirve para el resultado operativo.
 
 ## Gotchas
 
+- `POST /api/pedidos-online/` (ver `PedidoOnline` arriba) exige un usuario
+  staff + DRF Token de integración (`TokenAuthentication`), creado solo en
+  local por ahora (`integracion_3darg`). **En producción (Vercel/Neon) hay
+  que crear ese mismo usuario + token de nuevo** (DB distinta) y configurar
+  `PRESUPUESTOS3D_API_URL`/`PRESUPUESTOS3D_API_TOKEN` en el `.env` de
+  3darg-backend con la URL pública de Vercel + ese token nuevo — si no, el
+  aviso de venta queda apagado en prod sin romper nada (no-op silencioso,
+  mismo criterio que el resto de integraciones).
 - Activar el venv falla si no hacés `cd` al proyecto primero.
 - `ManifestStaticFilesStorage`: cualquier `.js`/`.css` nuevo necesita
   `collectstatic`. Si un JS minificado trae `//# sourceMappingURL=...` apuntando

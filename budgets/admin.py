@@ -22,6 +22,7 @@ from .models import (
     MetricasVentas,
     PanelCostos,
     PanelVentas,
+    PedidoOnline,
     Pieza,
     PiezaFilamentLine,
     Presupuesto,
@@ -568,6 +569,88 @@ class SocioAdmin(admin.ModelAdmin):
     list_display = ("name", "percentage", "is_active", "order")
     list_editable = ("percentage", "is_active", "order")
     ordering = ("order", "name")
+
+
+@admin.register(PedidoOnline)
+class PedidoOnlineAdmin(admin.ModelAdmin):
+    """
+    Avisos de ventas confirmadas en la tienda online (cualquier sub-marca),
+    a la espera de que el dueño los revise y los cargue a mano como
+    `Presupuesto` si corresponde poner a producir. No se genera nada
+    automático — ver docstring de `PedidoOnline` en models.py.
+    """
+
+    list_display = (
+        "brand_name_display",
+        "external_reference",
+        "customer_email",
+        "items_summary",
+        "total_display",
+        "order_created_at",
+        "received_at",
+        "revisado",
+        "presupuesto",
+    )
+    list_filter = ("revisado", "brand_slug")
+    list_editable = ("revisado",)
+    search_fields = ("external_reference", "customer_email", "brand_name", "brand_slug")
+    autocomplete_fields = ("presupuesto",)
+    readonly_fields = (
+        "external_reference",
+        "brand_slug",
+        "brand_name",
+        "customer_email",
+        "items",
+        "total_amount",
+        "currency",
+        "order_created_at",
+        "received_at",
+        "raw_payload",
+    )
+    ordering = ("-received_at",)
+
+    fieldsets = (
+        (
+            _("Venta"),
+            {
+                "fields": (
+                    "brand_name",
+                    "brand_slug",
+                    "external_reference",
+                    "customer_email",
+                    "items",
+                    "total_amount",
+                    "currency",
+                    "order_created_at",
+                    "received_at",
+                )
+            },
+        ),
+        (_("Seguimiento"), {"fields": ("revisado", "presupuesto")}),
+        (_("Debug"), {"fields": ("raw_payload",), "classes": ("collapse",)}),
+    )
+
+    @admin.display(description=_("Marca"))
+    def brand_name_display(self, obj):
+        return obj.brand_name or obj.brand_slug
+
+    @admin.display(description=_("Productos"))
+    def items_summary(self, obj):
+        if not obj.items:
+            return "—"
+        return ", ".join(
+            f"{item.get('product_name', '?')} x{item.get('quantity', '?')}"
+            for item in obj.items
+        )
+
+    @admin.display(description=_("Total"))
+    def total_display(self, obj):
+        return f"{obj.currency} {obj.total_amount}"
+
+    def has_add_permission(self, request):
+        # Lo crea únicamente la API (vía token de integración desde
+        # 3darg-backend) — no tiene sentido darlo de alta a mano desde el admin.
+        return False
 
 
 @admin.register(Producto)

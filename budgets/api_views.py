@@ -1,21 +1,27 @@
 """
-Endpoint de solo lectura para automatizar el Reporte Ejecutivo Mensual (RH-003).
+Vistas de API de `budgets`. Dos endpoints, independientes entre sí:
 
-Pensado para que "Schedule by Zapier" lo consulte el día 1 de cada mes (o el
-día que se elija) y arme el Reporte Ejecutivo Mensual sin que nadie tenga que
-completarlo a mano: los KPIs de la Sección B salen de los datos reales del
-sistema. "Objetivo/Plan" queda afuera a propósito, porque no hay metas
-cargadas en ningún lado — eso lo define el socio de dirección en la reunión,
-no un dato del sistema.
+- `ReporteEjecutivoMensualView` (solo lectura): pensado para que "Schedule by
+  Zapier" lo consulte el día 1 de cada mes (o el día que se elija) y arme el
+  Reporte Ejecutivo Mensual sin que nadie tenga que completarlo a mano: los
+  KPIs de la Sección B salen de los datos reales del sistema. "Objetivo/Plan"
+  queda afuera a propósito, porque no hay metas cargadas en ningún lado — eso
+  lo define el socio de dirección en la reunión, no un dato del sistema.
+- `PedidoOnlineCreateView` (solo alta): la invoca 3darg-backend cuando una
+  venta online se confirma, para avisar en este admin. Ver docstring de
+  `PedidoOnline` en models.py.
 """
 
 from datetime import datetime, timedelta
 
 from django.utils import timezone
+from rest_framework import generics
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .metrics import _money, _pct, build_metrics
+from .models import PedidoOnline
+from .serializers import PedidoOnlineSerializer
 
 _MESES_ES = [
     "enero", "febrero", "marzo", "abril", "mayo", "junio",
@@ -76,3 +82,32 @@ class ReporteEjecutivoMensualView(APIView):
             },
         }
         return Response(data)
+
+
+class PedidoOnlineCreateView(generics.CreateAPIView):
+    """
+    POST /api/pedidos-online/
+
+    Lo llama `orders/signals.py::_notify_presupuestos3d` en 3darg-backend
+    cuando una Order pasa a PAID. Requiere el token de la cuenta de
+    integración (`TokenAuthentication`, `IsAdminUser` por el default global
+    de `REST_FRAMEWORK`) — no hay permission_classes propio acá a propósito,
+    reusa el mismo criterio que el resto de la API.
+
+    Idempotente por `external_reference`: si ya existe un `PedidoOnline` con
+    esa referencia (reintento del webhook de origen), devuelve el existente
+    en vez de duplicar el aviso.
+    """
+
+    serializer_class = PedidoOnlineSerializer
+
+    def create(self, request, *args, **kwargs):
+        external_reference = request.data.get("external_reference")
+        if external_reference:
+            existing = PedidoOnline.objects.filter(
+                external_reference=external_reference
+            ).first()
+            if existing is not None:
+                serializer = self.get_serializer(existing)
+                return Response(serializer.data, status=200)
+        return super().create(request, *args, **kwargs)
