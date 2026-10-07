@@ -53,11 +53,13 @@ class Producto(models.Model):
         null=True,
         help_text=_(
             "Código único de catálogo, el mismo que usa este producto en la "
-            "página web y en Mercado Libre (se autogenera ahí como "
-            "'3DARG-000123', ver `Product.sku` en el backend de la web). "
-            "Cargalo a mano acá para poder ubicar rápido a qué costeo "
-            "corresponde cada venta. Opcional: dejalo vacío si el producto "
-            "todavía no se publicó en ningún canal."
+            "página web y en Mercado Libre (se autogenera ahí con el formato "
+            "'MARCA-CATEGORIA-NNNNNN', ej. 'LUMY-COR-000037', opcionalmente "
+            "con '-COLOR-TAMAÑO' al final si el producto los tiene cargados; "
+            "ver `Product.generate_sku()` en el backend de la web). Cargalo a "
+            "mano acá para poder ubicar rápido a qué costeo corresponde cada "
+            "venta. Opcional: dejalo vacío si el producto todavía no se "
+            "publicó en ningún canal."
         ),
     )
     description = models.TextField(_("Descripción"), blank=True)

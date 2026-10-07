@@ -179,14 +179,20 @@ media/           # uploads locales (.3mf/gcode) — efímero en prod
 - **`Producto.sku`**: CharField opcional (`unique=True, null=True, blank=True`
   — `null=True` a propósito, para que varios productos sin SKU cargado
   todavía no choquen entre sí por la unicidad). Es el mismo código que usa
-  `Product.sku` en el backend de la página web (`3darg-backend`, se
-  autogenera ahí como `3DARG-000123`) y el mismo que se manda a Mercado
-  Libre como atributo `SELLER_SKU` (ver `mercadolibre/services.py` en ese
-  repo) — cargarlo acá a mano es lo que permite, a futuro, matchear una
-  venta/publicación de cualquiera de los otros dos sistemas contra su
-  costeo acá sin depender de que el nombre del producto coincida letra por
-  letra. Visible en `list_display`/`search_fields` y en el primer fieldset
-  de `ProductoAdmin`, al lado del nombre. Hoy es solo informativo: no hay
+  `Product.sku` en el backend de la página web (`3darg-backend`) y el mismo
+  que se manda a Mercado Libre como atributo `SELLER_SKU` (ver
+  `mercadolibre/services.py` en ese repo) — cargarlo acá a mano es lo que
+  permite, a futuro, matchear una venta/publicación de cualquiera de los
+  otros dos sistemas contra su costeo acá sin depender de que el nombre del
+  producto coincida letra por letra.
+  Formato (definido del lado de la web, `Product.generate_sku()`):
+  `MARCA-CATEGORIA-NNNNNN[-VARIANTE]`, ej. `LUMY-COR-000037` o
+  `MSL-ARO-000401-VERDE-M` si el producto tiene color/tamaño cargados ahí
+  (solo informativos, no son variantes con stock propio). El código de
+  marca/categoría es fijo una vez asignado — no cambia aunque el producto
+  se recategorice después.
+  Visible en `list_display`/`search_fields` y en el primer fieldset de
+  `ProductoAdmin`, al lado del nombre. Hoy es solo informativo: no hay
   ningún proceso automático en este repo que lo complete ni que lo
   sincronice — es el dueño quien copia el SKU real al cargar el costeo.
 
