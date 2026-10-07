@@ -12,12 +12,14 @@ from production.models import Maquina
 
 from .metrics import build_metrics
 from .models import (
+    CanalVenta,
     Pieza,
     PiezaFilamentLine,
     Presupuesto,
     PresupuestoItem,
     Producto,
     ProductoAggregateLine,
+    ProductoCanalPrecio,
     Socio,
 )
 
@@ -73,6 +75,88 @@ class ProductoCosteoTests(TestCase):
         self.assertEqual(p.margin_percent, Decimal("50.00"))
         # margen sobre el precio de venta: (1800-1200)/1800 = 33.33%
         self.assertEqual(p.margin_on_price_percent, Decimal("33.33"))
+
+
+class CanalVentaTests(TestCase):
+    def setUp(self):
+        self.fil = Filament.objects.create(
+            brand="M",
+            material_type=Filament.MaterialType.PLA,
+            color="C",
+            cost_per_kg=Decimal("10000"),  # $10/g
+            stock_grams=Decimal("10000"),
+        )
+        # Los canales "Mercado Libre"/"Página Web" de la migración de datos
+        # (0038_seed_canales_venta) ya existen en la DB de test. Se borran acá
+        # porque ningún producto los referencia todavía (recién se siembran,
+        # sin productos) y así cada test arranca sin canales de por medio.
+        CanalVenta.objects.all().delete()
+
+    def test_producto_nuevo_se_informa_solo_en_canales_activos(self):
+        meli = CanalVenta.objects.create(nombre="Canal activo", comision_percent=Decimal("15"))
+        CanalVenta.objects.create(nombre="Canal inactivo", is_active=False)
+
+        p = make_producto(sale_price=Decimal("1000"))
+
+        # Solo se crea la fila para el canal activo, no para el inactivo.
+        self.assertEqual(p.canal_precios.count(), 1)
+        self.assertEqual(p.canal_precios.get().canal, meli)
+
+    def test_canal_nuevo_hace_backfill_de_productos_existentes(self):
+        p1 = make_producto(name="Ya existía", sale_price=Decimal("1000"))
+        p2 = make_producto(name="Inactivo", sale_price=Decimal("1000"), is_active=False)
+
+        canal = CanalVenta.objects.create(nombre="Canal nuevo")
+
+        self.assertTrue(ProductoCanalPrecio.objects.filter(producto=p1, canal=canal).exists())
+        self.assertFalse(ProductoCanalPrecio.objects.filter(producto=p2, canal=canal).exists())
+
+    def test_gastos_de_venta_y_ganancia_neta_con_precio_general(self):
+        canal = CanalVenta.objects.create(
+            nombre="Canal con costos",
+            comision_percent=Decimal("15"),
+            costo_fijo=Decimal("50"),
+            costo_envio=Decimal("100"),
+            otros_costos_percent=Decimal("5"),
+        )
+        p = make_producto(sale_price=Decimal("2000"))
+        add_pieza(p, self.fil, Decimal("100"))  # unit_cost_avg = 1200 (ver test de costeo)
+
+        precio_canal = ProductoCanalPrecio.objects.get(producto=p, canal=canal)
+
+        # Sin pisar nada: usa el precio general del producto y el envío del canal.
+        self.assertEqual(precio_canal.precio_efectivo, Decimal("2000.00"))
+        self.assertEqual(precio_canal.costo_envio_efectivo, Decimal("100.00"))
+        # Comisión 15% de 2000 = 300 ; otros costos 5% de 2000 = 100
+        self.assertEqual(precio_canal.gasto_comision, Decimal("300.00"))
+        self.assertEqual(precio_canal.gasto_otros_costos, Decimal("100.00"))
+        # Gastos totales: 300 + 100 + 50 (fijo) + 100 (envío) = 550
+        self.assertEqual(precio_canal.gastos_de_venta, Decimal("550.00"))
+        # Ganancia neta: 2000 - 1200 (costo promedio) - 550 = 250
+        self.assertEqual(precio_canal.ganancia_neta, Decimal("250.00"))
+        # Margen neto: 250/2000 = 12.5%
+        self.assertEqual(precio_canal.margen_neto_percent, Decimal("12.50"))
+
+    def test_precio_y_envio_se_pueden_pisar_por_producto(self):
+        canal = CanalVenta.objects.create(
+            nombre="Canal con override", comision_percent=Decimal("10"), costo_envio=Decimal("100")
+        )
+        p = make_producto(sale_price=Decimal("2000"))
+        add_pieza(p, self.fil, Decimal("100"))
+
+        precio_canal = ProductoCanalPrecio.objects.get(producto=p, canal=canal)
+        precio_canal.sale_price = Decimal("2500")
+        precio_canal.costo_envio_override = Decimal("300")
+        precio_canal.save()
+
+        self.assertEqual(precio_canal.precio_efectivo, Decimal("2500.00"))
+        self.assertEqual(precio_canal.costo_envio_efectivo, Decimal("300.00"))
+
+    def test_margen_neto_es_cero_sin_precio_cargado(self):
+        canal = CanalVenta.objects.create(nombre="Canal sin precio")
+        p = make_producto(sale_price=Decimal("0"))
+        precio_canal = ProductoCanalPrecio.objects.get(producto=p, canal=canal)
+        self.assertEqual(precio_canal.margen_neto_percent, Decimal("0.00"))
 
 
 class PresupuestoTotalTests(TestCase):

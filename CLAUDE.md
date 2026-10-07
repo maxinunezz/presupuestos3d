@@ -152,6 +152,30 @@ media/           # uploads locales (.3mf/gcode) — efímero en prod
   mano. **A propósito no genera `Presupuesto` ni descuenta inventario ni
   encola producción solo** — es un aviso para revisar y aprobar, no un
   disparador automático.
+- **CanalVenta** + **ProductoCanalPrecio**: informan, en la pantalla de
+  costeo de cada `Producto`, cuánto le queda de ganancia neta vendiendo en
+  cada canal (hoy: Mercado Libre y la página web propia) una vez descontados
+  los gastos propios de venderlo ahí. `CanalVenta` (CRUD normal, admin
+  propio) define el costo típico del canal: `comision_percent`, `costo_fijo`
+  (cargo fijo por venta), `costo_envio` (promedio que asume el vendedor),
+  `otros_costos_percent` (impuestos/pasarela de pago), `is_active`, `order`.
+  `ProductoCanalPrecio` (inline "Gastos de venta y precio por canal" dentro
+  de `ProductoAdmin`, debajo de las Piezas/Agregados) es la línea por
+  producto × canal: deja pisar el `sale_price` de ESE canal (si se deja
+  vacío, usa `Producto.sale_price`) y el `costo_envio_override` (si un
+  producto en particular pesa/mide distinto al promedio del canal). Props
+  calculadas (dinero = `@property`, no columna, mismo criterio que el resto):
+  `precio_efectivo`, `costo_envio_efectivo`, `gasto_comision`,
+  `gasto_otros_costos`, `gastos_de_venta` (total), `ganancia_neta` (sobre
+  `unit_cost_avg` del producto) y `margen_neto_percent`. Las filas se crean
+  solas, no hace falta cargarlas a mano: al guardar un `Producto` nuevo se
+  crea una fila por cada `CanalVenta` activo (`Producto.save()`), y al dar de
+  alta un canal nuevo se hace backfill de todos los productos activos que ya
+  existían (`CanalVenta.save()`). `ProductoAdmin` también muestra el `pk` del
+  producto como campo de solo lectura ("ID interno") arriba de todo, para
+  tenerlo a mano al cargar el producto en Mercado Libre o donde haga falta.
+  Migración `0038_seed_canales_venta` sembró "Mercado Libre" y "Página Web"
+  (costos en 0 — el dueño carga los reales desde el admin de `CanalVenta`).
 
 ### production
 - **Maquina**: una impresora. `is_active`, `supports_multicolor` (la Bambu Lab

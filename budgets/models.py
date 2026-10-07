@@ -167,6 +167,7 @@ class Producto(models.Model):
         return self.name
 
     def save(self, *args, **kwargs):
+        is_new = self.pk is None
         previous_ready = False
         if self.pk:
             previous_ready = (
@@ -184,6 +185,13 @@ class Producto(models.Model):
             self.diseno_listo_at = None
 
         super().save(*args, **kwargs)
+
+        if is_new:
+            # Un producto nuevo arranca informando sus gastos de venta en
+            # todos los canales activos (Mercado Libre, página web, etc.) sin
+            # tener que agregarlos a mano uno por uno — ver `CanalVenta`.
+            for canal in CanalVenta.objects.filter(is_active=True):
+                ProductoCanalPrecio.objects.get_or_create(producto=self, canal=canal)
 
         if just_marked_ready:
             from config.slack import notificar
@@ -441,6 +449,211 @@ class ProductoAggregateLine(models.Model):
     @property
     def line_cost(self) -> Decimal:
         return (self.quantity * self.effective_unit_cost).quantize(Decimal("0.01"))
+
+
+# ===========================================================================
+#  CANALES DE VENTA
+#
+#  Informan, para cada Producto, cuánto le queda de ganancia neta si se vende
+#  en Mercado Libre, en la página web propia, o en cualquier otro canal que se
+#  cargue — una vez descontados los gastos propios de vender ahí (comisión,
+#  cargo fijo, envío, otros costos). No reemplaza a `Producto.sale_price` (el
+#  precio "de lista"): cada canal puede pisarlo si conviene vender distinto en
+#  cada uno (ej: más caro en Mercado Libre para compensar su comisión).
+# ===========================================================================
+
+
+class CanalVenta(models.Model):
+    """
+    Un canal de venta (Mercado Libre, página web propia, etc.) con sus costos
+    típicos de vender ahí. Se carga una vez por canal y se reutiliza para
+    informar el precio de venta de cada `Producto` en ese canal — ver
+    `ProductoCanalPrecio`.
+    """
+
+    nombre = models.CharField(_("Canal"), max_length=60, unique=True)
+    comision_percent = models.DecimalField(
+        _("Comisión del canal (%)"),
+        max_digits=5,
+        decimal_places=2,
+        default=0,
+        help_text=_(
+            "Comisión que cobra el canal sobre el precio de venta (ej: "
+            "comisión de Mercado Libre, variable según categoría)."
+        ),
+    )
+    costo_fijo = models.DecimalField(
+        _("Cargo fijo por venta"),
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        help_text=_(
+            "Cargo fijo que cobra el canal por cada venta, sin importar el "
+            "monto (ej: el cargo fijo de Mercado Libre en ventas de bajo monto)."
+        ),
+    )
+    costo_envio = models.DecimalField(
+        _("Costo de envío promedio"),
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        help_text=_(
+            "Costo de envío que asumís como vendedor en este canal, si "
+            "aplica. Se puede pisar por producto en 'Gastos de venta y "
+            "precio por canal' si uno en particular pesa/mide distinto."
+        ),
+    )
+    otros_costos_percent = models.DecimalField(
+        _("Otros costos variables (%)"),
+        max_digits=5,
+        decimal_places=2,
+        default=0,
+        help_text=_(
+            "Otros costos variables del canal sobre el precio de venta "
+            "(impuestos, pasarela de pago, etc.)."
+        ),
+    )
+    is_active = models.BooleanField(
+        _("Activo"),
+        default=True,
+        help_text=_(
+            "Los canales inactivos dejan de sumarse solos a los productos "
+            "nuevos, pero no borran los precios por canal ya cargados."
+        ),
+    )
+    order = models.PositiveIntegerField(_("Orden"), default=0)
+
+    class Meta:
+        verbose_name = _("Canal de venta")
+        verbose_name_plural = _("Canales de venta")
+        ordering = ["order", "nombre"]
+
+    def __str__(self):
+        return self.nombre
+
+    def save(self, *args, **kwargs):
+        is_new = self.pk is None
+        super().save(*args, **kwargs)
+        if is_new:
+            # Un canal nuevo (ej: se suma "Instagram Shop") arranca
+            # informando a todos los productos activos que ya existían, no
+            # solo a los que se carguen de acá en adelante.
+            for producto in Producto.objects.filter(is_active=True):
+                ProductoCanalPrecio.objects.get_or_create(producto=producto, canal=self)
+
+
+class ProductoCanalPrecio(models.Model):
+    """
+    Cuánto le queda de ganancia a `producto` si se vende en `canal`, una vez
+    descontados los gastos propios de ese canal. El precio de venta en el
+    canal se puede pisar acá; si se deja vacío, se usa el precio de venta
+    general del producto (`Producto.sale_price`). Se crea solo: una fila por
+    cada canal activo, al guardar el producto (o al dar de alta el canal) —
+    ver `Producto.save()` / `CanalVenta.save()`.
+    """
+
+    producto = models.ForeignKey(
+        Producto, on_delete=models.CASCADE, related_name="canal_precios"
+    )
+    canal = models.ForeignKey(
+        CanalVenta, on_delete=models.PROTECT, related_name="producto_precios"
+    )
+    sale_price = models.DecimalField(
+        _("Precio de venta en este canal"),
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text=_(
+            "Si se deja vacío, se usa el precio de venta general del "
+            "producto (pestaña Precio)."
+        ),
+    )
+    costo_envio_override = models.DecimalField(
+        _("Costo de envío de este producto"),
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text=_(
+            "Si este producto tiene un costo de envío distinto al promedio "
+            "del canal (por peso/tamaño), cargalo acá. Vacío = usa el "
+            "costo de envío general del canal."
+        ),
+    )
+    notas = models.CharField(_("Notas"), max_length=200, blank=True)
+
+    class Meta:
+        verbose_name = _("Precio por canal")
+        verbose_name_plural = _("Precios por canal")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["producto", "canal"], name="unique_producto_canal"
+            )
+        ]
+        ordering = ["canal__order", "canal__nombre"]
+
+    def __str__(self):
+        return f"{self.producto} · {self.canal}"
+
+    @property
+    def precio_efectivo(self) -> Decimal:
+        """Precio de venta que se usa en este canal: el propio si se cargó,
+        si no el precio de venta general del producto."""
+        if self.sale_price is not None:
+            return _dec(self.sale_price)
+        return _dec(self.producto.sale_price)
+
+    @property
+    def costo_envio_efectivo(self) -> Decimal:
+        """Costo de envío que se usa en este canal: el propio del producto
+        si se cargó, si no el promedio del canal."""
+        if self.costo_envio_override is not None:
+            return _dec(self.costo_envio_override)
+        return _dec(self.canal.costo_envio)
+
+    @property
+    def gasto_comision(self) -> Decimal:
+        return (
+            self.precio_efectivo * _dec(self.canal.comision_percent) / Decimal("100")
+        ).quantize(Decimal("0.01"))
+
+    @property
+    def gasto_otros_costos(self) -> Decimal:
+        return (
+            self.precio_efectivo
+            * _dec(self.canal.otros_costos_percent)
+            / Decimal("100")
+        ).quantize(Decimal("0.01"))
+
+    @property
+    def gastos_de_venta(self) -> Decimal:
+        """Total de gastos de vender UNA unidad en este canal: comisión +
+        cargo fijo + envío + otros costos variables."""
+        return (
+            self.gasto_comision
+            + self.gasto_otros_costos
+            + _dec(self.canal.costo_fijo)
+            + self.costo_envio_efectivo
+        ).quantize(Decimal("0.01"))
+
+    @property
+    def ganancia_neta(self) -> Decimal:
+        """Lo que queda de ganancia por unidad vendida en este canal, después
+        de descontar el costo de producción promedio y los gastos de venta
+        del canal."""
+        return (
+            self.precio_efectivo - self.producto.unit_cost_avg - self.gastos_de_venta
+        ).quantize(Decimal("0.01"))
+
+    @property
+    def margen_neto_percent(self) -> Decimal:
+        """Ganancia neta como % del precio de venta en este canal. 0 si no
+        hay precio cargado (ni propio ni general)."""
+        precio = self.precio_efectivo
+        if precio <= 0:
+            return Decimal("0.00")
+        return (self.ganancia_neta / precio * Decimal("100")).quantize(Decimal("0.01"))
 
 
 class Pieza(models.Model):

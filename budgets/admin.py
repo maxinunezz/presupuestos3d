@@ -17,6 +17,7 @@ from production.models import HistorialImpresion, ProductionJob
 
 from .metrics import PERIODS, build_metrics, export_xlsx, template_context
 from .models import (
+    CanalVenta,
     DisenoNoListoError,
     Metricas,
     MetricasVentas,
@@ -30,6 +31,7 @@ from .models import (
     PresupuestoNotApprovableError,
     Producto,
     ProductoAggregateLine,
+    ProductoCanalPrecio,
     Socio,
     StockPiezas,
     StockProductos,
@@ -564,6 +566,69 @@ class ProductoAggregateLineInline(admin.TabularInline):
         return f"${obj.line_cost}" if obj.pk else "-"
 
 
+class ProductoCanalPrecioInline(admin.TabularInline):
+    """Gastos de venta y precio por canal (Mercado Libre, página web, etc.)
+    de un producto. Las filas se crean solas -una por canal activo- al
+    guardar el producto o al dar de alta un canal nuevo (ver
+    `Producto.save()` / `CanalVenta.save()`); acá solo se pisan el precio de
+    venta y/o el costo de envío de ESTE producto en ese canal."""
+
+    model = ProductoCanalPrecio
+    verbose_name = _("canal de venta")
+    verbose_name_plural = _("Gastos de venta y precio por canal")
+    extra = 0
+    formfield_overrides = DECIMAL_LOCALIZE
+    fields = (
+        "canal",
+        "sale_price",
+        "costo_envio_override",
+        "gastos_de_venta_display",
+        "ganancia_neta_display",
+        "margen_neto_display",
+        "notas",
+    )
+    readonly_fields = (
+        "gastos_de_venta_display",
+        "ganancia_neta_display",
+        "margen_neto_display",
+    )
+
+    @admin.display(description=_("Gastos de venta"))
+    def gastos_de_venta_display(self, obj):
+        return f"${obj.gastos_de_venta}" if obj.pk else "-"
+
+    @admin.display(description=_("Ganancia neta"))
+    def ganancia_neta_display(self, obj):
+        return f"${obj.ganancia_neta}" if obj.pk else "-"
+
+    @admin.display(description=_("Margen neto"))
+    def margen_neto_display(self, obj):
+        return f"{obj.margen_neto_percent}%" if obj.pk else "-"
+
+
+@admin.register(CanalVenta)
+class CanalVentaAdmin(admin.ModelAdmin):
+    list_display = (
+        "nombre",
+        "comision_percent",
+        "costo_fijo",
+        "costo_envio",
+        "otros_costos_percent",
+        "is_active",
+        "order",
+    )
+    list_editable = (
+        "comision_percent",
+        "costo_fijo",
+        "costo_envio",
+        "otros_costos_percent",
+        "is_active",
+        "order",
+    )
+    ordering = ("order", "nombre")
+    formfield_overrides = DECIMAL_LOCALIZE
+
+
 @admin.register(Socio)
 class SocioAdmin(admin.ModelAdmin):
     list_display = ("name", "percentage", "is_active", "order")
@@ -671,8 +736,8 @@ class ProductoAdmin(admin.ModelAdmin):
     list_filter = ("is_active", "diseno_listo", "is_multicolor", "priority")
     list_editable = ("priority", "diseno_listo")
     search_fields = ("name", "description")
-    inlines = (PiezaInline, ProductoAggregateLineInline)
-    readonly_fields = ("costs_summary", "price_info", "diseno_listo_at")
+    inlines = (PiezaInline, ProductoAggregateLineInline, ProductoCanalPrecioInline)
+    readonly_fields = ("producto_id_display", "costs_summary", "price_info", "diseno_listo_at")
     formfield_overrides = DECIMAL_LOCALIZE
 
     def get_queryset(self, request):
@@ -690,7 +755,19 @@ class ProductoAdmin(admin.ModelAdmin):
         )
 
     fieldsets = (
-        (None, {"fields": ("name", "description", "priority", "is_multicolor", "is_active")}),
+        (
+            None,
+            {
+                "fields": (
+                    "producto_id_display",
+                    "name",
+                    "description",
+                    "priority",
+                    "is_multicolor",
+                    "is_active",
+                )
+            },
+        ),
         (
             _("Stock de productos terminados"),
             {"fields": ("stock_quantity", "min_stock")},
@@ -717,6 +794,10 @@ class ProductoAdmin(admin.ModelAdmin):
             {"fields": ("diseno_listo", "diseno_listo_at")},
         ),
     )
+
+    @admin.display(description=_("ID interno"))
+    def producto_id_display(self, obj):
+        return obj.pk if obj.pk else gettext("(se asigna al guardar)")
 
     @admin.display(description=_("Costo/pieza"))
     def unit_cost_display(self, obj):
@@ -778,6 +859,13 @@ class ProductoAdmin(admin.ModelAdmin):
             "<br>&nbsp;&nbsp;"
             + gettext("Margen sobre el precio de venta:")
             + f" <b>{obj.margin_on_price_percent}%</b>"
+            "<br><br>"
+            + gettext(
+                "Este precio es el de lista. Para ver cuánto queda de "
+                "ganancia neta vendiendo en Mercado Libre, la página web u "
+                "otro canal (descontando su comisión, envío, etc.), mirá "
+                "'Gastos de venta y precio por canal' más abajo."
+            )
         )
 
 
