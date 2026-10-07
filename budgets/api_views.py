@@ -1,5 +1,5 @@
 """
-Vistas de API de `budgets`. Dos endpoints, independientes entre sí:
+Vistas de API de `budgets`. Tres endpoints, independientes entre sí:
 
 - `ReporteEjecutivoMensualView` (solo lectura): pensado para que "Schedule by
   Zapier" lo consulte el día 1 de cada mes (o el día que se elija) y arme el
@@ -10,6 +10,11 @@ Vistas de API de `budgets`. Dos endpoints, independientes entre sí:
 - `PedidoOnlineCreateView` (solo alta): la invoca 3darg-backend cuando una
   venta online se confirma, para avisar en este admin. Ver docstring de
   `PedidoOnline` en models.py.
+- `ProductoCostoPorSkuView` (solo lectura): la consulta 3darg-backend para
+  traer automáticamente el costo promedio de cada producto (por `sku`) y
+  calcular ahí la ganancia neta por canal de venta, sin tener que cargar el
+  costo a mano del otro lado. Devuelve solo el número final (`unit_cost_avg`),
+  no el detalle de piezas/filamento/agregados.
 """
 
 from datetime import datetime, timedelta
@@ -20,7 +25,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .metrics import _money, _pct, build_metrics
-from .models import PedidoOnline
+from .models import PedidoOnline, Producto
 from .serializers import PedidoOnlineSerializer
 
 _MESES_ES = [
@@ -111,3 +116,41 @@ class PedidoOnlineCreateView(generics.CreateAPIView):
                 serializer = self.get_serializer(existing)
                 return Response(serializer.data, status=200)
         return super().create(request, *args, **kwargs)
+
+
+class ProductoCostoPorSkuView(APIView):
+    """
+    GET /api/productos/costo/?sku=LUMY-COR-000037&sku=LUMY-COR-000038
+
+    Devuelve el costo promedio (`unit_cost_avg`) de los productos cuyo `sku`
+    coincide con alguno de los pasados por query param (se puede repetir
+    `sku=` para pedir varios de una, o mandar uno solo). Pensado para que
+    3darg-backend autocomplete el costo al mostrar la ganancia neta por canal
+    de venta, matcheando por el mismo SKU que ya usa para Mercado Libre.
+
+    Requiere el token de la cuenta de integración (`TokenAuthentication`,
+    `IsAdminUser` por el default global de `REST_FRAMEWORK`) — no hay
+    permission_classes propio acá a propósito, reusa el mismo criterio que
+    el resto de la API.
+
+    Los SKU que no matchean ningún producto (o vienen vacíos) simplemente no
+    aparecen en la respuesta — no es un error, 3darg-backend decide qué
+    mostrar si no encuentra costo para alguno.
+    """
+
+    def get(self, request, *args, **kwargs):
+        skus = [s for s in request.query_params.getlist("sku") if s]
+        if not skus:
+            raw = request.query_params.get("sku", "")
+            skus = [s.strip() for s in raw.split(",") if s.strip()]
+
+        productos = Producto.objects.filter(sku__in=skus)
+        data = [
+            {
+                "sku": p.sku,
+                "unit_cost_avg": str(p.unit_cost_avg),
+                "updated_at": p.updated_at.isoformat(),
+            }
+            for p in productos
+        ]
+        return Response({"resultados": data})

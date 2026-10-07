@@ -6,6 +6,7 @@ from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
+from rest_framework.test import APIClient
 
 from gastos.models import CategoriaGasto, Gasto
 from inventory.models import Aggregate, Filament
@@ -1886,4 +1887,66 @@ class FechaCobroAutocompletadaTests(TestCase):
         pres.save()
         pres.refresh_from_db()
         self.assertIsNone(pres.fecha_cobro)
+
+
+class ProductoCostoPorSkuApiTests(TestCase):
+    """GET /api/productos/costo/: lo consume 3darg-backend para traer el
+    costo promedio por SKU, mismo criterio de auth que el resto de la API
+    (staff + TokenAuthentication/SessionAuthentication)."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.producto = make_producto(
+            name="Cortante gato",
+            sku="LUMY-COR-000037",
+            machine_cost_per_hour=Decimal("100"),
+        )
+
+    def test_anonimo_no_autenticado(self):
+        resp = self.client.get("/api/productos/costo/", {"sku": "LUMY-COR-000037"})
+        self.assertEqual(resp.status_code, 401)
+
+    def test_staff_puede_leer_por_sku(self):
+        User = get_user_model()
+        User.objects.create_user("admin", password="x", is_staff=True)
+        self.client.login(username="admin", password="x")
+        resp = self.client.get("/api/productos/costo/", {"sku": "LUMY-COR-000037"})
+        self.assertEqual(resp.status_code, 200)
+        resultados = resp.data["resultados"]
+        self.assertEqual(len(resultados), 1)
+        self.assertEqual(resultados[0]["sku"], "LUMY-COR-000037")
+        self.assertEqual(
+            Decimal(resultados[0]["unit_cost_avg"]), self.producto.unit_cost_avg
+        )
+
+    def test_sku_sin_match_no_rompe_devuelve_vacio(self):
+        User = get_user_model()
+        User.objects.create_user("admin", password="x", is_staff=True)
+        self.client.login(username="admin", password="x")
+        resp = self.client.get("/api/productos/costo/", {"sku": "NO-EXISTE"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["resultados"], [])
+
+    def test_sin_sku_devuelve_vacio_no_toda_la_tabla(self):
+        User = get_user_model()
+        User.objects.create_user("admin", password="x", is_staff=True)
+        self.client.login(username="admin", password="x")
+        resp = self.client.get("/api/productos/costo/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["resultados"], [])
+
+    def test_multiples_sku_repitiendo_el_query_param(self):
+        make_producto(
+            name="Cortante perro",
+            sku="LUMY-COR-000038",
+            machine_cost_per_hour=Decimal("50"),
+        )
+        User = get_user_model()
+        User.objects.create_user("admin", password="x", is_staff=True)
+        self.client.login(username="admin", password="x")
+        resp = self.client.get(
+            "/api/productos/costo/?sku=LUMY-COR-000037&sku=LUMY-COR-000038"
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(len(resp.data["resultados"]), 2)
 

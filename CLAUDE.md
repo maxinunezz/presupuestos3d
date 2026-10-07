@@ -497,5 +497,10 @@ compras de insumos, que van por inventory). Sirve para el resultado operativo.
   alguien no técnico.
 - No commitear sin que lo pidan. Crear commits nuevos (no `--amend`).
 - Hay un agente `review` para verificar cambios end-to-end después de implementar.
-- API REST: solo inventario (`/api/filaments`, `/api/aggregates`,
-  `/api/stock-movements`). El resto del flujo va por el admin.
+- API REST: principalmente inventario (`/api/filaments`, `/api/aggregates`,
+  `/api/stock-movements`). El resto del flujo va por el admin. Excepciones
+  puntuales para integraciones con 3darg-backend (ver `budgets/api_views.py`):
+  `POST /api/pedidos-online/` (avisos de venta online) y
+  `GET /api/productos/costo/?sku=...` (costo promedio por SKU, para que
+  3darg-backend calcule la ganancia neta por canal de venta sin tener que
+  cargar el costo a mano).
