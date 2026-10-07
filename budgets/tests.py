@@ -2,6 +2,7 @@ from datetime import timedelta
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
+from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -75,6 +76,24 @@ class ProductoCosteoTests(TestCase):
         self.assertEqual(p.margin_percent, Decimal("50.00"))
         # margen sobre el precio de venta: (1800-1200)/1800 = 33.33%
         self.assertEqual(p.margin_on_price_percent, Decimal("33.33"))
+
+    def test_sku_es_opcional_y_varios_productos_pueden_dejarlo_vacio(self):
+        # unique=True + null=True: dos productos sin SKU cargado todavía no
+        # deberían chocar entre sí (si no, cargar productos nuevos sin SKU
+        # a mano sería imposible después del primero).
+        p1 = make_producto(name="Sin SKU 1")
+        p2 = make_producto(name="Sin SKU 2")
+        self.assertIsNone(p1.sku)
+        self.assertIsNone(p2.sku)
+
+    def test_sku_duplicado_rechaza_el_guardado(self):
+        make_producto(name="Original", sku="3DARG-000001")
+        # atomic(): en Postgres, un IntegrityError deja la transacción abortada
+        # hasta hacer rollback explícito; sin este bloque, cualquier query
+        # posterior en el mismo test (incluso el tearDown) rompería.
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                make_producto(name="Duplicado", sku="3DARG-000001")
 
 
 class CanalVentaTests(TestCase):

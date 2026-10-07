@@ -722,6 +722,7 @@ class PedidoOnlineAdmin(admin.ModelAdmin):
 class ProductoAdmin(admin.ModelAdmin):
     list_display = (
         "name",
+        "sku",
         "priority",
         "diseno_listo",
         "unit_cost_display",
@@ -735,7 +736,7 @@ class ProductoAdmin(admin.ModelAdmin):
     )
     list_filter = ("is_active", "diseno_listo", "is_multicolor", "priority")
     list_editable = ("priority", "diseno_listo")
-    search_fields = ("name", "description")
+    search_fields = ("name", "description", "sku")
     inlines = (PiezaInline, ProductoAggregateLineInline, ProductoCanalPrecioInline)
     readonly_fields = ("producto_id_display", "costs_summary", "price_info", "diseno_listo_at")
     formfield_overrides = DECIMAL_LOCALIZE
@@ -761,6 +762,7 @@ class ProductoAdmin(admin.ModelAdmin):
                 "fields": (
                     "producto_id_display",
                     "name",
+                    "sku",
                     "description",
                     "priority",
                     "is_multicolor",

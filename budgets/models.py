@@ -45,6 +45,21 @@ class Producto(models.Model):
         SIN = 9, _("Sin prioridad")
 
     name = models.CharField(_("Nombre / pieza"), max_length=200)
+    sku = models.CharField(
+        _("SKU"),
+        max_length=64,
+        unique=True,
+        blank=True,
+        null=True,
+        help_text=_(
+            "Código único de catálogo, el mismo que usa este producto en la "
+            "página web y en Mercado Libre (se autogenera ahí como "
+            "'3DARG-000123', ver `Product.sku` en el backend de la web). "
+            "Cargalo a mano acá para poder ubicar rápido a qué costeo "
+            "corresponde cada venta. Opcional: dejalo vacío si el producto "
+            "todavía no se publicó en ningún canal."
+        ),
+    )
     description = models.TextField(_("Descripción"), blank=True)
 
     priority = models.PositiveSmallIntegerField(

@@ -176,6 +176,19 @@ media/           # uploads locales (.3mf/gcode) — efímero en prod
   tenerlo a mano al cargar el producto en Mercado Libre o donde haga falta.
   Migración `0038_seed_canales_venta` sembró "Mercado Libre" y "Página Web"
   (costos en 0 — el dueño carga los reales desde el admin de `CanalVenta`).
+- **`Producto.sku`**: CharField opcional (`unique=True, null=True, blank=True`
+  — `null=True` a propósito, para que varios productos sin SKU cargado
+  todavía no choquen entre sí por la unicidad). Es el mismo código que usa
+  `Product.sku` en el backend de la página web (`3darg-backend`, se
+  autogenera ahí como `3DARG-000123`) y el mismo que se manda a Mercado
+  Libre como atributo `SELLER_SKU` (ver `mercadolibre/services.py` en ese
+  repo) — cargarlo acá a mano es lo que permite, a futuro, matchear una
+  venta/publicación de cualquiera de los otros dos sistemas contra su
+  costeo acá sin depender de que el nombre del producto coincida letra por
+  letra. Visible en `list_display`/`search_fields` y en el primer fieldset
+  de `ProductoAdmin`, al lado del nombre. Hoy es solo informativo: no hay
+  ningún proceso automático en este repo que lo complete ni que lo
+  sincronice — es el dueño quien copia el SKU real al cargar el costeo.
 
 ### production
 - **Maquina**: una impresora. `is_active`, `supports_multicolor` (la Bambu Lab
