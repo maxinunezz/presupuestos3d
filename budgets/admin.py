@@ -734,7 +734,7 @@ class ProductoAdmin(admin.ModelAdmin):
         "is_active",
         "updated_at",
     )
-    list_filter = ("is_active", "diseno_listo", "is_multicolor", "priority")
+    list_filter = ("is_active", "diseno_listo", "is_multicolor", "priority", "es_producto_ecommerce")
     list_editable = ("priority", "diseno_listo")
     search_fields = ("name", "description", "sku")
     inlines = (PiezaInline, ProductoAggregateLineInline, ProductoCanalPrecioInline)
@@ -784,6 +784,29 @@ class ProductoAdmin(admin.ModelAdmin):
         ),
         (_("1. Costeo"), {"fields": ("costs_summary",)}),
         (_("2. Precio"), {"fields": ("price_info", "sale_price")}),
+        (
+            _("Sincronización con 3darg-backend (ecommerce)"),
+            {
+                "description": _(
+                    "Este Producto representa un TAMAÑO de costeo compartido por "
+                    "muchos diseños del catálogo (ej: \"cortante mediano\"), no un "
+                    "producto puntual. Si lo marcás como producto de ecommerce, al "
+                    "guardar se manda el precio y las medidas de acá a "
+                    "3darg-backend, que actualiza en bloque TODOS los productos de "
+                    "catálogo que tengan el mismo tamaño (y los vuelve a publicar "
+                    "en Mercado Libre si corresponde). Categoría, subcategoría y "
+                    "SKU NO se tocan — son del diseño puntual, no del tamaño."
+                ),
+                "fields": (
+                    "es_producto_ecommerce",
+                    "ecommerce_cutter_size",
+                    "weight_kg",
+                    "length_cm",
+                    "width_cm",
+                    "height_cm",
+                ),
+            },
+        ),
         (
             _("Archivo del modelo"),
             {
@@ -869,6 +892,65 @@ class ProductoAdmin(admin.ModelAdmin):
                 "'Gastos de venta y precio por canal' más abajo."
             )
         )
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        # Feedback del sync con 3darg-backend (ver Producto.save() /
+        # config/api_3darg.py::sync_costeo_ecommerce). sync_result queda en
+        # None si el producto no es de ecommerce o si la integración está
+        # apagada (sin API_3DARG_URL/TOKEN) — en esos casos no mostramos nada.
+        result = getattr(obj, "sync_result", None)
+        if result is None:
+            return
+        if "error" in result:
+            self.message_user(
+                request,
+                gettext(
+                    "No se pudo sincronizar con 3darg-backend: %(error)s"
+                )
+                % {"error": result["error"]},
+                level=messages.ERROR,
+            )
+            return
+
+        actualizados = result.get("actualizados", 0)
+        ml_republicados = result.get("ml_republicados", 0)
+        ml_errores = result.get("ml_errores") or []
+        if not actualizados:
+            self.message_user(
+                request,
+                gettext(
+                    "Sincronizado con 3darg-backend, pero no hay todavía ningún "
+                    "producto de catálogo con el tamaño '%(size)s'."
+                )
+                % {"size": obj.get_ecommerce_cutter_size_display()},
+                level=messages.WARNING,
+            )
+            return
+
+        mensaje = gettext(
+            "3darg-backend: se actualizaron %(actualizados)s producto(s) de "
+            "catálogo con el tamaño '%(size)s'."
+        ) % {"actualizados": actualizados, "size": obj.get_ecommerce_cutter_size_display()}
+        if ml_republicados:
+            mensaje += " " + gettext(
+                "%(cantidad)s se volvieron a publicar en Mercado Libre."
+            ) % {"cantidad": ml_republicados}
+        self.message_user(request, mensaje, level=messages.SUCCESS)
+
+        if ml_errores:
+            detalle = ", ".join(
+                f"{e.get('sku', '?')}: {e.get('error', '')}" for e in ml_errores
+            )
+            self.message_user(
+                request,
+                gettext(
+                    "Ojo: %(cantidad)s producto(s) no se pudieron volver a "
+                    "publicar en Mercado Libre: %(detalle)s"
+                )
+                % {"cantidad": len(ml_errores), "detalle": detalle},
+                level=messages.WARNING,
+            )
 
 
 # ===========================================================================

@@ -19,13 +19,48 @@ mensajes del admin priorizan claridad.
 ## Stack
 
 - **Python 3.12**, **Django 6.0.6**, **Django REST Framework 3.17**.
-- **SQLite** en local (`db.sqlite3`); **Postgres/Neon** en producción vía
-  `DATABASE_URL`.
+- **SQLite** en local (`db.sqlite3`); **Postgres en Railway** en producción vía
+  `DATABASE_URL` (migrado desde Neon el 2026-10-08 — ver "Deploy en producción"
+  abajo).
 - **whitenoise** sirve los estáticos (storage con manifest comprimido).
 - **xhtml2pdf (pisa)** para PDFs. **openpyxl** para export a Excel.
   **Chart.js** (servido local, no CDN) para los gráficos del admin.
-- Deploy en **Vercel** (serverless). `DEBUG=0` en prod; `ALLOWED_HOSTS` incluye
-  `.vercel.app`. El build debe correr `collectstatic`.
+- Deploy en **Vercel** (serverless, el servicio web — NO la base de datos).
+  `DEBUG=0` en prod; `ALLOWED_HOSTS` incluye `.vercel.app`. El build debe
+  correr `collectstatic`.
+
+## Deploy en producción
+
+El servicio web sigue en **Vercel** (`maxinunezzs-projects/presupuestos3d`,
+dominio `presupuestos3d.vercel.app`), pero la base de datos se migró de
+**Neon a Railway Postgres** el 2026-10-08 (motivo: unificar infra con
+`3darg-backend`, que también vive en Railway).
+
+- Proyecto Railway `presupuestos3d`, servicio Postgres (`postgres-ssl` como
+  template, igual que `3darg-backend`). A diferencia de ese otro proyecto,
+  este Postgres **sí tiene un TCP proxy público habilitado**
+  (`railway tcp-proxy create --port 5432`) porque Vercel está fuera de la red
+  privada de Railway y no puede usar el host interno — el `DATABASE_URL` en
+  Vercel apunta al endpoint público (`*.proxy.rlwy.net:<puerto>`), no al
+  `railway.internal`.
+- Migración ejecutada con `pg_dump`/`pg_restore` (no `dumpdata`/`loaddata`:
+  más simple para una DB completa, sin preocuparse por FKs entre apps),
+  verificada fila por fila contra Neon antes y después del corte final
+  (cero mismatches en las 41 tablas).
+- `DATABASE_URL` en Vercel repuntado de Neon a Railway vía
+  `vercel env rm/add DATABASE_URL production` + `vercel redeploy
+  <último-deploy> --target production` (preferido sobre `vercel --prod`
+  desde el checkout local, que buildearía con archivos sueltos del working
+  directory en vez del commit real).
+- **Neon queda como respaldo histórico, ya no es la fuente de verdad** — no
+  se borró, pero la app en producción ya no lee ni escribe ahí.
+- `.env.production.local` (local, gitignored) guarda el `DATABASE_URL` de
+  Neon para scripts de verificación/comparación puntuales. ⚠️ Su valor trae
+  un `&` sin comillas en el query string (`...require&channel_binding=require`)
+  — hacer `source` de este archivo en bash falla silenciosamente (el `&`
+  backgroundea la asignación, la variable nunca queda exportada). Extraer el
+  valor con `grep '^DATABASE_URL=' .env.production.local | cut -d= -f2-` en
+  vez de `source`.
 
 ## Cómo correr (IMPORTANTE)
 
@@ -195,6 +230,39 @@ media/           # uploads locales (.3mf/gcode) — efímero en prod
   `ProductoAdmin`, al lado del nombre. Hoy es solo informativo: no hay
   ningún proceso automático en este repo que lo complete ni que lo
   sincronice — es el dueño quien copia el SKU real al cargar el costeo.
+- **Sync de costeo → ecommerce** (`es_producto_ecommerce`, `ecommerce_cutter_size`,
+  `weight_kg`/`length_cm`/`width_cm`/`height_cm`): checkbox + campos para que un
+  `Producto` que representa un **tamaño de cortante compartido** (no un diseño
+  puntual — ej. "cortante mediano", el mismo precio/medidas aplica a Halloween,
+  Navidad, etc.) empuje su precio y medidas hacia `3darg-backend`, que las
+  aplica en bloque a TODOS los `Product` de catálogo con ese mismo
+  `cutter_size` (y los vuelve a publicar en Mercado Libre si corresponde).
+  - `EcommerceCutterSize` (TextChoices) usa a propósito los mismos valores
+    (`mini`/`chico`/`mediano`/`grande`/`a_medida`) que `Product.CutterSize` en
+    `3darg-backend` — es la clave literal de matching, **no es decorativo**: si
+    se agrega un tamaño nuevo, hay que sumarlo en los dos repos.
+  - `Producto.clean()` exige `ecommerce_cutter_size` si `es_producto_ecommerce`
+    está tildado (si no, `sync_costeo_ecommerce()` no sabría a qué tamaño
+    aplicar el precio).
+  - `Producto.save()` dispara `config/api_3darg.py::sync_costeo_ecommerce(self)`
+    al final (después del aviso de Slack de "diseño listo"), y guarda el
+    resultado en `self.sync_result` (atributo transitorio, NO es un campo de
+    DB) para que `ProductoAdmin.save_model()` muestre feedback inmediato
+    (`message_user`): cuántos productos se actualizaron, cuántos se volvieron
+    a publicar en Mercado Libre, y el detalle de cualquier error de ML por SKU.
+  - **A propósito NO manda `category`/`subcategory`/`sku`/`ml_category_id`** —
+    son del diseño puntual, no del tamaño; pisarlos en bloque rompería el
+    catálogo. Solo viajan precio y medidas físicas, que sí son iguales para
+    todos los diseños de un mismo tamaño.
+  - `config/api_3darg.py::sync_costeo_ecommerce()`: `POST` a
+    `{API_3DARG_URL}/api/products/costeo-sync/` con `Authorization: Token
+    {API_3DARG_TOKEN}` (token del usuario staff `integracion_presupuestos3d`
+    en `3darg-backend`). Mismo criterio "vacío = apagado, nunca rompe el
+    guardado" que `config/zapier.py`/`config/slack.py`: sin
+    `API_3DARG_URL`/`API_3DARG_TOKEN` configurados, o ante cualquier error de
+    red/API, no hace nada más que loguearlo. Ver `3darg-backend/CLAUDE.md` →
+    "Integración inversa: sync de costeo → ecommerce" para el detalle del
+    endpoint receptor.
 
 ### production
 - **Maquina**: una impresora. `is_active`, `supports_multicolor` (la Bambu Lab
@@ -473,13 +541,14 @@ compras de insumos, que van por inventory). Sirve para el resultado operativo.
 ## Gotchas
 
 - `POST /api/pedidos-online/` (ver `PedidoOnline` arriba) exige un usuario
-  staff + DRF Token de integración (`TokenAuthentication`), creado solo en
-  local por ahora (`integracion_3darg`). **En producción (Vercel/Neon) hay
-  que crear ese mismo usuario + token de nuevo** (DB distinta) y configurar
-  `PRESUPUESTOS3D_API_URL`/`PRESUPUESTOS3D_API_TOKEN` en el `.env` de
-  3darg-backend con la URL pública de Vercel + ese token nuevo — si no, el
-  aviso de venta queda apagado en prod sin romper nada (no-op silencioso,
-  mismo criterio que el resto de integraciones).
+  staff + DRF Token de integración (`TokenAuthentication`), usuario
+  `integracion_3darg`. **Activo en producción desde 2026-10-08**: el usuario
+  ya existía en la Postgres de Railway (vino en el restore desde Neon), se le
+  confirmó `is_staff=True` y se le generó un token nuevo; `3darg-backend`
+  (Railway, servicio `web`) tiene `PRESUPUESTOS3D_API_URL=https://presupuestos3d.vercel.app`
+  y `PRESUPUESTOS3D_API_TOKEN` seteados y verificados con un `POST` de prueba
+  real a este endpoint (201, registro borrado después). El aviso de venta ya
+  no es no-op en prod.
 - Activar el venv falla si no hacés `cd` al proyecto primero.
 - `ManifestStaticFilesStorage`: cualquier `.js`/`.css` nuevo necesita
   `collectstatic`. Si un JS minificado trae `//# sourceMappingURL=...` apuntando

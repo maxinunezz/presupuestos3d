@@ -125,6 +125,15 @@ SLACK_WEBHOOKS = {
     'pedido_completado': os.environ.get('SLACK_WEBHOOK_PEDIDO_COMPLETADO', ''),
 }
 
+# Integración saliente hacia 3darg-backend (ver config/api_3darg.py): sync de
+# precio/medidas de un tamaño de costeo "producto de ecommerce" hacia TODOS
+# los Product de catálogo con ese mismo cutter_size. Token de la cuenta de
+# integración dedicada (usuario staff "integracion_presupuestos3d" en
+# 3darg-backend). Vacío = integración apagada, no rompe nada (mismo criterio
+# que ZAPIER_WEBHOOKS/SLACK_WEBHOOKS de arriba).
+API_3DARG_URL = os.environ.get('API_3DARG_URL', '')
+API_3DARG_TOKEN = os.environ.get('API_3DARG_TOKEN', '')
+
 ROOT_URLCONF = 'config.urls'
 
 TEMPLATES = [
