@@ -582,13 +582,16 @@ class CanalVenta(models.Model):
         ),
     )
     costo_fijo = models.DecimalField(
-        _("Cargo fijo por venta"),
+        _("Cargo fijo por venta (default)"),
         max_digits=10,
         decimal_places=2,
         default=0,
         help_text=_(
-            "Cargo fijo que cobra el canal por cada venta, sin importar el "
-            "monto (ej: el cargo fijo de Mercado Libre en ventas de bajo monto)."
+            "Cargo fijo plano para este canal. Si cargás 'Tramos de cargo "
+            "fijo' más abajo, el sistema calcula el cargo fijo solo según "
+            "el precio de cada producto y este valor queda como respaldo "
+            "(se usa solo si el precio de un producto no cae en ningún "
+            "tramo cargado)."
         ),
     )
     costo_envio = models.DecimalField(
@@ -640,6 +643,73 @@ class CanalVenta(models.Model):
             for producto in Producto.objects.filter(is_active=True):
                 ProductoCanalPrecio.objects.get_or_create(producto=producto, canal=self)
 
+    def cargo_fijo_para_precio(self, precio) -> Decimal:
+        """Cargo fijo que corresponde a un precio de venta puntual, según
+        los `CanalCargoFijoTramo` cargados para este canal (ej: Mercado
+        Libre cobra un cargo fijo escalonado que baja o desaparece a partir
+        de cierto precio). Si no hay tramos cargados para este canal, o el
+        precio no cae en ninguno, devuelve el `costo_fijo` plano de
+        siempre — no rompe nada en los canales que no usan tramos."""
+        precio = _dec(precio)
+        tramo = (
+            self.tramos_cargo_fijo.filter(precio_desde__lte=precio)
+            .filter(
+                models.Q(precio_hasta__isnull=True)
+                | models.Q(precio_hasta__gt=precio)
+            )
+            .order_by("-precio_desde")
+            .first()
+        )
+        if tramo is not None:
+            return _dec(tramo.cargo_fijo)
+        return _dec(self.costo_fijo)
+
+
+class CanalCargoFijoTramo(models.Model):
+    """
+    Un tramo de precio con su cargo fijo correspondiente, para canales que
+    cobran el cargo fijo por venta de forma escalonada según el precio del
+    producto (ej: Mercado Libre). Varios tramos por `CanalVenta` — ver
+    `CanalVenta.cargo_fijo_para_precio()`, que elige el tramo que matchea el
+    precio de venta efectivo de cada producto.
+    """
+
+    canal = models.ForeignKey(
+        CanalVenta, on_delete=models.CASCADE, related_name="tramos_cargo_fijo"
+    )
+    precio_desde = models.DecimalField(
+        _("Precio desde"),
+        max_digits=10,
+        decimal_places=2,
+        help_text=_(
+            "Este tramo aplica a partir de este precio (incluido). Cargá "
+            "el tramo de precio más bajo con $0."
+        ),
+    )
+    precio_hasta = models.DecimalField(
+        _("Precio hasta"),
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text=_(
+            "Hasta este precio, sin incluirlo. Dejalo vacío en el último "
+            "tramo (sin techo, ej: $33.000 en adelante)."
+        ),
+    )
+    cargo_fijo = models.DecimalField(
+        _("Cargo fijo en este tramo"), max_digits=10, decimal_places=2
+    )
+
+    class Meta:
+        verbose_name = _("Tramo de cargo fijo")
+        verbose_name_plural = _("Tramos de cargo fijo")
+        ordering = ["canal", "precio_desde"]
+
+    def __str__(self):
+        hasta = f"${self.precio_hasta}" if self.precio_hasta is not None else "en adelante"
+        return f"{self.canal.nombre}: ${self.precio_desde} a {hasta} → ${self.cargo_fijo}"
+
 
 class ProductoCanalPrecio(models.Model):
     """
@@ -680,6 +750,44 @@ class ProductoCanalPrecio(models.Model):
             "costo de envío general del canal."
         ),
     )
+    comision_override = models.DecimalField(
+        _("Comisión en este producto (%)"),
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text=_(
+            "Si este producto paga una comisión distinta a la del canal "
+            "(otra categoría de Mercado Libre, por ejemplo), cargala acá. "
+            "Vacío = usa la comisión general del canal."
+        ),
+    )
+    costo_fijo_override = models.DecimalField(
+        _("Cargo fijo en este producto"),
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text=_(
+            "Si este producto paga un cargo fijo por venta distinto al del "
+            "canal (el cargo fijo de Mercado Libre es escalonado por "
+            "precio), cargalo acá. Vacío = usa el cargo fijo general del "
+            "canal."
+        ),
+    )
+    otros_costos_override = models.DecimalField(
+        _("Otros costos variables en este producto (%)"),
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text=_(
+            "Si este producto tiene otros costos variables distintos al "
+            "promedio del canal (ej: ofrecés un plan de cuotas distinto en "
+            "esta publicación), cargalo acá. Vacío = usa el valor general "
+            "del canal."
+        ),
+    )
     notas = models.CharField(_("Notas"), max_length=200, blank=True)
 
     class Meta:
@@ -712,17 +820,41 @@ class ProductoCanalPrecio(models.Model):
         return _dec(self.canal.costo_envio)
 
     @property
+    def comision_efectiva(self) -> Decimal:
+        """Comisión (%) que se usa en este canal: la propia del producto si
+        se cargó, si no la general del canal."""
+        if self.comision_override is not None:
+            return _dec(self.comision_override)
+        return _dec(self.canal.comision_percent)
+
+    @property
+    def costo_fijo_efectivo(self) -> Decimal:
+        """Cargo fijo que se usa en este canal: el propio del producto si se
+        cargó (override manual, máxima prioridad); si no, el que corresponda
+        por tramo de precio según `CanalVenta.cargo_fijo_para_precio()`
+        (que a su vez cae al `costo_fijo` plano si no hay tramos cargados)."""
+        if self.costo_fijo_override is not None:
+            return _dec(self.costo_fijo_override)
+        return self.canal.cargo_fijo_para_precio(self.precio_efectivo)
+
+    @property
+    def otros_costos_efectivos(self) -> Decimal:
+        """Otros costos variables (%) que se usan en este canal: los propios
+        del producto si se cargaron, si no los generales del canal."""
+        if self.otros_costos_override is not None:
+            return _dec(self.otros_costos_override)
+        return _dec(self.canal.otros_costos_percent)
+
+    @property
     def gasto_comision(self) -> Decimal:
         return (
-            self.precio_efectivo * _dec(self.canal.comision_percent) / Decimal("100")
+            self.precio_efectivo * self.comision_efectiva / Decimal("100")
         ).quantize(Decimal("0.01"))
 
     @property
     def gasto_otros_costos(self) -> Decimal:
         return (
-            self.precio_efectivo
-            * _dec(self.canal.otros_costos_percent)
-            / Decimal("100")
+            self.precio_efectivo * self.otros_costos_efectivos / Decimal("100")
         ).quantize(Decimal("0.01"))
 
     @property
@@ -732,7 +864,7 @@ class ProductoCanalPrecio(models.Model):
         return (
             self.gasto_comision
             + self.gasto_otros_costos
-            + _dec(self.canal.costo_fijo)
+            + self.costo_fijo_efectivo
             + self.costo_envio_efectivo
         ).quantize(Decimal("0.01"))
 

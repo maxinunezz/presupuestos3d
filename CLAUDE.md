@@ -192,25 +192,52 @@ media/           # uploads locales (.3mf/gcode) — efímero en prod
   cada canal (hoy: Mercado Libre y la página web propia) una vez descontados
   los gastos propios de venderlo ahí. `CanalVenta` (CRUD normal, admin
   propio) define el costo típico del canal: `comision_percent`, `costo_fijo`
-  (cargo fijo por venta), `costo_envio` (promedio que asume el vendedor),
-  `otros_costos_percent` (impuestos/pasarela de pago), `is_active`, `order`.
+  ("Cargo fijo por venta (default)" — ver `CanalCargoFijoTramo` abajo),
+  `costo_envio` (promedio que asume el vendedor), `otros_costos_percent`
+  (impuestos/pasarela de pago), `is_active`, `order`.
+  **`CanalCargoFijoTramo`** (inline dentro de `CanalVentaAdmin`, FK a
+  `CanalVenta`, campos `precio_desde`/`precio_hasta`/`cargo_fijo`) resuelve
+  el cargo fijo escalonado por precio de Mercado Libre sin tocar nada por
+  producto: `CanalVenta.cargo_fijo_para_precio(precio)` busca el tramo cuyo
+  rango `[precio_desde, precio_hasta)` contiene el precio (`precio_hasta`
+  vacío = sin techo, último tramo) y devuelve su `cargo_fijo`; si no hay
+  tramos cargados para el canal, o el precio no cae en ninguno, cae al
+  `costo_fijo` plano de siempre (cero cambios de comportamiento hasta que el
+  dueño cargue tramos reales — arrancan vacíos a propósito, igual que
+  `CanalVenta` arrancó en 0).
   `ProductoCanalPrecio` (inline "Gastos de venta y precio por canal" dentro
   de `ProductoAdmin`, debajo de las Piezas/Agregados) es la línea por
-  producto × canal: deja pisar el `sale_price` de ESE canal (si se deja
-  vacío, usa `Producto.sale_price`) y el `costo_envio_override` (si un
-  producto en particular pesa/mide distinto al promedio del canal). Props
-  calculadas (dinero = `@property`, no columna, mismo criterio que el resto):
-  `precio_efectivo`, `costo_envio_efectivo`, `gasto_comision`,
-  `gasto_otros_costos`, `gastos_de_venta` (total), `ganancia_neta` (sobre
-  `unit_cost_avg` del producto) y `margen_neto_percent`. Las filas se crean
-  solas, no hace falta cargarlas a mano: al guardar un `Producto` nuevo se
-  crea una fila por cada `CanalVenta` activo (`Producto.save()`), y al dar de
-  alta un canal nuevo se hace backfill de todos los productos activos que ya
-  existían (`CanalVenta.save()`). `ProductoAdmin` también muestra el `pk` del
+  producto × canal: deja pisar, para ESE producto en ESE canal, el
+  `sale_price` (si se deja vacío, usa `Producto.sale_price`),
+  `costo_envio_override`, `comision_override`, `costo_fijo_override` y
+  `otros_costos_override` (los cuatro últimos: vacío = usa el valor
+  resuelto del `CanalVenta` — para `costo_fijo_efectivo` eso ya incluye el
+  cálculo por tramos). Pensado para excepciones puntuales que los tramos NO
+  cubren (ej: una publicación de ML con un plan de cuotas distinto al
+  habitual) — **no hace falta tocar nada por default**, todo producto nuevo
+  arranca usando los tramos/promedios del canal sin que el dueño tenga que
+  cargar nada fila por fila. Props calculadas (dinero = `@property`, no
+  columna, mismo criterio que el resto): `precio_efectivo`,
+  `costo_envio_efectivo`, `comision_efectiva`, `costo_fijo_efectivo`,
+  `otros_costos_efectivos`, `gasto_comision`, `gasto_otros_costos`,
+  `gastos_de_venta` (total), `ganancia_neta` (sobre `unit_cost_avg` del
+  producto) y `margen_neto_percent` — cada `_efectivo` resuelve "el override
+  del producto si existe, si no el valor (resuelto) del `CanalVenta`" (mismo
+  patrón para los cuatro, `costo_fijo_efectivo` es el único que además
+  consulta tramos antes de caer al plano). Las filas se crean solas, no hace
+  falta cargarlas a mano: al guardar un `Producto` nuevo se crea una fila por cada `CanalVenta`
+  activo (`Producto.save()`), y al dar de alta un canal nuevo se hace
+  backfill de todos los productos activos que ya existían
+  (`CanalVenta.save()`). `ProductoAdmin` también muestra el `pk` del
   producto como campo de solo lectura ("ID interno") arriba de todo, para
   tenerlo a mano al cargar el producto en Mercado Libre o donde haga falta.
   Migración `0038_seed_canales_venta` sembró "Mercado Libre" y "Página Web"
-  (costos en 0 — el dueño carga los reales desde el admin de `CanalVenta`).
+  (costos en 0 — el dueño carga los reales desde el admin de `CanalVenta`);
+  migración `0042_agregar_overrides_comision_cargo_fijo_otros_costos` sumó
+  los tres overrides nuevos (comisión, cargo fijo, otros costos) al patrón
+  que ya existía para `costo_envio_override`; migración
+  `0043_agregar_tramos_cargo_fijo` creó `CanalCargoFijoTramo` (sin seed —
+  el dueño carga los tramos reales de su cuenta de ML desde el admin).
 - **`Producto.sku`**: CharField opcional (`unique=True, null=True, blank=True`
   — `null=True` a propósito, para que varios productos sin SKU cargado
   todavía no choquen entre sí por la unicidad). Es el mismo código que usa

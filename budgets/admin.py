@@ -17,6 +17,7 @@ from production.models import HistorialImpresion, ProductionJob
 
 from .metrics import PERIODS, build_metrics, export_xlsx, template_context
 from .models import (
+    CanalCargoFijoTramo,
     CanalVenta,
     DisenoNoListoError,
     Metricas,
@@ -570,8 +571,10 @@ class ProductoCanalPrecioInline(admin.TabularInline):
     """Gastos de venta y precio por canal (Mercado Libre, página web, etc.)
     de un producto. Las filas se crean solas -una por canal activo- al
     guardar el producto o al dar de alta un canal nuevo (ver
-    `Producto.save()` / `CanalVenta.save()`); acá solo se pisan el precio de
-    venta y/o el costo de envío de ESTE producto en ese canal."""
+    `Producto.save()` / `CanalVenta.save()`); acá se pueden pisar, por
+    producto, el precio de venta, el costo de envío, la comisión, el cargo
+    fijo y/u otros costos variables de ESTE producto en ese canal. Todos
+    vacíos por default = se usa el valor general del canal."""
 
     model = ProductoCanalPrecio
     verbose_name = _("canal de venta")
@@ -582,6 +585,9 @@ class ProductoCanalPrecioInline(admin.TabularInline):
         "canal",
         "sale_price",
         "costo_envio_override",
+        "comision_override",
+        "costo_fijo_override",
+        "otros_costos_override",
         "gastos_de_venta_display",
         "ganancia_neta_display",
         "margen_neto_display",
@@ -606,6 +612,20 @@ class ProductoCanalPrecioInline(admin.TabularInline):
         return f"{obj.margen_neto_percent}%" if obj.pk else "-"
 
 
+class CanalCargoFijoTramoInline(admin.TabularInline):
+    """Tramos de cargo fijo por precio para este canal (ej: Mercado Libre
+    cobra un cargo fijo distinto según el precio de venta). Si se cargan
+    tramos acá, `ProductoCanalPrecio.costo_fijo_efectivo` usa el tramo que
+    matchea el precio de cada producto en vez del 'Cargo fijo por venta
+    (default)' de más arriba — ver `CanalVenta.cargo_fijo_para_precio()`."""
+
+    model = CanalCargoFijoTramo
+    extra = 0
+    formfield_overrides = DECIMAL_LOCALIZE
+    fields = ("precio_desde", "precio_hasta", "cargo_fijo")
+    ordering = ("precio_desde",)
+
+
 @admin.register(CanalVenta)
 class CanalVentaAdmin(admin.ModelAdmin):
     list_display = (
@@ -627,6 +647,7 @@ class CanalVentaAdmin(admin.ModelAdmin):
     )
     ordering = ("order", "nombre")
     formfield_overrides = DECIMAL_LOCALIZE
+    inlines = (CanalCargoFijoTramoInline,)
 
 
 @admin.register(Socio)
