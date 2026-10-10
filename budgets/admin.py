@@ -806,29 +806,6 @@ class ProductoAdmin(admin.ModelAdmin):
         (_("1. Costeo"), {"fields": ("costs_summary",)}),
         (_("2. Precio"), {"fields": ("price_info", "sale_price")}),
         (
-            _("Sincronización con 3darg-backend (ecommerce)"),
-            {
-                "description": _(
-                    "Este Producto representa un TAMAÑO de costeo compartido por "
-                    "muchos diseños del catálogo (ej: \"cortante mediano\"), no un "
-                    "producto puntual. Si lo marcás como producto de ecommerce, al "
-                    "guardar se manda el precio y las medidas de acá a "
-                    "3darg-backend, que actualiza en bloque TODOS los productos de "
-                    "catálogo que tengan el mismo tamaño (y los vuelve a publicar "
-                    "en Mercado Libre si corresponde). Categoría, subcategoría y "
-                    "SKU NO se tocan — son del diseño puntual, no del tamaño."
-                ),
-                "fields": (
-                    "es_producto_ecommerce",
-                    "ecommerce_cutter_size",
-                    "weight_kg",
-                    "length_cm",
-                    "width_cm",
-                    "height_cm",
-                ),
-            },
-        ),
-        (
             _("Archivo del modelo"),
             {
                 "classes": ("collapse",),
@@ -840,6 +817,57 @@ class ProductoAdmin(admin.ModelAdmin):
             {"fields": ("diseno_listo", "diseno_listo_at")},
         ),
     )
+
+    def get_fieldsets(self, request, obj=None):
+        # La mayoría de los productos son a pedido (no de ecommerce), así que
+        # esta sección arranca colapsada y solo pide lo mínimo para activar
+        # la sincronización (tilde + tamaño). Las medidas (peso/largo/ancho/
+        # alto) recién aparecen DESPUÉS de guardar con el tilde activo: si las
+        # mostráramos antes, `ecommerce_cutter_size` (que es obligatorio en el
+        # mismo guardado que activa el tilde, ver `Producto.clean()`) quedaría
+        # oculto y el guardado rebotaría sin poder corregirse desde acá.
+        es_ecommerce = bool(obj and obj.es_producto_ecommerce)
+
+        ecommerce_fields = ["es_producto_ecommerce", "ecommerce_template_name"]
+        description = _(
+            "Este Producto representa un presupuesto de costeo compartido "
+            "por muchos diseños del catálogo (ej: \"Cortante 4cm\", "
+            "\"Shaker grande\"), no un producto puntual. Si lo marcás como "
+            "producto de ecommerce, al guardar se crea o actualiza del lado "
+            "de 3darg-backend el template de costo con este nombre, y se "
+            "republican en Mercado Libre los productos ya vinculados a ese "
+            "template (si corresponde). Qué diseños/variantes quedan "
+            "vinculados a cada template se elige a mano desde el admin de "
+            "3darg-backend — categoría, subcategoría y SKU NO se tocan "
+            "desde acá."
+        )
+        if es_ecommerce:
+            ecommerce_fields += ["weight_kg", "length_cm", "width_cm", "height_cm"]
+            ecommerce_classes = ()
+        else:
+            description += " " + _(
+                "Tildá la opción, poné un nombre y guardá: recién ahí "
+                "aparecen acá las medidas (peso y dimensiones) para completar."
+            )
+            ecommerce_classes = ("collapse",)
+
+        ecommerce_fieldset = (
+            _("Sincronización con 3darg-backend (ecommerce)"),
+            {
+                "description": description,
+                "fields": tuple(ecommerce_fields),
+                "classes": ecommerce_classes,
+            },
+        )
+
+        fieldsets = list(self.fieldsets)
+        # Insertarlo en el mismo lugar que antes: justo después de "2. Precio".
+        insert_at = next(
+            i for i, (_title, opts) in enumerate(fieldsets)
+            if opts["fields"] == ("price_info", "sale_price")
+        ) + 1
+        fieldsets.insert(insert_at, ecommerce_fieldset)
+        return fieldsets
 
     @admin.display(description=_("ID interno"))
     def producto_id_display(self, obj):
@@ -941,18 +969,20 @@ class ProductoAdmin(admin.ModelAdmin):
             self.message_user(
                 request,
                 gettext(
-                    "Sincronizado con 3darg-backend, pero no hay todavía ningún "
-                    "producto de catálogo con el tamaño '%(size)s'."
+                    "Sincronizado con 3darg-backend, pero todavía no hay "
+                    "ninguna variante de catálogo vinculada al template "
+                    "'%(nombre)s' (se vincula a mano desde el admin de "
+                    "3darg-backend)."
                 )
-                % {"size": obj.get_ecommerce_cutter_size_display()},
+                % {"nombre": obj.ecommerce_template_name},
                 level=messages.WARNING,
             )
             return
 
         mensaje = gettext(
             "3darg-backend: se actualizaron %(actualizados)s producto(s) de "
-            "catálogo con el tamaño '%(size)s'."
-        ) % {"actualizados": actualizados, "size": obj.get_ecommerce_cutter_size_display()}
+            "catálogo vinculados al template '%(nombre)s'."
+        ) % {"actualizados": actualizados, "nombre": obj.ecommerce_template_name}
         if ml_republicados:
             mensaje += " " + gettext(
                 "%(cantidad)s se volvieron a publicar en Mercado Libre."

@@ -1,11 +1,14 @@
 """Sincronización de costeo → 3darg-backend para productos de ecommerce.
 
-Cuando un `Producto` de costeo representa un TAMAÑO compartido por muchos
-diseños del catálogo (ver `Producto.es_producto_ecommerce`/
-`ecommerce_cutter_size` en budgets/models.py — ej: "cortante mediano"), este
-módulo le avisa a 3darg-backend para que actualice en bloque el precio y las
-medidas de TODOS los productos de catálogo que tengan ese mismo tamaño, y
-los vuelva a publicar en Mercado Libre si corresponde.
+Cuando un `Producto` de costeo representa un presupuesto compartido por
+muchos diseños del catálogo (ver `Producto.es_producto_ecommerce`/
+`ecommerce_template_name` en budgets/models.py — ej: "Cortante 4cm", "Shaker
+grande"), este módulo le avisa a 3darg-backend para que cree o actualice el
+`CostTemplate` correspondiente (identificado por una referencia estable, no
+por el nombre — ver `external_ref` más abajo) con el precio y las medidas de
+acá, y republique en Mercado Libre los productos de catálogo que ya estén
+vinculados a ese template (vínculo que se arma a mano del otro lado, en el
+admin de 3darg-backend).
 
 Mismo criterio "vacío = apagado, nunca rompe el guardado" que
 `config/zapier.py` y `config/slack.py`: sin `API_3DARG_URL`/`API_3DARG_TOKEN`
@@ -27,10 +30,15 @@ TIMEOUT = 10
 
 
 def sync_costeo_ecommerce(producto) -> dict | None:
-    """POSTea a 3darg-backend el precio/medidas del tamaño de costeo de
-    `producto` para que actualice en bloque todos los productos de catálogo
-    con ese mismo `cutter_size` (y los vuelva a publicar en Mercado Libre si
-    corresponde).
+    """POSTea a 3darg-backend el precio/medidas del template de costeo de
+    `producto` para que cree/actualice el `CostTemplate` correspondiente y
+    propague el precio a todas las variantes de catálogo ya vinculadas a
+    ese template (y las vuelva a publicar en Mercado Libre si corresponde).
+
+    `external_ref` es la clave real de upsert del lado de 3darg-backend —
+    estable en base al `pk` de este `Producto`, así que renombrar el
+    template (`ecommerce_template_name`) más adelante no rompe el link ya
+    hecho ni duplica el template allá.
 
     Devuelve el dict de respuesta de 3darg-backend (`{"actualizados":...,
     "ml_republicados":..., "ml_errores":[...]}`), o `{"error": "..."}` si
@@ -46,7 +54,8 @@ def sync_costeo_ecommerce(producto) -> dict | None:
         return None
 
     payload = {
-        "cutter_size": producto.ecommerce_cutter_size,
+        "external_ref": f"presupuestos3d:{producto.pk}",
+        "nombre": producto.ecommerce_template_name,
         "sale_price": str(producto.sale_price),
     }
     for field in ("weight_kg", "length_cm", "width_cm", "height_cm"):

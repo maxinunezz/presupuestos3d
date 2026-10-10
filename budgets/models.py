@@ -45,18 +45,6 @@ class Producto(models.Model):
         BAJA = 3, _("Baja")
         SIN = 9, _("Sin prioridad")
 
-    class EcommerceCutterSize(models.TextChoices):
-        """Mismos valores (string) que `Product.CutterSize` en 3darg-backend
-        — no es decorativo, es la clave que usa `CosteoSyncAPIView` del otro
-        lado para encontrar qué productos de catálogo les toca este precio/
-        medidas. Si se agrega una opción nueva acá, hay que sumarla también
-        allá (`products/models.py::Product.CutterSize`)."""
-        MINI = "mini", _("Mini")
-        CHICO = "chico", _("Chico")
-        MEDIANO = "mediano", _("Mediano")
-        GRANDE = "grande", _("Grande")
-        A_MEDIDA = "a_medida", _("A medida")
-
     name = models.CharField(_("Nombre / pieza"), max_length=200)
     sku = models.CharField(
         _("SKU"),
@@ -138,36 +126,42 @@ class Producto(models.Model):
     )
 
     # --- Ecommerce: sincronización con 3darg-backend ---
-    # Este `Producto` representa el costeo de un TAMAÑO (ej: "cortante
-    # mediano"), compartido por muchos diseños distintos del catálogo de
-    # 3darg-backend — no un producto puntual. Ver `save()` más abajo y
+    # Este `Producto` representa el costeo de un "presupuesto" compartido
+    # (ej: "Cortante 4cm", "Shaker grande"), NO un diseño puntual del
+    # catálogo. Del otro lado, en 3darg-backend, esto crea/actualiza un
+    # `CostTemplate` (identificado por una referencia estable, no por el
+    # nombre — ver `external_ref` más abajo) al que después se enganchan,
+    # a mano desde el admin de 3darg-backend, todos los `ProductVariant`
+    # que comparten ese presupuesto. Ver `save()` más abajo y
     # `config/api_3darg.py::sync_costeo_ecommerce()`.
     es_producto_ecommerce = models.BooleanField(
         _("Es producto de ecommerce"),
         default=False,
         help_text=_(
-            "Marcá esto cuando este costeo representa un tamaño compartido "
-            "por muchos diseños del catálogo de 3darg-backend (ej: \"cortante "
-            "mediano\", no un diseño puntual). Al guardar con esto activo, se "
-            "le avisa a 3darg-backend para que actualice en bloque el precio "
-            "y las medidas de TODOS los productos de catálogo que tengan "
-            "cargado ese mismo tamaño ('Tamaño (3darg-backend)' abajo) — y, "
-            "si ya están publicados en Mercado Libre, los vuelve a publicar "
-            "con los valores nuevos, sin tener que entrar al otro admin. "
-            "Categoría, SKU y el resto de los datos propios de cada diseño "
-            "NO se tocan: eso sigue siendo manual en 3darg-backend."
+            "Marcá esto cuando este costeo representa un presupuesto "
+            "compartido por muchos diseños del catálogo de 3darg-backend "
+            "(ej: \"Cortante 4cm\", \"Shaker grande\"), no un diseño puntual. "
+            "Al guardar con esto activo, se le avisa a 3darg-backend para "
+            "que cree o actualice el template de costo correspondiente "
+            "('Nombre del template' abajo) con el precio y las medidas de "
+            "acá — y republique en Mercado Libre los productos de catálogo "
+            "que ya estén vinculados a ese template. Qué diseños/variantes "
+            "quedan vinculados a cada template se elige a mano desde el "
+            "admin de 3darg-backend, no se toca desde acá."
         ),
     )
-    ecommerce_cutter_size = models.CharField(
-        _("Tamaño (3darg-backend)"),
-        max_length=20,
-        choices=EcommerceCutterSize.choices,
+    ecommerce_template_name = models.CharField(
+        _("Nombre del template (3darg-backend)"),
+        max_length=100,
         blank=True,
         help_text=_(
-            "Obligatorio si 'Es producto de ecommerce' está marcado — es la "
-            "clave que usa 3darg-backend para saber a qué productos de "
-            "catálogo les toca este precio/medidas (tiene que ser el mismo "
-            "tamaño que tengan cargado ahí en 'Tamaño de cortante')."
+            "Obligatorio si 'Es producto de ecommerce' está marcado. Nombre "
+            "libre del template de costo compartido (ej: \"Cortante 4cm\", "
+            "\"Shaker grande\") — no hace falta que coincida con ningún "
+            "valor fijo. La sincronización usa una referencia interna "
+            "estable (el ID de este Producto) para encontrar el template "
+            "del lado de 3darg-backend, así que renombrarlo acá más "
+            "adelante no rompe el link ya hecho."
         ),
     )
     weight_kg = models.DecimalField(
@@ -247,11 +241,12 @@ class Producto(models.Model):
 
     def clean(self):
         super().clean()
-        if self.es_producto_ecommerce and not self.ecommerce_cutter_size:
+        if self.es_producto_ecommerce and not self.ecommerce_template_name:
             raise ValidationError({
-                "ecommerce_cutter_size": _(
-                    "Elegí un tamaño para poder sincronizar el precio/medidas "
-                    "con 3darg-backend."
+                "ecommerce_template_name": _(
+                    "Elegí un nombre para el template de costo compartido, "
+                    "así se puede sincronizar el precio/medidas con "
+                    "3darg-backend."
                 )
             })
 
@@ -292,11 +287,11 @@ class Producto(models.Model):
             )
 
         # Sincronización con 3darg-backend (ver `clean()`: con 'es_producto_ecommerce'
-        # activo, 'ecommerce_cutter_size' siempre está cargado acá). `sync_result`
+        # activo, 'ecommerce_template_name' siempre está cargado acá). `sync_result`
         # NO es un campo de DB — es un atributo transitorio para que
         # `ProductoAdmin.save_model()` muestre feedback inmediato de qué pasó.
         self.sync_result = None
-        if self.es_producto_ecommerce and self.ecommerce_cutter_size:
+        if self.es_producto_ecommerce and self.ecommerce_template_name:
             from config.api_3darg import sync_costeo_ecommerce
 
             self.sync_result = sync_costeo_ecommerce(self)

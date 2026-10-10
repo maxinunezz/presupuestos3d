@@ -126,11 +126,13 @@ SLACK_WEBHOOKS = {
 }
 
 # Integración saliente hacia 3darg-backend (ver config/api_3darg.py): sync de
-# precio/medidas de un tamaño de costeo "producto de ecommerce" hacia TODOS
-# los Product de catálogo con ese mismo cutter_size. Token de la cuenta de
-# integración dedicada (usuario staff "integracion_presupuestos3d" en
-# 3darg-backend). Vacío = integración apagada, no rompe nada (mismo criterio
-# que ZAPIER_WEBHOOKS/SLACK_WEBHOOKS de arriba).
+# precio/medidas de un presupuesto de costeo "producto de ecommerce" hacia el
+# CostTemplate correspondiente (identificado por una referencia estable, no
+# por el nombre), que propaga a todas las variantes de catálogo ya
+# vinculadas a ese template. Token de la cuenta de integración dedicada
+# (usuario staff "integracion_presupuestos3d" en 3darg-backend). Vacío =
+# integración apagada, no rompe nada (mismo criterio que
+# ZAPIER_WEBHOOKS/SLACK_WEBHOOKS de arriba).
 API_3DARG_URL = os.environ.get('API_3DARG_URL', '')
 API_3DARG_TOKEN = os.environ.get('API_3DARG_TOKEN', '')
 
