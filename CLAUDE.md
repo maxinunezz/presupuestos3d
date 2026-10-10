@@ -257,39 +257,52 @@ media/           # uploads locales (.3mf/gcode) — efímero en prod
   `ProductoAdmin`, al lado del nombre. Hoy es solo informativo: no hay
   ningún proceso automático en este repo que lo complete ni que lo
   sincronice — es el dueño quien copia el SKU real al cargar el costeo.
-- **Sync de costeo → ecommerce** (`es_producto_ecommerce`, `ecommerce_cutter_size`,
-  `weight_kg`/`length_cm`/`width_cm`/`height_cm`): checkbox + campos para que un
-  `Producto` que representa un **tamaño de cortante compartido** (no un diseño
-  puntual — ej. "cortante mediano", el mismo precio/medidas aplica a Halloween,
-  Navidad, etc.) empuje su precio y medidas hacia `3darg-backend`, que las
-  aplica en bloque a TODOS los `Product` de catálogo con ese mismo
-  `cutter_size` (y los vuelve a publicar en Mercado Libre si corresponde).
-  - `EcommerceCutterSize` (TextChoices) usa a propósito los mismos valores
-    (`mini`/`chico`/`mediano`/`grande`/`a_medida`) que `Product.CutterSize` en
-    `3darg-backend` — es la clave literal de matching, **no es decorativo**: si
-    se agrega un tamaño nuevo, hay que sumarlo en los dos repos.
-  - `Producto.clean()` exige `ecommerce_cutter_size` si `es_producto_ecommerce`
-    está tildado (si no, `sync_costeo_ecommerce()` no sabría a qué tamaño
-    aplicar el precio).
+- **Sync de costeo → ecommerce** (`es_producto_ecommerce`, `ecommerce_template_name`,
+  `sale_price`, `weight_kg`/`length_cm`/`width_cm`/`height_cm`): checkbox + campos
+  para que un `Producto` que representa un **presupuesto de costeo compartido**
+  por muchos diseños (no un diseño puntual — ej. "Cortante mediano", el mismo
+  precio/medidas aplica a Halloween, Navidad, etc.) empuje su precio y medidas
+  hacia `3darg-backend`, que las propaga a todas las `ProductVariant` de
+  catálogo ya vinculadas a ese presupuesto (y las vuelve a publicar en Mercado
+  Libre si corresponde). Reemplaza al mecanismo viejo por `cutter_size`
+  (enum fijo de 5 tamaños) — `ecommerce_template_name` es texto libre, sin
+  límite de cantidad ni valores predefinidos.
+  - `ecommerce_template_name` (CharField libre): nombre a mostrar del
+    `CostTemplate` del lado de `3darg-backend` — puramente descriptivo, se
+    puede renombrar en cualquier momento sin romper el vínculo ya armado allá
+    (ver `external_ref` abajo).
+  - `Producto.clean()` exige `ecommerce_template_name` si `es_producto_ecommerce`
+    está tildado (si no, `sync_costeo_ecommerce()` no tendría nombre para
+    mostrar del lado de 3darg-backend).
   - `Producto.save()` dispara `config/api_3darg.py::sync_costeo_ecommerce(self)`
     al final (después del aviso de Slack de "diseño listo"), y guarda el
     resultado en `self.sync_result` (atributo transitorio, NO es un campo de
     DB) para que `ProductoAdmin.save_model()` muestre feedback inmediato
-    (`message_user`): cuántos productos se actualizaron, cuántos se volvieron
+    (`message_user`): cuántas variantes se actualizaron, cuántas se volvieron
     a publicar en Mercado Libre, y el detalle de cualquier error de ML por SKU.
   - **A propósito NO manda `category`/`subcategory`/`sku`/`ml_category_id`** —
-    son del diseño puntual, no del tamaño; pisarlos en bloque rompería el
-    catálogo. Solo viajan precio y medidas físicas, que sí son iguales para
-    todos los diseños de un mismo tamaño.
+    son del diseño puntual, no del presupuesto compartido; pisarlos en bloque
+    rompería el catálogo. Solo viajan precio y medidas físicas, que sí son
+    iguales para todos los diseños que comparten el mismo presupuesto.
   - `config/api_3darg.py::sync_costeo_ecommerce()`: `POST` a
-    `{API_3DARG_URL}/api/products/costeo-sync/` con `Authorization: Token
-    {API_3DARG_TOKEN}` (token del usuario staff `integracion_presupuestos3d`
-    en `3darg-backend`). Mismo criterio "vacío = apagado, nunca rompe el
-    guardado" que `config/zapier.py`/`config/slack.py`: sin
+    `{API_3DARG_URL}/api/products/costeo-sync/` con
+    `{"external_ref": f"presupuestos3d:{producto.pk}", "nombre":
+    producto.ecommerce_template_name, "sale_price": ...}` (+ medidas si están
+    cargadas) y `Authorization: Token {API_3DARG_TOKEN}` (token del usuario
+    staff `integracion_presupuestos3d` en `3darg-backend`). **`external_ref`,
+    no el nombre, es la clave real de upsert** del `CostTemplate` allá — se
+    arma a partir del `pk` de este `Producto`, así que renombrar
+    `ecommerce_template_name` después no rompe el link ya hecho ni duplica el
+    template. Mismo criterio "vacío = apagado, nunca rompe el guardado" que
+    `config/zapier.py`/`config/slack.py`: sin
     `API_3DARG_URL`/`API_3DARG_TOKEN` configurados, o ante cualquier error de
-    red/API, no hace nada más que loguearlo. Ver `3darg-backend/CLAUDE.md` →
-    "Integración inversa: sync de costeo → ecommerce" para el detalle del
-    endpoint receptor.
+    red/API, no hace nada más que loguearlo.
+  - **El sync NUNCA crea productos de catálogo nuevos** y, si el `CostTemplate`
+    recién se creó (primer sync de un presupuesto nuevo), no actualiza ninguna
+    variante hasta que alguien lo vincule a mano del otro lado — ver
+    `3darg-backend/CLAUDE.md` → "Integración inversa: sync de costeo →
+    ecommerce" para el detalle del endpoint receptor y de esa vinculación
+    manual (`ProductVariant.cost_template`, acción "Asignar template de costo").
 
 ### production
 - **Maquina**: una impresora. `is_active`, `supports_multicolor` (la Bambu Lab
