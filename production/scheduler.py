@@ -241,7 +241,7 @@ def material_forecast(now: datetime = None) -> dict:
         )
         .select_related("producto", "pieza")
         .prefetch_related(
-            "producto__piezas__filament_lines__filament",
+            "producto__producto_piezas__pieza__filament_lines__filament",
             "producto__aggregate_lines__aggregate",
             "pieza__filament_lines__filament",
         )

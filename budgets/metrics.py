@@ -102,7 +102,7 @@ def _approved_in_range(start, end):
         .exclude(status=Presupuesto.Status.CANCELLED)
         .exclude(para_stock=True)
         .prefetch_related(
-            "items__producto__piezas__filament_lines__filament",
+            "items__producto__producto_piezas__pieza__filament_lines__filament",
             "items__producto__aggregate_lines__aggregate",
         )
     )
@@ -199,9 +199,10 @@ def build_metrics(period: str, now: datetime = None) -> dict:
             cost_machine += qty * producto.machine_cost_avg
             cost_machine_hours += qty * producto.total_machine_hours_avg
             cost_aggregates += qty * producto.aggregate_cost
-            for pieza in producto.piezas.all():
+            for pp in producto.producto_piezas.select_related("pieza").all():
+                pieza = pp.pieza
                 ppg = pieza.pieces_per_gcode or 1
-                units = pieza.units_needed or 0
+                units = pp.units_needed or 0
                 for fline in pieza.filament_lines.all():
                     avg_cost_one = fline.line_cost / ppg * units
                     fil_money[str(fline.filament)] += qty * avg_cost_one
@@ -349,11 +350,26 @@ def build_metrics(period: str, now: datetime = None) -> dict:
         ),
         ZERO,
     )
-    for pieza in Pieza.objects.filter(stock_quantity__gt=0).select_related("producto"):
+    for pieza in Pieza.objects.filter(stock_quantity__gt=0).prefetch_related(
+        "producto_piezas__producto"
+    ):
         ppg = pieza.pieces_per_gcode or 1
         material_unit = pieza.material_cost_per_run / ppg
         hours_unit = (Decimal(pieza.print_time_minutes or 0) / Decimal("60")) / ppg
-        machine_unit = hours_unit * pieza.producto.machine_cost_per_hour
+        # Una pieza de catálogo puede usarse en 0, 1 o varios productos, cada
+        # uno con su propio costo de máquina ($/h). Para esta foto de
+        # inventario (no hay un producto "dueño" único) se promedia el
+        # machine_cost_per_hour de todos los productos que la usan; si todavía
+        # no la usa ningún producto, el componente de máquina queda en 0 (la
+        # pieza sigue valuándose por su material).
+        productos = [pp.producto for pp in pieza.producto_piezas.all()]
+        if productos:
+            machine_cost_per_hour = sum(
+                (p.machine_cost_per_hour for p in productos), ZERO
+            ) / len(productos)
+        else:
+            machine_cost_per_hour = ZERO
+        machine_unit = hours_unit * machine_cost_per_hour
         valor_inv_terminados += pieza.stock_quantity * (material_unit + machine_unit)
     valor_inv_total = valor_inv_materia_prima + valor_inv_terminados
 

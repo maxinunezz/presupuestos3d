@@ -119,11 +119,32 @@ media/           # uploads locales (.3mf/gcode) — efímero en prod
   Props: `total_filament_grams`, `total_machine_hours`, `material_cost`,
   `aggregate_cost`, `machine_cost`, `labor_cost`, `unit_cost`, `unit_price`,
   `aggregated_filament()`.
-- **Pieza**: una pieza física del producto. `units_needed` (por producto),
-  `pieces_per_gcode` (cuántas salen por corrida), `print_time_hours` (por
-  corrida), `requires_ams` (auto si >1 línea de filamento), `stock_quantity`
-  (unidades ya impresas en stock). `gcode_runs = ceil(units_needed/ppg)`;
-  filamento y horas se multiplican por las corridas.
+- **Pieza**: ítem de **catálogo reutilizable entre Productos** (ej. una base
+  de llavero que se reimprime igual para 10 diseños distintos) — ya NO tiene
+  FK a un `Producto` único. Campos "por corrida de gcode" (no dependen de qué
+  producto la usa): `pieces_per_gcode` (cuántas salen por corrida),
+  `print_time_minutes` (minutos de máquina por corrida), `requires_ams` (auto
+  si >1 línea de filamento), `stock_quantity` (unidades ya impresas — pool
+  **compartido**: sirve para cualquier producto que use la pieza). Props
+  "por corrida": `filament_grams_per_run`, `machine_hours_per_run`,
+  `material_cost_per_run`.
+- **ProductoPieza**: cuántas unidades de una `Pieza` lleva UN `Producto`
+  puntual (`units_needed`, `order`) — reemplaza al viejo `Pieza.units_needed`,
+  porque ese número es "por producto" (la misma pieza puede llevar 3 unidades
+  en un producto y 1 sola en otro), no "por pieza". FK `pieza` con
+  `on_delete=PROTECT` (no se puede borrar una Pieza todavía usada por algún
+  producto); FK `producto` con `CASCADE`. `UniqueConstraint(producto, pieza)`.
+  Props "por producto" (dependen de `units_needed`): `gcode_runs =
+  ceil(units_needed/ppg)`, `filament_grams`, `machine_hours`, `material_cost`
+  (y variantes `_avg`) — multiplican los valores "por corrida" de `Pieza` por
+  las corridas que hacen falta para ESTE producto.
+- En el admin: el inline de Piezas dentro de `Producto` usa
+  `autocomplete_fields` sobre `pieza` — buscás una pieza ya cargada por
+  nombre (con el ícono "+" nativo de Django al lado para crear una nueva sin
+  salir del producto) en vez de estar obligado a crear una pieza de cero cada
+  vez. "Piezas" es un catálogo visible en el menú principal, con columna
+  "Usada en" (qué productos la usan) y un inline de solo lectura con el mismo
+  detalle.
 - **PiezaFilamentLine** (`grams_used` por corrida, `unit_cost` congelado) /
   **ProductoAggregateLine** (`quantity`, `unit_cost` congelado).
   `stock_quantity` / `min_stock`: **stock de productos terminados** (armados,

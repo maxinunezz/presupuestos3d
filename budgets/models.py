@@ -318,14 +318,16 @@ class Producto(models.Model):
     def total_filament_grams(self) -> Decimal:
         """Gramos de filamento de UN producto: suma de todas sus piezas."""
         return sum(
-            (pieza.filament_grams for pieza in self.piezas.all()), Decimal("0")
+            (pp.filament_grams for pp in self.producto_piezas.select_related("pieza").all()),
+            Decimal("0"),
         ).quantize(Decimal("0.01"))
 
     @property
     def total_machine_hours(self) -> Decimal:
         """Horas de máquina de UN producto: suma de todas sus piezas."""
         return sum(
-            (pieza.machine_hours for pieza in self.piezas.all()), Decimal("0")
+            (pp.machine_hours for pp in self.producto_piezas.select_related("pieza").all()),
+            Decimal("0"),
         ).quantize(Decimal("0.01"))
 
     @property
@@ -340,13 +342,17 @@ class Producto(models.Model):
     @property
     def needs_ams(self) -> bool:
         """True si alguna pieza del producto necesita AMS (multicolor)."""
-        return any(pieza.requires_ams for pieza in self.piezas.all())
+        return any(
+            pp.pieza.requires_ams
+            for pp in self.producto_piezas.select_related("pieza").all()
+        )
 
     @property
     def material_cost(self) -> Decimal:
         """Costo de filamento de UN producto, sin merma (suma de las piezas)."""
         return sum(
-            (pieza.material_cost for pieza in self.piezas.all()), Decimal("0")
+            (pp.material_cost for pp in self.producto_piezas.select_related("pieza").all()),
+            Decimal("0"),
         ).quantize(Decimal("0.01"))
 
     @property
@@ -404,20 +410,23 @@ class Producto(models.Model):
     @property
     def total_filament_grams_avg(self) -> Decimal:
         return sum(
-            (pieza.filament_grams_avg for pieza in self.piezas.all()), Decimal("0")
+            (pp.filament_grams_avg for pp in self.producto_piezas.select_related("pieza").all()),
+            Decimal("0"),
         ).quantize(Decimal("0.01"))
 
     @property
     def total_machine_hours_avg(self) -> Decimal:
         return sum(
-            (pieza.machine_hours_avg for pieza in self.piezas.all()), Decimal("0")
+            (pp.machine_hours_avg for pp in self.producto_piezas.select_related("pieza").all()),
+            Decimal("0"),
         ).quantize(Decimal("0.01"))
 
     @property
     def material_cost_avg(self) -> Decimal:
         """Costo de filamento promedio de UN producto, sin merma."""
         return sum(
-            (pieza.material_cost_avg for pieza in self.piezas.all()), Decimal("0")
+            (pp.material_cost_avg for pp in self.producto_piezas.select_related("pieza").all()),
+            Decimal("0"),
         ).quantize(Decimal("0.01"))
 
     @property
@@ -482,9 +491,9 @@ class Producto(models.Model):
 
         grams = defaultdict(lambda: Decimal("0"))
         objs = {}
-        for pieza in self.piezas.all():
-            runs = pieza.gcode_runs
-            for line in pieza.filament_lines.all():
+        for pp in self.producto_piezas.select_related("pieza").all():
+            runs = pp.gcode_runs
+            for line in pp.pieza.filament_lines.all():
                 grams[line.filament_id] += _dec(line.grams_used) * runs
                 objs[line.filament_id] = line.filament
         return [(objs[fid], total) for fid, total in grams.items()]
@@ -884,26 +893,18 @@ class ProductoCanalPrecio(models.Model):
 
 class Pieza(models.Model):
     """
-    Una pieza física que compone un Producto. Un producto puede necesitar
-    varias piezas (ej. una maceta = base + tapa). Cada pieza tiene sus propias
-    líneas de filamento y sus horas de máquina, cargadas POR CORRIDA DE GCODE
-    (una impresión que puede sacar varias piezas a la vez).
+    Un ítem de CATÁLOGO reutilizable: una pieza física que se puede usar en
+    varios Productos a la vez (ej. una base de llavero que se reimprime igual
+    para 10 diseños distintos). Cada pieza tiene sus propias líneas de
+    filamento y su tiempo de máquina, cargados POR CORRIDA DE GCODE (una
+    impresión que puede sacar varias piezas a la vez), y un `stock_quantity`
+    que es un pool COMPARTIDO: sirve para cualquier producto que la use.
 
-    Para producir UN producto hacen falta `units_needed` unidades de esta pieza;
-    si el gcode saca `pieces_per_gcode` por corrida, el sistema calcula cuántas
-    corridas hacen falta = ceil(units_needed / pieces_per_gcode) y multiplica el
-    filamento y las horas por esa cantidad de corridas.
+    Cuántas unidades de esta pieza lleva cada producto NO vive acá (ese
+    número es "por producto", no "por pieza") — vive en `ProductoPieza.units_needed`.
     """
 
-    producto = models.ForeignKey(
-        Producto, on_delete=models.CASCADE, related_name="piezas"
-    )
     name = models.CharField(_("Nombre de la pieza"), max_length=200)
-    units_needed = models.PositiveIntegerField(
-        _("Unidades necesarias por producto"),
-        default=1,
-        help_text=_("Cuántas unidades de esta pieza lleva UN producto."),
-    )
     pieces_per_gcode = models.PositiveIntegerField(
         _("Piezas por corrida de gcode"),
         default=1,
@@ -928,29 +929,23 @@ class Pieza(models.Model):
     stock_quantity = models.PositiveIntegerField(
         _("Stock de piezas impresas"),
         default=0,
-        help_text=_("Unidades de esta pieza ya impresas y disponibles en stock."),
+        help_text=_(
+            "Unidades de esta pieza ya impresas y disponibles en stock. Es un "
+            "pool compartido: si la pieza se usa en más de un producto, este "
+            "stock sirve para cualquiera de ellos."
+        ),
     )
-    order = models.PositiveIntegerField(_("Orden"), default=0)
     created_at = models.DateTimeField(_("Agregada el"), auto_now_add=True)
 
     class Meta:
         verbose_name = _("Pieza")
         verbose_name_plural = _("Piezas")
-        ordering = ["order", "id"]
+        ordering = ["name"]
 
     def __str__(self):
-        return f"{self.name} (×{self.units_needed})"
+        return self.name
 
-    # ---- Cálculos por UN producto ----
-
-    @property
-    def gcode_runs(self) -> int:
-        """Corridas de gcode para UN producto: ceil(unidades / piezas por gcode)."""
-        ppg = self.pieces_per_gcode or 1
-        units = self.units_needed or 0
-        if units <= 0:
-            return 0
-        return math.ceil(units / ppg)
+    # ---- Cálculos "por corrida de gcode" (no dependen de qué producto la usa) ----
 
     @property
     def filament_grams_per_run(self) -> Decimal:
@@ -960,15 +955,9 @@ class Pieza(models.Model):
         )
 
     @property
-    def filament_grams(self) -> Decimal:
-        """Gramos de filamento para UN producto (corridas × gramos por corrida)."""
-        return (self.filament_grams_per_run * self.gcode_runs).quantize(Decimal("0.01"))
-
-    @property
-    def machine_hours(self) -> Decimal:
-        """Horas de máquina para UN producto (corridas × horas por corrida)."""
-        hours_per_run = _dec(self.print_time_minutes) / Decimal("60")
-        return (hours_per_run * self.gcode_runs).quantize(Decimal("0.01"))
+    def machine_hours_per_run(self) -> Decimal:
+        """Horas de máquina de UNA corrida del gcode."""
+        return (_dec(self.print_time_minutes) / Decimal("60")).quantize(Decimal("0.01"))
 
     @property
     def material_cost_per_run(self) -> Decimal:
@@ -976,41 +965,6 @@ class Pieza(models.Model):
         return sum(
             (line.line_cost for line in self.filament_lines.all()), Decimal("0")
         )
-
-    @property
-    def material_cost(self) -> Decimal:
-        """Costo de filamento para UN producto (corridas × costo por corrida)."""
-        return (self.material_cost_per_run * self.gcode_runs).quantize(Decimal("0.01"))
-
-    # ---- Cálculos "promedio" (si se aprovecha toda la sobrante de la corrida) ----
-    # La corrida se paga entera aunque el producto solo use `units_needed` de las
-    # `pieces_per_gcode` que salen: acá prorrateamos el costo/tiempo de la corrida
-    # entre TODAS las unidades que salen (no solo las que usa este producto), para
-    # estimar cuánto sale en promedio si esas sobrantes se terminan usando en
-    # otros pedidos (quedan en `stock_quantity` y no vuelven a costar).
-
-    @property
-    def filament_grams_avg(self) -> Decimal:
-        """Gramos de filamento por UN producto, prorrateados sobre toda la corrida."""
-        ppg = self.pieces_per_gcode or 1
-        return (
-            self.filament_grams_per_run / ppg * (self.units_needed or 0)
-        ).quantize(Decimal("0.01"))
-
-    @property
-    def machine_hours_avg(self) -> Decimal:
-        """Horas de máquina por UN producto, prorrateadas sobre toda la corrida."""
-        ppg = self.pieces_per_gcode or 1
-        hours_per_run = _dec(self.print_time_minutes) / Decimal("60")
-        return (hours_per_run / ppg * (self.units_needed or 0)).quantize(Decimal("0.01"))
-
-    @property
-    def material_cost_avg(self) -> Decimal:
-        """Costo de filamento por UN producto, prorrateado sobre toda la corrida."""
-        ppg = self.pieces_per_gcode or 1
-        return (
-            self.material_cost_per_run / ppg * (self.units_needed or 0)
-        ).quantize(Decimal("0.01"))
 
     def auto_requires_ams(self) -> bool:
         """True si la pieza tiene más de una línea de filamento (multicolor)."""
@@ -1064,11 +1018,108 @@ class PiezaFilamentLine(models.Model):
         return (self.grams_used * self.effective_unit_cost).quantize(Decimal("0.01"))
 
 
+class ProductoPieza(models.Model):
+    """
+    Cuántas unidades de una `Pieza` (ítem de catálogo) lleva UN `Producto`
+    puntual. Reemplaza al viejo `Pieza.units_needed`: ese número es "por
+    producto", no "por pieza" (la misma pieza puede llevar 3 unidades en un
+    producto y 1 sola en otro).
+    """
+
+    producto = models.ForeignKey(
+        Producto, on_delete=models.CASCADE, related_name="producto_piezas"
+    )
+    pieza = models.ForeignKey(
+        Pieza, on_delete=models.PROTECT, related_name="producto_piezas"
+    )
+    units_needed = models.PositiveIntegerField(
+        _("Unidades necesarias por producto"),
+        default=1,
+        help_text=_("Cuántas unidades de esta pieza lleva UN producto."),
+    )
+    order = models.PositiveIntegerField(_("Orden"), default=0)
+
+    class Meta:
+        verbose_name = _("Pieza del producto")
+        verbose_name_plural = _("Piezas del producto")
+        ordering = ["order", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["producto", "pieza"], name="unique_producto_pieza"
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.pieza.name} (×{self.units_needed})"
+
+    # ---- Cálculos por UN producto (dependen de `units_needed`) ----
+
+    @property
+    def gcode_runs(self) -> int:
+        """Corridas de gcode para UN producto: ceil(unidades / piezas por gcode)."""
+        ppg = self.pieza.pieces_per_gcode or 1
+        units = self.units_needed or 0
+        if units <= 0:
+            return 0
+        return math.ceil(units / ppg)
+
+    @property
+    def filament_grams(self) -> Decimal:
+        """Gramos de filamento para UN producto (corridas × gramos por corrida)."""
+        return (self.pieza.filament_grams_per_run * self.gcode_runs).quantize(
+            Decimal("0.01")
+        )
+
+    @property
+    def machine_hours(self) -> Decimal:
+        """Horas de máquina para UN producto (corridas × horas por corrida)."""
+        hours_per_run = _dec(self.pieza.print_time_minutes) / Decimal("60")
+        return (hours_per_run * self.gcode_runs).quantize(Decimal("0.01"))
+
+    @property
+    def material_cost(self) -> Decimal:
+        """Costo de filamento para UN producto (corridas × costo por corrida)."""
+        return (self.pieza.material_cost_per_run * self.gcode_runs).quantize(
+            Decimal("0.01")
+        )
+
+    # ---- Cálculos "promedio" (si se aprovecha toda la sobrante de la corrida) ----
+    # La corrida se paga entera aunque el producto solo use `units_needed` de las
+    # `pieces_per_gcode` que salen: acá prorrateamos el costo/tiempo de la corrida
+    # entre TODAS las unidades que salen (no solo las que usa este producto), para
+    # estimar cuánto sale en promedio si esas sobrantes se terminan usando en
+    # otros pedidos (quedan en `Pieza.stock_quantity` y no vuelven a costar).
+
+    @property
+    def filament_grams_avg(self) -> Decimal:
+        """Gramos de filamento por UN producto, prorrateados sobre toda la corrida."""
+        ppg = self.pieza.pieces_per_gcode or 1
+        return (
+            self.pieza.filament_grams_per_run / ppg * (self.units_needed or 0)
+        ).quantize(Decimal("0.01"))
+
+    @property
+    def machine_hours_avg(self) -> Decimal:
+        """Horas de máquina por UN producto, prorrateadas sobre toda la corrida."""
+        ppg = self.pieza.pieces_per_gcode or 1
+        hours_per_run = _dec(self.pieza.print_time_minutes) / Decimal("60")
+        return (hours_per_run / ppg * (self.units_needed or 0)).quantize(Decimal("0.01"))
+
+    @property
+    def material_cost_avg(self) -> Decimal:
+        """Costo de filamento por UN producto, prorrateado sobre toda la corrida."""
+        ppg = self.pieza.pieces_per_gcode or 1
+        return (
+            self.pieza.material_cost_per_run / ppg * (self.units_needed or 0)
+        ).quantize(Decimal("0.01"))
+
+
 class StockPiezas(Pieza):
     """
-    Proxy de Pieza para tener en el admin una página 'Stock de piezas': lista
-    las piezas de cada producto con su stock de unidades ya impresas. El stock
-    sube cuando se imprimen piezas y baja cuando se confirma un pedido que las usa.
+    Proxy de Pieza para tener en el admin una página 'Stock de piezas':
+    catálogo de piezas con su stock de unidades ya impresas (compartido entre
+    todos los productos que las usan). El stock sube cuando se imprimen
+    piezas y baja cuando se confirma un pedido que las usa.
     """
 
     class Meta:
@@ -1454,11 +1505,11 @@ class Presupuesto(models.Model):
             producto = item.producto
             if producto.diseno_listo:
                 continue
-            for pieza in producto.piezas.all():
-                units_required = pieza.units_needed * qty
+            for pp in producto.producto_piezas.select_related("pieza").all():
+                units_required = pp.units_needed * qty
                 if units_required <= 0:
                     continue
-                to_print = units_required - min(pieza.stock_quantity, units_required)
+                to_print = units_required - min(pp.pieza.stock_quantity, units_required)
                 if to_print > 0:
                     sin_diseno.add(producto.name)
                     break
@@ -1536,8 +1587,9 @@ class Presupuesto(models.Model):
             item_qty = produce_qty[item.id]
             if item_qty <= 0:
                 continue
-            for pieza in item.producto.piezas.all():
-                units_required = pieza.units_needed * item_qty
+            for pp in item.producto.producto_piezas.select_related("pieza").all():
+                pieza = pp.pieza
+                units_required = pp.units_needed * item_qty
                 if units_required <= 0:
                     continue
                 from_stock = min(pieza.stock_quantity, units_required)
@@ -1913,8 +1965,9 @@ class Presupuesto(models.Model):
                     produced = item.quantity - item.from_finished_stock
                     if produced <= 0:
                         continue
-                    for pieza in item.producto.piezas.all():
-                        required_by_pieza[pieza.pk] += pieza.units_needed * produced
+                    for pp in item.producto.producto_piezas.select_related("pieza").all():
+                        pieza = pp.pieza
+                        required_by_pieza[pieza.pk] += pp.units_needed * produced
                         pieza_obj[pieza.pk] = pieza
                 for pid, required in required_by_pieza.items():
                     from_stock = required - queued_by_pieza.get(pid, 0)

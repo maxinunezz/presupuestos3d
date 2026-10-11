@@ -22,6 +22,7 @@ from .models import (
     Producto,
     ProductoAggregateLine,
     ProductoCanalPrecio,
+    ProductoPieza,
     Socio,
 )
 
@@ -41,17 +42,17 @@ def make_producto(**kwargs):
     return Producto.objects.create(**defaults)
 
 
-def add_pieza(producto, filament, grams, print_hours=Decimal("2"), name="Pieza principal"):
-    """Crea una pieza con sus horas de máquina y una línea de filamento.
+def add_pieza(producto, filament, grams, print_hours=Decimal("2"), name="Pieza principal", units_needed=1):
+    """Crea una pieza (catálogo reutilizable) con sus horas de máquina y una
+    línea de filamento, y la vincula a `producto` vía ProductoPieza.
     Por defecto: 1 unidad por producto, 1 pieza por gcode (1 corrida)."""
     pieza = Pieza.objects.create(
-        producto=producto,
         name=name,
-        units_needed=1,
         pieces_per_gcode=1,
         print_time_minutes=print_hours * 60,
     )
     PiezaFilamentLine.objects.create(pieza=pieza, filament=filament, grams_used=grams)
+    ProductoPieza.objects.create(producto=producto, pieza=pieza, units_needed=units_needed)
     return pieza
 
 
@@ -395,12 +396,13 @@ class AprobacionStockPiezasTests(TestCase):
     def test_sobrante_de_gcode_va_a_stock_al_imprimir(self):
         # Pieza que saca 4 por corrida; se piden 3 -> imprime 1 corrida (4), sobra 1.
         pieza = Pieza.objects.create(
-            producto=self.p, name="Tapa", units_needed=1, pieces_per_gcode=4,
+            name="Tapa", pieces_per_gcode=4,
             print_time_minutes=Decimal("60"),
         )
         PiezaFilamentLine.objects.create(
             pieza=pieza, filament=self.fil, grams_used=Decimal("50")
         )
+        ProductoPieza.objects.create(producto=self.p, pieza=pieza, units_needed=1)
         pres = self._pres(3)
         pres.approve()
         job = pres.jobs.get(pieza=pieza)

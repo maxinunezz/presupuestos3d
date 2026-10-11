@@ -33,6 +33,7 @@ from .models import (
     Producto,
     ProductoAggregateLine,
     ProductoCanalPrecio,
+    ProductoPieza,
     Socio,
     StockPiezas,
     StockProductos,
@@ -129,31 +130,27 @@ class PiezaFilamentLineInline(admin.TabularInline):
         return f"${obj.line_cost}" if obj and obj.pk else "-"
 
 
-class PiezaInline(admin.TabularInline):
-    """Piezas que componen el producto. El filamento de cada pieza se carga
-    entrando a la pieza (enlace 'Modificar' que aparece en la fila una vez
-    guardada), porque lleva sus propias líneas de filamento."""
+class ProductoPiezaInline(admin.TabularInline):
+    """Piezas que componen el producto. El campo 'Pieza' es un buscador de
+    TODO el catálogo de piezas ya cargadas (autocomplete): podés elegir una
+    que ya exista en otro producto (se comparte el mismo stock y la misma
+    línea de filamento — un cambio ahí impacta en TODOS los productos que la
+    usan) o tocar el ícono "+" para crear una pieza nueva sin salir de esta
+    pantalla. El filamento de una pieza se carga entrando a ella (ícono de
+    lápiz, una vez guardada)."""
 
-    model = Pieza
+    model = ProductoPieza
     extra = 0
-    show_change_link = True
+    autocomplete_fields = ("pieza",)
     formfield_overrides = DECIMAL_LOCALIZE
-    fields = (
-        "name",
-        "units_needed",
-        "pieces_per_gcode",
-        "print_time_minutes",
-        "requires_ams",
-        "stock_quantity",
-        "resumen",
-    )
+    fields = ("pieza", "units_needed", "order", "resumen")
     readonly_fields = ("resumen",)
 
-    @admin.display(description=_("Por producto (corridas · gramos · horas)"))
+    @admin.display(description=_("Por este producto (corridas · gramos · horas)"))
     def resumen(self, obj):
         if not obj.pk:
             return gettext(
-                "Guardá el producto para poder cargar el filamento de esta pieza."
+                "Guardá el producto para ver el cálculo de esta pieza."
             )
         return gettext("%(runs)s corrida/s · %(grams)s g · %(hours)s") % {
             "runs": obj.gcode_runs,
@@ -162,32 +159,53 @@ class PiezaInline(admin.TabularInline):
         }
 
 
+class ProductoPiezaUsoInline(admin.TabularInline):
+    """Solo lectura: en qué productos se usa esta pieza y cuántas unidades
+    lleva cada uno. Para agregar o quitar un producto que usa esta pieza se
+    trabaja desde el inline 'Piezas' de ESE producto (ProductoPiezaInline),
+    no desde acá."""
+
+    model = ProductoPieza
+    fk_name = "pieza"
+    extra = 0
+    can_delete = False
+    fields = ("producto", "units_needed")
+    readonly_fields = ("producto", "units_needed")
+    verbose_name = _("Producto que usa esta pieza")
+    verbose_name_plural = _("Productos que usan esta pieza")
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
 @admin.register(Pieza)
 class PiezaAdmin(admin.ModelAdmin):
-    """Se mantiene registrado para poder buscar/filtrar piezas sueltas y para
-    que funcione el enlace 'Modificar' de cada fila en el inline de Piezas
-    del producto (PiezaInline, ver ProductoAdmin), pero se saca del menú
-    principal del admin: los datos básicos de la pieza se cargan desde
-    adentro del producto; el filamento se carga entrando a la pieza."""
+    """Catálogo de piezas físicas reutilizables entre productos: se carga una
+    pieza UNA sola vez (nombre, filamento, tiempo de impresión) y después se
+    la puede elegir, buscándola por nombre, desde el inline 'Piezas' de
+    cualquier Producto en vez de crearla de nuevo. El stock y las líneas de
+    filamento son compartidos: cambiarlos acá impacta en TODOS los productos
+    que usan esta pieza (ver columna 'Usada en')."""
 
     list_display = (
         "name",
-        "producto",
-        "units_needed",
+        "productos_display",
         "pieces_per_gcode",
-        "gcode_runs",
         "requires_ams",
         "stock_quantity",
     )
-    list_filter = ("requires_ams", "producto")
-    search_fields = ("name", "producto__name")
-    autocomplete_fields = ("producto",)
-    inlines = (PiezaFilamentLineInline,)
+    list_filter = ("requires_ams",)
+    search_fields = ("name",)
+    inlines = (ProductoPiezaUsoInline, PiezaFilamentLineInline)
     formfield_overrides = DECIMAL_LOCALIZE
     fields = (
-        "producto",
         "name",
-        "units_needed",
         "pieces_per_gcode",
         "print_time_minutes",
         "requires_ams",
@@ -196,11 +214,13 @@ class PiezaAdmin(admin.ModelAdmin):
     )
     readonly_fields = ("resumen",)
 
-    def has_module_permission(self, request):
-        # Oculta "Piezas" del menú principal: se editan desde adentro del
-        # producto (nested admin). Se mantiene registrado por si hace falta
-        # acceder por URL directa o para el autocomplete.
-        return False
+    def get_queryset(self, request):
+        return super().get_queryset(request).prefetch_related("producto_piezas__producto")
+
+    @admin.display(description=_("Usada en"))
+    def productos_display(self, obj):
+        nombres = [pp.producto.name for pp in obj.producto_piezas.all()]
+        return ", ".join(nombres) if nombres else gettext("(sin usar todavía)")
 
     @admin.display(description=_("Cálculo de la pieza"))
     def resumen(self, obj):
@@ -208,43 +228,38 @@ class PiezaAdmin(admin.ModelAdmin):
             return gettext("Guardá la pieza y agregá su filamento para ver el cálculo.")
         ams = gettext("Sí") if obj.requires_ams else gettext("No")
         return mark_safe(
-            "<b>" + gettext("Por UN producto:") + "</b><br>"
-            "&nbsp;&nbsp;" + gettext("Corridas de gcode:") + f" {obj.gcode_runs} "
-            f"(ceil({obj.units_needed} / {obj.pieces_per_gcode}))<br>"
-            "&nbsp;&nbsp;" + gettext("Filamento:") + f" {obj.filament_grams} g<br>"
-            "&nbsp;&nbsp;" + gettext("Horas de máquina:") + f" {format_hours(obj.machine_hours)}<br>"
-            "&nbsp;&nbsp;" + gettext("Costo de filamento:") + f" ${obj.material_cost}<br>"
+            "<b>" + gettext("Por UNA corrida de gcode:") + "</b><br>"
+            "&nbsp;&nbsp;" + gettext("Piezas por corrida:") + f" {obj.pieces_per_gcode}<br>"
+            "&nbsp;&nbsp;" + gettext("Filamento:") + f" {obj.filament_grams_per_run} g<br>"
+            "&nbsp;&nbsp;" + gettext("Horas de máquina:") + f" {format_hours(obj.machine_hours_per_run)}<br>"
+            "&nbsp;&nbsp;" + gettext("Costo de filamento:") + f" ${obj.material_cost_per_run}<br>"
             "&nbsp;&nbsp;" + gettext("Necesita AMS:") + f" {ams}"
         )
 
 
 @admin.register(StockPiezas)
 class StockPiezasAdmin(admin.ModelAdmin):
-    """Stock de piezas ya impresas, por producto. Sube solo cuando un trabajo se
-    imprime con sobrante de gcode y baja al aprobar pedidos que las usan. Podés
-    ajustar el stock a mano acá si hace falta.
+    """Stock de piezas ya impresas: pool COMPARTIDO entre todos los productos
+    que usan cada pieza. Sube solo cuando un trabajo se imprime con sobrante
+    de gcode y baja al aprobar pedidos que las usan. Podés ajustar el stock a
+    mano acá si hace falta.
 
     También sirve como pantalla principal para terminar de cargar una pieza
-    después de costear el producto: entrando a una fila (no desde el listado
+    después de costear un producto: entrando a una fila (no desde el listado
     editable) se ve el form completo, con el inline de filamento incluido
-    (igual que 'Piezas', que queda oculta del menú y solo se usa desde el
-    link 'Modificar' del producto)."""
+    (igual que 'Piezas')."""
 
-    list_display = ("producto", "name", "requires_ams", "stock_quantity", "created_at")
-    list_filter = ("producto", "requires_ams")
-    search_fields = ("name", "producto__name")
+    list_display = ("name", "productos_display", "requires_ams", "stock_quantity", "created_at")
+    list_filter = ("requires_ams",)
+    search_fields = ("name",)
     list_editable = ("stock_quantity",)
     # Por defecto alfabético por nombre; hacé clic en "Agregada el" para
-    # ordenar por fecha en que se agregó la pieza (o en "Producto"/"Nombre"
-    # para ordenar por esas columnas).
+    # ordenar por fecha en que se agregó la pieza.
     ordering = ("name",)
-    autocomplete_fields = ("producto",)
     inlines = (PiezaFilamentLineInline,)
     formfield_overrides = DECIMAL_LOCALIZE
     fields = (
-        "producto",
         "name",
-        "units_needed",
         "pieces_per_gcode",
         "print_time_minutes",
         "requires_ams",
@@ -252,6 +267,14 @@ class StockPiezasAdmin(admin.ModelAdmin):
         "resumen",
     )
     readonly_fields = ("resumen",)
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).prefetch_related("producto_piezas__producto")
+
+    @admin.display(description=_("Usada en"))
+    def productos_display(self, obj):
+        nombres = [pp.producto.name for pp in obj.producto_piezas.all()]
+        return ", ".join(nombres) if nombres else gettext("(sin usar todavía)")
 
     def has_add_permission(self, request):
         return False
@@ -265,12 +288,11 @@ class StockPiezasAdmin(admin.ModelAdmin):
             return gettext("Guardá la pieza y agregá su filamento para ver el cálculo.")
         ams = gettext("Sí") if obj.requires_ams else gettext("No")
         return mark_safe(
-            "<b>" + gettext("Por UN producto:") + "</b><br>"
-            "&nbsp;&nbsp;" + gettext("Corridas de gcode:") + f" {obj.gcode_runs} "
-            f"(ceil({obj.units_needed} / {obj.pieces_per_gcode}))<br>"
-            "&nbsp;&nbsp;" + gettext("Filamento:") + f" {obj.filament_grams} g<br>"
-            "&nbsp;&nbsp;" + gettext("Horas de máquina:") + f" {format_hours(obj.machine_hours)}<br>"
-            "&nbsp;&nbsp;" + gettext("Costo de filamento:") + f" ${obj.material_cost}<br>"
+            "<b>" + gettext("Por UNA corrida de gcode:") + "</b><br>"
+            "&nbsp;&nbsp;" + gettext("Piezas por corrida:") + f" {obj.pieces_per_gcode}<br>"
+            "&nbsp;&nbsp;" + gettext("Filamento:") + f" {obj.filament_grams_per_run} g<br>"
+            "&nbsp;&nbsp;" + gettext("Horas de máquina:") + f" {format_hours(obj.machine_hours_per_run)}<br>"
+            "&nbsp;&nbsp;" + gettext("Costo de filamento:") + f" ${obj.material_cost_per_run}<br>"
             "&nbsp;&nbsp;" + gettext("Necesita AMS:") + f" {ams}"
         )
 
@@ -462,7 +484,7 @@ class PanelVentasAdmin(admin.ModelAdmin):
             .exclude(status=Presupuesto.Status.CANCELLED)
             .exclude(para_stock=True)
             .prefetch_related(
-                "items__producto__piezas__filament_lines__filament",
+                "items__producto__producto_piezas__pieza__filament_lines__filament",
                 "items__producto__aggregate_lines__aggregate",
             )
         )
@@ -758,7 +780,7 @@ class ProductoAdmin(admin.ModelAdmin):
     list_filter = ("is_active", "diseno_listo", "is_multicolor", "priority", "es_producto_ecommerce")
     list_editable = ("priority", "diseno_listo")
     search_fields = ("name", "description", "sku")
-    inlines = (PiezaInline, ProductoAggregateLineInline, ProductoCanalPrecioInline)
+    inlines = (ProductoPiezaInline, ProductoAggregateLineInline, ProductoCanalPrecioInline)
     readonly_fields = ("producto_id_display", "costs_summary", "price_info", "diseno_listo_at")
     formfield_overrides = DECIMAL_LOCALIZE
 
@@ -771,7 +793,7 @@ class ProductoAdmin(admin.ModelAdmin):
             super()
             .get_queryset(request)
             .prefetch_related(
-                "piezas__filament_lines__filament",
+                "producto_piezas__pieza__filament_lines__filament",
                 "aggregate_lines__aggregate",
             )
         )
@@ -889,13 +911,13 @@ class ProductoAdmin(admin.ModelAdmin):
     def costs_summary(self, obj):
         if not obj.pk:
             return gettext("Guardá el producto para ver el resumen de costos.")
-        piezas = obj.piezas.all()
+        producto_piezas = obj.producto_piezas.select_related("pieza").all()
         corridas = gettext("corrida/s")
         piezas_rows = "".join(
-            f"&nbsp;&nbsp;&nbsp;&nbsp;{p.name}: {p.gcode_runs} {corridas} · "
-            f"{p.filament_grams} g · {format_hours(p.machine_hours)}"
-            f"{' · AMS' if p.requires_ams else ''}<br>"
-            for p in piezas
+            f"&nbsp;&nbsp;&nbsp;&nbsp;{pp.pieza.name}: {pp.gcode_runs} {corridas} · "
+            f"{pp.filament_grams} g · {format_hours(pp.machine_hours)}"
+            f"{' · AMS' if pp.pieza.requires_ams else ''}<br>"
+            for pp in producto_piezas
         )
         sin_piezas = (
             "&nbsp;&nbsp;&nbsp;&nbsp;" + gettext("(sin piezas todavía)") + "<br>"

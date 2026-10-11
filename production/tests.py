@@ -8,7 +8,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from budgets.models import Pieza, PiezaFilamentLine, Presupuesto, Producto
+from budgets.models import Pieza, PiezaFilamentLine, Presupuesto, Producto, ProductoPieza
 from inventory.models import Filament, StockMovement
 
 from .models import (
@@ -34,17 +34,17 @@ def make_producto(multicolor=False):
     )
 
 
-def add_pieza(producto, filament, grams, print_hours=Decimal("2"), name="Pieza principal"):
-    """Crea una pieza con sus horas de máquina y una línea de filamento.
+def add_pieza(producto, filament, grams, print_hours=Decimal("2"), name="Pieza principal", units_needed=1):
+    """Crea una pieza (catálogo reutilizable) con sus horas de máquina y una
+    línea de filamento, y la vincula a `producto` vía ProductoPieza.
     Por defecto: 1 unidad por producto, 1 pieza por gcode (1 corrida)."""
     pieza = Pieza.objects.create(
-        producto=producto,
         name=name,
-        units_needed=1,
         pieces_per_gcode=1,
         print_time_minutes=print_hours * 60,
     )
     PiezaFilamentLine.objects.create(pieza=pieza, filament=filament, grams_used=grams)
+    ProductoPieza.objects.create(producto=producto, pieza=pieza, units_needed=units_needed)
     return pieza
 
 
@@ -208,7 +208,7 @@ class DepreciacionTests(TestCase):
         )
 
     def test_recalc_suma_solo_trabajos_terminados(self):
-        pieza = self.producto.piezas.first()
+        pieza = self.producto.producto_piezas.first().pieza
         done = self._job(3, pieza)  # 3 corridas × 2 h = 6 h
         done.status = ProductionJob.Status.DONE
         done.save(update_fields=["status"])
@@ -220,7 +220,7 @@ class DepreciacionTests(TestCase):
         self.assertEqual(self.maquina.accumulated_depreciation, Decimal("3000.00"))
 
     def test_recalc_es_idempotente(self):
-        pieza = self.producto.piezas.first()
+        pieza = self.producto.producto_piezas.first().pieza
         done = self._job(1, pieza)  # 2 h
         done.status = ProductionJob.Status.DONE
         done.save(update_fields=["status"])
@@ -517,14 +517,15 @@ class GcodeRunsProgressTests(TestCase):
         self.producto = make_producto()
         # 2 piezas por corrida, 7 necesarias -> ceil(7/2) = 4 corridas.
         self.pieza = Pieza.objects.create(
-            producto=self.producto,
             name="Pin traba dorsal",
-            units_needed=7,
             pieces_per_gcode=2,
             print_time_minutes=Decimal("30"),
         )
         PiezaFilamentLine.objects.create(
             pieza=self.pieza, filament=self.fil, grams_used=Decimal("10")
+        )
+        ProductoPieza.objects.create(
+            producto=self.producto, pieza=self.pieza, units_needed=7
         )
         self.pres = Presupuesto.objects.create(client_name="Cliente")
         self.maquina = Maquina.objects.create(name="Ender")
