@@ -12,6 +12,7 @@ from budgets.models import (
     Presupuesto,
     PresupuestoItem,
     Producto,
+    ProductoPieza,
 )
 from gastos.models import CategoriaGasto, Gasto, MedioPagoGasto
 from inventory.models import Filament
@@ -35,13 +36,12 @@ def make_producto(**kwargs):
 
 def add_pieza(producto, filament, grams, print_hours=Decimal("2"), name="Pieza principal"):
     pieza = Pieza.objects.create(
-        producto=producto,
         name=name,
-        units_needed=1,
         pieces_per_gcode=1,
         print_time_minutes=print_hours * 60,
     )
     PiezaFilamentLine.objects.create(pieza=pieza, filament=filament, grams_used=grams)
+    ProductoPieza.objects.create(producto=producto, pieza=pieza, units_needed=1)
     return pieza
 
 
