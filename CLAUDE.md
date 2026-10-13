@@ -25,24 +25,92 @@ mensajes del admin priorizan claridad.
 - **whitenoise** sirve los estáticos (storage con manifest comprimido).
 - **xhtml2pdf (pisa)** para PDFs. **openpyxl** para export a Excel.
   **Chart.js** (servido local, no CDN) para los gráficos del admin.
-- Deploy en **Vercel** (serverless, el servicio web — NO la base de datos).
-  `DEBUG=0` en prod; `ALLOWED_HOSTS` incluye `.vercel.app`. El build debe
-  correr `collectstatic`.
+- Deploy del servicio web en **Railway** (`presupuestos3d-web`, Dockerfile +
+  gunicorn, desde el 2026-10-13 — ver "Deploy en producción" abajo), en el
+  mismo proyecto Railway que la Postgres (red interna, sin la latencia del
+  proxy público). **Vercel** (serverless, `presupuestos3d.vercel.app`) sigue
+  desplegando en cada push y queda como respaldo funcional (mismo código,
+  misma base), pero ya no es la URL de uso diario. `DEBUG=0` en prod en
+  ambos; `ALLOWED_HOSTS`/`CSRF_TRUSTED_ORIGINS` por env var (`.up.railway.app`
+  en Railway, `.vercel.app` en Vercel). El build debe correr `collectstatic`
+  en los dos.
 
 ## Deploy en producción
 
-El servicio web sigue en **Vercel** (`maxinunezzs-projects/presupuestos3d`,
-dominio `presupuestos3d.vercel.app`), pero la base de datos se migró de
-**Neon a Railway Postgres** el 2026-10-08 (motivo: unificar infra con
-`3darg-backend`, que también vive en Railway).
+El servicio web corre en **Railway** (proyecto `presupuestos3d`, servicio
+`presupuestos3d-web`, Dockerfile + gunicorn) desde el **2026-10-13**, en el
+mismo proyecto que la base de datos — ver subsección de abajo. **Vercel**
+(`maxinunezzs-projects/presupuestos3d`, dominio `presupuestos3d.vercel.app`)
+sigue desplegando en cada push (el `Dockerfile` no interfiere con su build
+nativo de Python) y queda como respaldo funcional, pero ya no es la URL de
+uso diario — mismo criterio que "Neon queda como respaldo histórico" más
+abajo.
+
+### Migración del servicio web: Vercel → Railway (2026-10-13)
+
+Motivo: Vercel (`iad1`, US East) consultaba la Postgres de Railway
+(`us-west2`) por el proxy TCP público, con ~294ms de latencia por *round
+trip* — cada página que dispara varias queries lo sufre multiplicado
+(Panel de métricas: ~12.6s; Panel de costos: ~12.1s; listado de Productos:
+~4.5s). Mover el servicio web al mismo proyecto Railway que la base permite
+usar la red interna (`<servicio>.railway.internal`, sub-milisegundo) en vez
+del proxy público. Medido después del corte: Panel de métricas 12.6s→0.96s,
+Panel de costos 12.1s→1.3s, listado de Productos 4.5s→1.4s.
+
+- **URL de producción**: `https://presupuestos3d-web-production.up.railway.app`
+  (dominio gratuito `*.up.railway.app` generado con `railway domain`). No hay
+  un dominio propio comprado para presupuestos3d (a diferencia de `3darg.com`)
+  — `presupuestos3d.vercel.app` siempre fue el dominio gratuito de Vercel, así
+  que no hay DNS propio para redirigir a Railway; se optó por promover
+  directamente la URL gratuita de Railway en vez de comprar un dominio o armar
+  un puente de redirección.
+- **`Dockerfile` + `start-server.sh`**: mismo patrón que `3darg-backend`
+  (`python:3.12-slim`, `gunicorn`, espera a Postgres por TCP antes de migrar).
+  Un detalle propio de este repo (no aplica a `3darg-backend`, que comitea
+  `staticfiles/`): `staticfiles/`/`media/` están en `.gitignore`, así que no
+  existen después del `COPY --chown=appuser:appuser . .`; y como `/app` lo
+  crea `WORKDIR` mientras el build todavía corre como `root` (antes del
+  `useradd`), `COPY --chown` no alcanza a darle permiso de escritura a
+  `appuser` sobre el directorio padre. Sin el `RUN mkdir -p /app/staticfiles
+  /app/media && chown -R appuser:appuser /app` explícito antes del `COPY`,
+  `collectstatic` tira `PermissionError` en el primer deploy.
+- **Variables de entorno** del servicio `presupuestos3d-web` (seteadas con
+  `railway variable set`, no hardcodeadas): `DATABASE_URL` por referencia de
+  servicio (`${{Postgres-rpE9.DATABASE_URL}}`, resuelve solo y queda
+  sincronizada si cambia del lado de la Postgres), `SECRET_KEY` (generada
+  nueva, propia de este servicio), `DEBUG=0`, `ALLOWED_HOSTS=.up.railway.app`,
+  `CSRF_TRUSTED_ORIGINS=https://*.up.railway.app`.
+- **Verificación end-to-end** hecha a mano contra la URL real (no solo con el
+  test client local): navegación y render del admin, generación de PDF
+  (xhtml2pdf) y Excel (openpyxl), estáticos servidos por whitenoise, y el
+  flujo de escritura completo (sesión autenticada + CSRF + POST + commit en
+  la DB real de Railway) con un alta/baja de prueba sobre `Socio`, limpiada
+  después.
+- **Pendiente, a confirmar con el dueño**: `3darg-backend` (otro repo/proyecto
+  Railway) tiene `PRESUPUESTOS3D_API_URL=https://presupuestos3d.vercel.app`
+  apuntando todavía al Vercel viejo (lo usa `orders/signals.py` para avisar
+  `POST /api/pedidos-online/` cuando una venta online se confirma). Como
+  Vercel sigue activo y funcional el aviso no se rompe, pero sigue viajando
+  por el camino lento (Vercel) en vez del nuevo. Repuntarlo a la URL de
+  Railway es un cambio en la config de OTRO proyecto — no se tocó todavía a
+  propósito, queda para cuando el dueño confirme.
+
+### Migración de base de datos: Neon → Railway Postgres (2026-10-08)
+
+La base de datos se migró de **Neon a Railway Postgres** el 2026-10-08
+(motivo: unificar infra con `3darg-backend`, que también vive en Railway).
 
 - Proyecto Railway `presupuestos3d`, servicio Postgres (`postgres-ssl` como
   template, igual que `3darg-backend`). A diferencia de ese otro proyecto,
   este Postgres **sí tiene un TCP proxy público habilitado**
-  (`railway tcp-proxy create --port 5432`) porque Vercel está fuera de la red
-  privada de Railway y no puede usar el host interno — el `DATABASE_URL` en
-  Vercel apunta al endpoint público (`*.proxy.rlwy.net:<puerto>`), no al
-  `railway.internal`.
+  (`railway tcp-proxy create --port 5432`), porque hasta el 2026-10-13 era el
+  único camino posible: Vercel está fuera de la red privada de Railway y no
+  puede usar el host interno. Hoy ese proxy lo sigue usando el Vercel de
+  respaldo (`DATABASE_URL` ahí apunta al endpoint público,
+  `*.proxy.rlwy.net:<puerto>`); el servicio web nuevo en Railway
+  (`presupuestos3d-web`) usa la referencia interna
+  (`${{Postgres-rpE9.DATABASE_URL}}`, resuelve a `railway.internal`) y no
+  pasa por el proxy.
 - Migración ejecutada con `pg_dump`/`pg_restore` (no `dumpdata`/`loaddata`:
   más simple para una DB completa, sin preocuparse por FKs entre apps),
   verificada fila por fila contra Neon antes y después del corte final
