@@ -350,7 +350,12 @@ def build_metrics(period: str, now: datetime = None) -> dict:
     valor_inv_terminados = sum(
         (
             p.stock_quantity * p.unit_cost_avg
-            for p in Producto.objects.filter(is_active=True, stock_quantity__gt=0)
+            for p in Producto.objects.filter(
+                is_active=True, stock_quantity__gt=0
+            ).prefetch_related(
+                "producto_piezas__pieza__filament_lines__filament",
+                "aggregate_lines__aggregate",
+            )
         ),
         ZERO,
     )
