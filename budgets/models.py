@@ -316,9 +316,18 @@ class Producto(models.Model):
 
     @property
     def total_filament_grams(self) -> Decimal:
-        """Gramos de filamento de UN producto: suma de todas sus piezas."""
+        """Gramos de filamento de UN producto: suma de todas sus piezas.
+
+        Sin `.select_related("pieza")` a propósito: cuando el queryset de
+        Producto viene con `prefetch_related("producto_piezas__pieza__...")`
+        (changelist/admin/métricas, que son los lugares donde esto se llama
+        en bucle sobre muchos productos), `self.producto_piezas.all()` sirve
+        del cache ya prefetcheado — en cambio `.select_related(...).all()`
+        clona el queryset y dispara una consulta nueva por cada llamada,
+        ignorando el prefetch (era la causa real de las páginas lentas).
+        """
         return sum(
-            (pp.filament_grams for pp in self.producto_piezas.select_related("pieza").all()),
+            (pp.filament_grams for pp in self.producto_piezas.all()),
             Decimal("0"),
         ).quantize(Decimal("0.01"))
 
@@ -326,7 +335,7 @@ class Producto(models.Model):
     def total_machine_hours(self) -> Decimal:
         """Horas de máquina de UN producto: suma de todas sus piezas."""
         return sum(
-            (pp.machine_hours for pp in self.producto_piezas.select_related("pieza").all()),
+            (pp.machine_hours for pp in self.producto_piezas.all()),
             Decimal("0"),
         ).quantize(Decimal("0.01"))
 
@@ -344,14 +353,14 @@ class Producto(models.Model):
         """True si alguna pieza del producto necesita AMS (multicolor)."""
         return any(
             pp.pieza.requires_ams
-            for pp in self.producto_piezas.select_related("pieza").all()
+            for pp in self.producto_piezas.all()
         )
 
     @property
     def material_cost(self) -> Decimal:
         """Costo de filamento de UN producto, sin merma (suma de las piezas)."""
         return sum(
-            (pp.material_cost for pp in self.producto_piezas.select_related("pieza").all()),
+            (pp.material_cost for pp in self.producto_piezas.all()),
             Decimal("0"),
         ).quantize(Decimal("0.01"))
 
@@ -410,14 +419,14 @@ class Producto(models.Model):
     @property
     def total_filament_grams_avg(self) -> Decimal:
         return sum(
-            (pp.filament_grams_avg for pp in self.producto_piezas.select_related("pieza").all()),
+            (pp.filament_grams_avg for pp in self.producto_piezas.all()),
             Decimal("0"),
         ).quantize(Decimal("0.01"))
 
     @property
     def total_machine_hours_avg(self) -> Decimal:
         return sum(
-            (pp.machine_hours_avg for pp in self.producto_piezas.select_related("pieza").all()),
+            (pp.machine_hours_avg for pp in self.producto_piezas.all()),
             Decimal("0"),
         ).quantize(Decimal("0.01"))
 
@@ -425,7 +434,7 @@ class Producto(models.Model):
     def material_cost_avg(self) -> Decimal:
         """Costo de filamento promedio de UN producto, sin merma."""
         return sum(
-            (pp.material_cost_avg for pp in self.producto_piezas.select_related("pieza").all()),
+            (pp.material_cost_avg for pp in self.producto_piezas.all()),
             Decimal("0"),
         ).quantize(Decimal("0.01"))
 
@@ -491,7 +500,7 @@ class Producto(models.Model):
 
         grams = defaultdict(lambda: Decimal("0"))
         objs = {}
-        for pp in self.producto_piezas.select_related("pieza").all():
+        for pp in self.producto_piezas.all():
             runs = pp.gcode_runs
             for line in pp.pieza.filament_lines.all():
                 grams[line.filament_id] += _dec(line.grams_used) * runs

@@ -991,7 +991,11 @@ class ProductoAdmin(admin.ModelAdmin):
     def costs_summary(self, obj):
         if not obj.pk:
             return gettext("Guardá el producto para ver el resumen de costos.")
-        producto_piezas = obj.producto_piezas.select_related("pieza").all()
+        # Sin `.select_related("pieza")` a propósito: el queryset de
+        # ProductoAdmin ya viene con `prefetch_related("producto_piezas__pieza__...")`
+        # (ver get_queryset); encadenar select_related acá clonaba el
+        # queryset y disparaba una consulta nueva, ignorando ese prefetch.
+        producto_piezas = obj.producto_piezas.all()
         corridas = gettext("corrida/s")
         piezas_rows = "".join(
             f"&nbsp;&nbsp;&nbsp;&nbsp;{pp.pieza.name}: {pp.gcode_runs} {corridas} · "

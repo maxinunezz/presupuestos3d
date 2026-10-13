@@ -199,7 +199,11 @@ def build_metrics(period: str, now: datetime = None) -> dict:
             cost_machine += qty * producto.machine_cost_avg
             cost_machine_hours += qty * producto.total_machine_hours_avg
             cost_aggregates += qty * producto.aggregate_cost
-            for pp in producto.producto_piezas.select_related("pieza").all():
+            # Sin `.select_related("pieza")`: este producto ya viene de un
+            # queryset con prefetch_related profundo (ver _approved_in_range),
+            # encadenar select_related acá clonaba el queryset y disparaba una
+            # consulta nueva por producto en vez de usar el prefetch (N+1).
+            for pp in producto.producto_piezas.all():
                 pieza = pp.pieza
                 ppg = pieza.pieces_per_gcode or 1
                 units = pp.units_needed or 0
