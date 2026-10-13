@@ -17,7 +17,7 @@
 
 {% block after_field_sets %}
 {% for inline_admin_formset in inline_admin_formsets %}
-    {% if inline_admin_formset.opts.verbose_name_plural == "Piezas" %}
+    {% if inline_admin_formset.opts.verbose_name_plural == "Piezas del producto" %}
     <p class="help" style="margin: 0 0 10px;">
         {% translate "Para cargar el filamento de una pieza: completá sus datos acá abajo y guardá el producto (botón «Guardar y continuar editando»); en cada fila ya guardada va a aparecer un enlace «Modificar» para entrar a esa pieza y cargar sus líneas de filamento." %}
     </p>
