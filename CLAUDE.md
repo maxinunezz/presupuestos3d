@@ -86,14 +86,28 @@ Panel de costos 12.1s→1.3s, listado de Productos 4.5s→1.4s.
   flujo de escritura completo (sesión autenticada + CSRF + POST + commit en
   la DB real de Railway) con un alta/baja de prueba sobre `Socio`, limpiada
   después.
-- **Pendiente, a confirmar con el dueño**: `3darg-backend` (otro repo/proyecto
-  Railway) tiene `PRESUPUESTOS3D_API_URL=https://presupuestos3d.vercel.app`
-  apuntando todavía al Vercel viejo (lo usa `orders/signals.py` para avisar
-  `POST /api/pedidos-online/` cuando una venta online se confirma). Como
-  Vercel sigue activo y funcional el aviso no se rompe, pero sigue viajando
-  por el camino lento (Vercel) en vez del nuevo. Repuntarlo a la URL de
-  Railway es un cambio en la config de OTRO proyecto — no se tocó todavía a
-  propósito, queda para cuando el dueño confirme.
+- **`3darg-backend` repuntado a la URL de Railway**: `3darg-backend` (otro
+  repo/proyecto Railway, servicio `web`) tenía `PRESUPUESTOS3D_API_URL`
+  apuntando a `https://presupuestos3d.vercel.app` (lo usa
+  `orders/signals.py` para avisar `POST /api/pedidos-online/` cuando una
+  venta online se confirma). Se actualizó a
+  `https://presupuestos3d-web-production.up.railway.app` vía `railway
+  variable set` + redeploy de ese servicio, así el aviso viaja directo a
+  Railway en vez de rebotar por Vercel.
+- **Variables que estaban solo en Vercel, faltaban en Railway** (detectadas
+  comparando `vercel env ls production` contra `railway variables --service
+  presupuestos3d-web`, y copiadas con `railway variable set` + redeploy):
+  `API_3DARG_URL`/`API_3DARG_TOKEN` (sync de costeo → ecommerce, ver
+  `config/api_3darg.py` arriba) y los cuatro `SLACK_WEBHOOK_*` (avisos de
+  diseño listo/trabajo impreso/imprimiendo/pedido completado). El token de
+  `API_3DARG_TOKEN` se regeneró consultando directo la Postgres de
+  `3darg-backend` (`railway ssh --service web`, token ya existente del
+  usuario `integracion_presupuestos3d`) en vez de adivinarlo; los
+  `SLACK_WEBHOOK_*` se tomaron de `.env.local` (gitignored) bajo el supuesto
+  de que el negocio usa el mismo canal de Slack para avisos locales y de
+  producción — confirmar con el dueño si en algún momento se separan.
+  Sin esto, Railway corría con estas integraciones apagadas (silenciosamente,
+  por el patrón "vacío = no-op") aunque ya fuera la URL de uso diario.
 
 ### Migración de base de datos: Neon → Railway Postgres (2026-10-08)
 
@@ -674,10 +688,11 @@ compras de insumos, que van por inventory). Sirve para el resultado operativo.
   `integracion_3darg`. **Activo en producción desde 2026-10-08**: el usuario
   ya existía en la Postgres de Railway (vino en el restore desde Neon), se le
   confirmó `is_staff=True` y se le generó un token nuevo; `3darg-backend`
-  (Railway, servicio `web`) tiene `PRESUPUESTOS3D_API_URL=https://presupuestos3d.vercel.app`
-  y `PRESUPUESTOS3D_API_TOKEN` seteados y verificados con un `POST` de prueba
-  real a este endpoint (201, registro borrado después). El aviso de venta ya
-  no es no-op en prod.
+  (Railway, servicio `web`) tiene `PRESUPUESTOS3D_API_URL` (repuntada a
+  `https://presupuestos3d-web-production.up.railway.app` el 2026-10-13, ver
+  "Deploy en producción" arriba) y `PRESUPUESTOS3D_API_TOKEN` seteados y
+  verificados con un `POST` de prueba real a este endpoint (201, registro
+  borrado después). El aviso de venta ya no es no-op en prod.
 - Activar el venv falla si no hacés `cd` al proyecto primero.
 - `ManifestStaticFilesStorage`: cualquier `.js`/`.css` nuevo necesita
   `collectstatic`. Si un JS minificado trae `//# sourceMappingURL=...` apuntando
