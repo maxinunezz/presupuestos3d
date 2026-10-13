@@ -103,9 +103,9 @@ Panel de costos 12.1s→1.3s, listado de Productos 4.5s→1.4s.
   `API_3DARG_TOKEN` se regeneró consultando directo la Postgres de
   `3darg-backend` (`railway ssh --service web`, token ya existente del
   usuario `integracion_presupuestos3d`) en vez de adivinarlo; los
-  `SLACK_WEBHOOK_*` se tomaron de `.env.local` (gitignored) bajo el supuesto
-  de que el negocio usa el mismo canal de Slack para avisos locales y de
-  producción — confirmar con el dueño si en algún momento se separan.
+  `SLACK_WEBHOOK_*` se tomaron de `.env.local` (gitignored); el dueño
+  confirmó que el negocio usa **el mismo canal de Slack** para avisos
+  locales y de producción, así que no hace falta separarlos.
   Sin esto, Railway corría con estas integraciones apagadas (silenciosamente,
   por el patrón "vacío = no-op") aunque ya fuera la URL de uso diario.
 
