@@ -1,6 +1,7 @@
 from datetime import datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
+from django import forms
 from django.contrib import admin, messages
 from django.core.exceptions import ValidationError
 from django.db.models import DecimalField
@@ -49,6 +50,85 @@ from .pdf import (
 # Los campos de cantidad/precio (DecimalField) aceptan tanto coma como punto
 # para los decimales (ej: 8500,50 u 8500.50).
 DECIMAL_LOCALIZE = {DecimalField: {"localize": True}}
+
+
+class HorasMinutosWidget(forms.MultiWidget):
+    """Dos casilleros numéricos (horas / minutos) en vez de un campo de texto
+    libre, para cargar el tiempo de impresión tal cual lo separa el
+    laminador. Ver TiempoImpresionField."""
+
+    template_name = "budgets/widgets/horas_minutos.html"
+
+    class Media:
+        css = {"all": ("budgets/horas_minutos_widget.css",)}
+
+    def __init__(self, attrs=None):
+        widgets = (
+            forms.NumberInput(attrs={"min": 0, "class": "hm-input", "placeholder": "0"}),
+            forms.NumberInput(attrs={"min": 0, "max": 59, "class": "hm-input", "placeholder": "0"}),
+        )
+        super().__init__(widgets, attrs)
+
+    def decompress(self, value):
+        # `value` llega como el Decimal crudo del modelo (minutos totales).
+        if value in (None, ""):
+            return [None, None]
+        minutos_totales = Decimal(value)
+        horas, minutos = divmod(minutos_totales, Decimal("60"))
+        return [int(horas), int(minutos)]
+
+
+class TiempoImpresionField(forms.MultiValueField):
+    """Carga el tiempo de impresión en dos casilleros, horas y minutos (tal
+    cual lo separa el laminador), y lo guarda en el modelo como minutos
+    totales (Decimal), igual que siempre — este campo solo convierte en los
+    dos sentidos al mostrar y al guardar."""
+
+    widget = HorasMinutosWidget
+
+    def __init__(self, **kwargs):
+        fields = (
+            forms.IntegerField(
+                required=False,
+                min_value=0,
+                error_messages={"invalid": _("Las horas tienen que ser un número entero.")},
+            ),
+            forms.IntegerField(
+                required=False,
+                min_value=0,
+                max_value=59,
+                error_messages={
+                    "invalid": _("Los minutos tienen que ser un número entero."),
+                    "max_value": _("Los minutos van de 0 a 59 (la hora de más va en el casillero de horas)."),
+                },
+            ),
+        )
+        super().__init__(fields=fields, require_all_fields=False, **kwargs)
+
+    def compress(self, data_list):
+        if not data_list:
+            return None
+        horas, minutos = data_list
+        return (Decimal(horas or 0) * Decimal("60") + Decimal(minutos or 0)).quantize(Decimal("0.01"))
+
+
+class TiempoImpresionAdminMixin:
+    """Hace que el campo `print_time_minutes` de Pieza se cargue con dos
+    casilleros (horas / minutos) en vez de minutos sueltos (ver
+    TiempoImpresionField). Lo comparten PiezaAdmin y StockPiezasAdmin porque
+    ambos exponen ese campo en su form."""
+
+    def formfield_for_dbfield(self, db_field, request, **kwargs):
+        if db_field.name == "print_time_minutes":
+            return TiempoImpresionField(
+                label=db_field.verbose_name,
+                help_text=_(
+                    "Cargá el tiempo que tira el laminador separado en horas "
+                    "y minutos — se convierte solo a minutos."
+                ),
+                required=not db_field.blank,
+            )
+        return super().formfield_for_dbfield(db_field, request, **kwargs)
 
 
 # ===========================================================================
@@ -185,7 +265,7 @@ class ProductoPiezaUsoInline(admin.TabularInline):
 
 
 @admin.register(Pieza)
-class PiezaAdmin(admin.ModelAdmin):
+class PiezaAdmin(TiempoImpresionAdminMixin, admin.ModelAdmin):
     """Catálogo de piezas físicas reutilizables entre productos: se carga una
     pieza UNA sola vez (nombre, filamento, tiempo de impresión) y después se
     la puede elegir, buscándola por nombre, desde el inline 'Piezas' de
@@ -238,7 +318,7 @@ class PiezaAdmin(admin.ModelAdmin):
 
 
 @admin.register(StockPiezas)
-class StockPiezasAdmin(admin.ModelAdmin):
+class StockPiezasAdmin(TiempoImpresionAdminMixin, admin.ModelAdmin):
     """Stock de piezas ya impresas: pool COMPARTIDO entre todos los productos
     que usan cada pieza. Sube solo cuando un trabajo se imprime con sobrante
     de gcode y baja al aprobar pedidos que las usan. Podés ajustar el stock a

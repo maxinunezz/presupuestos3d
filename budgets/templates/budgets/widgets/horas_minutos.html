@@ -1,0 +1,10 @@
+{% spaceless %}
+<div class="hm-widget">
+  {% for widget in widget.subwidgets %}
+  <div class="hm-box">
+    {% include widget.template_name %}
+    <span class="hm-unit">{% if forloop.first %}h{% else %}m{% endif %}</span>
+  </div>
+  {% endfor %}
+</div>
+{% endspaceless %}

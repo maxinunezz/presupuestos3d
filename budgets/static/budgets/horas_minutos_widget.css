@@ -1,0 +1,62 @@
+/* Widget "horas / minutos" del tiempo de impresión de una Pieza (ver
+   HorasMinutosWidget en budgets/admin.py): dos casilleros numéricos chicos
+   en vez de un campo de texto largo, para pegar directo lo que separa el
+   laminador. Blanco y negro, mismo criterio que el resto del admin (ver
+   CLAUDE.md), nada de colores de marca. */
+.hm-widget {
+    display: inline-flex;
+    align-items: flex-end;
+    gap: 14px;
+}
+
+.hm-box {
+    display: inline-flex;
+    align-items: flex-end;
+    gap: 6px;
+}
+
+.hm-input {
+    width: 56px;
+    height: 48px;
+    box-sizing: border-box;
+    text-align: center;
+    font-size: 20px;
+    font-weight: bold;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    background: #f3f3f3;
+    color: #111;
+    padding: 0;
+    /* Oculta las flechitas de spinner del input numérico, para que quede
+       como un casillero liso igual al resto de los campos del admin. */
+    -moz-appearance: textfield;
+}
+.hm-input::-webkit-inner-spin-button,
+.hm-input::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+.hm-input:focus {
+    outline: none;
+    border-color: #111;
+    background: #fff;
+}
+
+.hm-unit {
+    font-size: 13px;
+    color: #666;
+    margin-bottom: 14px;
+}
+
+html[data-theme="dark"] .hm-input {
+    background: #2a2a2a;
+    border-color: #555;
+    color: #fff;
+}
+html[data-theme="dark"] .hm-input:focus {
+    border-color: #fff;
+    background: #333;
+}
+html[data-theme="dark"] .hm-unit {
+    color: #aaa;
+}
