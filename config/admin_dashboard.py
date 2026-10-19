@@ -19,13 +19,20 @@ orden por uno pensado para el flujo real de trabajo:
   aparte. "Tablero de producción" (antes acá) pasó a encabezar la sección
   "Producción", justo arriba de "Cola de producción": es donde se opera el
   día a día de las máquinas, no un panel de KPIs.
-- Después las apps de negocio (Producción, Ventas y presupuestos, Inventario
-  y compras, Gastos), y dentro de cada una: primero lo operativo (lo que se
-  toca seguido), al final los catálogos/configuración (lo que se carga una
-  vez y no se vuelve a tocar). Dentro de "Ventas y presupuestos", "Ventas"
-  (el panel, antes "Panel de ventas") queda justo arriba de "Presupuestos",
-  ya que es la vista de solo lectura de esos mismos pedidos ya aprobados.
-  Dentro de "Inventario y compras", "Totales de inventario" (antes en
+- Después las apps de negocio (Producción, Ventas y presupuestos, eCommerce,
+  Inventario y compras, Gastos), y dentro de cada una: primero lo operativo
+  (lo que se toca seguido), al final los catálogos/configuración (lo que se
+  carga una vez y no se vuelve a tocar). Dentro de "Ventas y presupuestos",
+  "Ventas" (el panel, antes "Panel de ventas") queda justo arriba de
+  "Canales de venta" (antes perdido en la app real "Presupuestos", sin
+  relación visible con las ventas) y de "Presupuestos"; "Piezas" (mismo caso,
+  antes también en "Presupuestos") pasó a quedar justo debajo de "Costeo de
+  productos" (antes "Producto"), ya que es el catálogo que consume ese
+  costeo. "Pedidos online pendientes" (antes también perdido en
+  "Presupuestos") se separó en su propia sección "eCommerce": es el único
+  modelo que viene de afuera (3darg-backend) y no del costeo/producción
+  propio, así que no encajaba bien agrupado con el resto de "Ventas y
+  presupuestos". Dentro de "Inventario y compras", "Totales de inventario" (antes en
   "Métricas") pasó a encabezar la sección, seguido de "Movimientos de
   stock" (el historial completo) y recién después lo operativo (Compras,
   Filamentos, Agregados y sus categorías), dejando "Ajustes manuales de
@@ -88,10 +95,19 @@ _SECTIONS = [
         _("Ventas y presupuestos"),
         [
             ("budgets", "PanelVentas"),
+            ("budgets", "CanalVenta"),
             ("budgets", "Presupuesto"),
             ("budgets", "Producto"),
+            ("budgets", "Pieza"),
             ("budgets", "StockProductos"),
             ("budgets", "StockPiezas"),
+        ],
+    ),
+    (
+        "ecommerce",
+        _("eCommerce"),
+        [
+            ("budgets", "PedidoOnline"),
         ],
     ),
     (
