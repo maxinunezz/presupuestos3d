@@ -2490,3 +2490,18 @@ class PedidoOnline(models.Model):
 
     def __str__(self):
         return f"{self.brand_name or self.brand_slug} - {self.external_reference}"
+
+    @property
+    def reference_code(self):
+        """
+        Código corto para ubicar este pedido a simple vista (ej. para
+        buscarlo contra lo que el cliente menciona). Reproduce EXACTO el
+        mismo recorte que ya usa 3darg-backend del lado del comprador
+        (`payments/services/transfer_notifications.py::reference_code()`):
+        los primeros 8 caracteres de `external_reference` (siempre hex en
+        minúscula, `uuid4().hex`) en mayúsculas. Es el mismo código que el
+        cliente ya ve como "concepto" en el comprobante de transferencia o
+        al consultar su pedido como invitado — no es un dato nuevo, es la
+        misma referencia mostrada de forma más corta/legible.
+        """
+        return (self.external_reference or "")[:8].upper()

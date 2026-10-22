@@ -10,6 +10,7 @@ from django.http import HttpResponse
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils import timezone
+from django.utils.html import format_html_join
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext, gettext_lazy as _
 
@@ -770,7 +771,7 @@ class PedidoOnlineAdmin(admin.ModelAdmin):
 
     list_display = (
         "brand_name_display",
-        "external_reference",
+        "reference_code_display",
         "customer_email",
         "items_summary",
         "total_display",
@@ -785,10 +786,11 @@ class PedidoOnlineAdmin(admin.ModelAdmin):
     autocomplete_fields = ("presupuesto",)
     readonly_fields = (
         "external_reference",
+        "reference_code_display",
         "brand_slug",
         "brand_name",
         "customer_email",
-        "items",
+        "items_display",
         "total_amount",
         "currency",
         "order_created_at",
@@ -804,9 +806,10 @@ class PedidoOnlineAdmin(admin.ModelAdmin):
                 "fields": (
                     "brand_name",
                     "brand_slug",
+                    "reference_code_display",
                     "external_reference",
                     "customer_email",
-                    "items",
+                    "items_display",
                     "total_amount",
                     "currency",
                     "order_created_at",
@@ -822,6 +825,13 @@ class PedidoOnlineAdmin(admin.ModelAdmin):
     def brand_name_display(self, obj):
         return obj.brand_name or obj.brand_slug
 
+    @admin.display(description=_("Código de referencia"))
+    def reference_code_display(self, obj):
+        # Mismo código corto (primeros 8 caracteres de external_reference,
+        # en mayúsculas) que el cliente ya ve del lado de 3darg-backend —
+        # ver Pedido Online.reference_code en models.py.
+        return obj.reference_code or "—"
+
     @admin.display(description=_("Productos"))
     def items_summary(self, obj):
         if not obj.items:
@@ -830,6 +840,27 @@ class PedidoOnlineAdmin(admin.ModelAdmin):
             f"{item.get('product_name', '?')} x{item.get('quantity', '?')}"
             for item in obj.items
         )
+
+    @admin.display(description=_("Productos"))
+    def items_display(self, obj):
+        # El campo `items` es un JSONField; mostrado tal cual en el form de
+        # solo lectura sale como JSON crudo, poco legible para el dueño. Acá
+        # se renderiza como una lista prolija, una línea por producto.
+        if not obj.items:
+            return "—"
+        filas = format_html_join(
+            "",
+            "<li>{} × {} — {} c/u</li>",
+            (
+                (
+                    item.get("quantity", "?"),
+                    item.get("product_name", "?"),
+                    f"$ {item.get('unit_price', '?')}",
+                )
+                for item in obj.items
+            ),
+        )
+        return mark_safe(f'<ul style="margin:0; padding-left:1.2em;">{filas}</ul>')
 
     @admin.display(description=_("Total"))
     def total_display(self, obj):
