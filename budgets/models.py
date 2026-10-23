@@ -2552,8 +2552,8 @@ class HistorialPedidoProducido(PedidoOnline):
 
     class Meta:
         proxy = True
-        verbose_name = _("Historial de pedido producido")
-        verbose_name_plural = _("Historial de pedidos producidos")
+        verbose_name = _("Historial venta eCommerce")
+        verbose_name_plural = _("Historial ventas eCommerce")
 
 
 class VentasEcommerce(PedidoOnline):

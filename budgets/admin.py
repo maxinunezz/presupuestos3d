@@ -814,7 +814,7 @@ class PedidoOnlineAdmin(admin.ModelAdmin):
     acciones genera nada automático (ni Presupuesto, ni costeo, ni cola de
     impresión) — es una marca de estado nomás, ver docstring de `PedidoOnline`
     en models.py. El historial de lo efectivamente producido vive aparte, en
-    "Historial de pedidos producidos" (`HistorialPedidoProducido` más abajo).
+    "Historial ventas eCommerce" (`HistorialPedidoProducido` más abajo).
     """
 
     list_display = (

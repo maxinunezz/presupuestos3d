@@ -40,7 +40,7 @@ orden por uno pensado para el flujo real de trabajo:
   "Presupuestos") se separó en su propia sección "eCommerce": es el único
   modelo que viene de afuera (3darg-backend) y no del costeo/producción
   propio, así que no encajaba bien agrupado con el resto de "Ventas y
-  presupuestos". Ahí mismo vive "Historial de pedidos producidos" (proxy de
+  presupuestos". Ahí mismo vive "Historial ventas eCommerce" (proxy de
   solo lectura sobre el mismo modelo, filtrado a los que ya llegaron a
   `Presupuesto.Status.COMPLETED`): separa "lo que hay que decidir" de "lo
   que ya se resolvió y se imprimió", sin mezclar ambas vistas en un único
