@@ -6,16 +6,22 @@ relación con cómo se usa el negocio en el día a día. Acá se reemplaza ese
 orden por uno pensado para el flujo real de trabajo:
 
 - Primero "Métricas": los paneles de solo lectura que hoy viven repartidos
-  en cada app (Panel de métricas, Panel de ventas, Panel de caja, Panel de
-  costos, Panel de gastos) — lo primero que se mira al entrar. Panel de
-  métricas/ventas/costos comparten el mismo motor de KPIs (budgets.metrics),
-  separado en varias páginas (ventas/cobros; costos de producción;
-  inventario/resultado) para no amontonar todo en un único dashboard
-  larguísimo. Panel de caja (app `caja`, nueva) mide otra cosa —plata real
-  movimiento a movimiento, no devengado— pero es igual un dashboard de solo
-  lectura, así que vive acá también, justo debajo de Panel de ventas. Las
-  páginas operativas de esa app (Cuentas de caja, Movimientos de caja, donde
-  se carga/confirma el libro diario) quedan en su propia sección "Caja",
+  en cada app (Panel de métricas, Panel de ventas, Panel ventas eCommerce,
+  Panel de caja, Panel de costos, Panel de gastos) — lo primero que se mira
+  al entrar. Panel de métricas/ventas/costos comparten el mismo motor de
+  KPIs (budgets.metrics), separado en varias páginas (ventas/cobros; costos
+  de producción; inventario/resultado) para no amontonar todo en un único
+  dashboard larguísimo. "Panel ventas eCommerce" (proxy de `PedidoOnline`,
+  no de `Presupuesto`) queda justo debajo de Panel de ventas: mismo rol de
+  dashboard de KPIs que Panel de ventas cumple para los presupuestos a
+  medida, pero del canal online, separado porque son dos negocios con datos
+  distintos (`Presupuesto` no tiene campo de canal/origen para filtrar
+  ecommerce de forma confiable; ver `budgets/ecommerce_metrics.py`). Panel
+  de caja (app `caja`, nueva) mide otra cosa —plata real movimiento a
+  movimiento, no devengado— pero es igual un dashboard de solo lectura, así
+  que vive acá también, justo debajo de Panel ventas eCommerce. Las páginas
+  operativas de esa app (Cuentas de caja, Movimientos de caja, donde se
+  carga/confirma el libro diario) quedan en su propia sección "Caja",
   aparte. "Tablero de producción" (antes acá) pasó a encabezar la sección
   "Producción", justo arriba de "Cola de producción": es donde se opera el
   día a día de las máquinas, no un panel de KPIs.
@@ -23,13 +29,10 @@ orden por uno pensado para el flujo real de trabajo:
   Inventario y compras, Gastos), y dentro de cada una: primero lo operativo
   (lo que se toca seguido), al final los catálogos/configuración (lo que se
   carga una vez y no se vuelve a tocar). Dentro de "Ventas y presupuestos",
-  "Ventas" (el panel, antes "Panel de ventas") queda primero, y justo debajo
-  "Panel ventas eCommerce" (proxy de `PedidoOnline`, no de `Presupuesto`):
-  mismo rol de dashboard de KPIs que "Ventas" cumple para los presupuestos a
-  medida, pero del canal online, separado porque son dos negocios con datos
-  distintos (`Presupuesto` no tiene campo de canal/origen para filtrar
-  ecommerce de forma confiable; ver `budgets/ecommerce_metrics.py`). Después
-  sigue "Canales de venta" (antes perdido en la app real "Presupuestos", sin
+  "Ventas" (el panel, antes "Panel de ventas") queda primero —su versión
+  para el canal online, "Panel ventas eCommerce", se agrupó en "Métricas"
+  junto al resto de los dashboards de solo lectura, no acá—. Después sigue
+  "Canales de venta" (antes perdido en la app real "Presupuestos", sin
   relación visible con las ventas) y "Presupuestos"; "Piezas" (mismo caso,
   antes también en "Presupuestos") pasó a quedar justo debajo de "Costeo de
   productos" (antes "Producto"), ya que es el catálogo que consume ese
@@ -41,8 +44,8 @@ orden por uno pensado para el flujo real de trabajo:
   solo lectura sobre el mismo modelo, filtrado a los que ya llegaron a
   `Presupuesto.Status.COMPLETED`): separa "lo que hay que decidir" de "lo
   que ya se resolvió y se imprimió", sin mezclar ambas vistas en un único
-  listado — "Panel ventas eCommerce" (arriba, en "Ventas y presupuestos") no
-  encaja acá porque es un KPI de ventas, no el flujo operativo del pedido.
+  listado — "Panel ventas eCommerce" (en "Métricas") no encaja acá porque es
+  un KPI de ventas, no el flujo operativo del pedido.
   Dentro de "Inventario y compras", "Totales de inventario" (antes en
   "Métricas") pasó a encabezar la sección, seguido de "Movimientos de
   stock" (el historial completo) y recién después lo operativo (Compras,
@@ -75,6 +78,7 @@ _SECTIONS = [
         [
             ("budgets", "Metricas"),
             ("budgets", "MetricasVentas"),
+            ("budgets", "VentasEcommerce"),
             ("caja", "PanelCaja"),
             ("budgets", "PanelCostos"),
             ("gastos", "PanelGastos"),
@@ -106,7 +110,6 @@ _SECTIONS = [
         _("Ventas y presupuestos"),
         [
             ("budgets", "PanelVentas"),
-            ("budgets", "VentasEcommerce"),
             ("budgets", "CanalVenta"),
             ("budgets", "Presupuesto"),
             ("budgets", "Producto"),
