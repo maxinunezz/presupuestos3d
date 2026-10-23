@@ -2463,10 +2463,29 @@ class PedidoOnline(models.Model):
     )
     received_at = models.DateTimeField(_("Recibido"), auto_now_add=True)
 
+    class Estado(models.TextChoices):
+        PENDIENTE = "PENDIENTE", _("Pendiente")
+        CONFIRMADO = "CONFIRMADO", _("Confirmado")
+        RECHAZADO = "RECHAZADO", _("Rechazado")
+
+    estado = models.CharField(
+        _("Estado"),
+        max_length=12,
+        choices=Estado.choices,
+        default=Estado.PENDIENTE,
+        help_text=_(
+            "Confirmá el pedido para avisarte a cargarlo como Presupuesto (si "
+            "corresponde producirlo), o rechazalo si no se va a producir. No "
+            "dispara nada automático — ver docstring de la clase."
+        ),
+    )
     revisado = models.BooleanField(
         _("Revisado"),
         default=False,
-        help_text=_("Marcalo una vez que ya lo cargaste (o decidiste no cargarlo)."),
+        help_text=_(
+            "Se marca solo al Confirmar o Rechazar (ver `estado`) — no hace "
+            "falta tocarlo a mano."
+        ),
     )
     presupuesto = models.ForeignKey(
         Presupuesto,
@@ -2484,12 +2503,21 @@ class PedidoOnline(models.Model):
     )
 
     class Meta:
-        verbose_name = _("Pedido online pendiente")
-        verbose_name_plural = _("Pedidos online pendientes")
+        verbose_name = _("Pedido online")
+        verbose_name_plural = _("Pedidos online")
         ordering = ["-received_at"]
 
     def __str__(self):
         return f"{self.brand_name or self.brand_slug} - {self.external_reference}"
+
+    def save(self, *args, **kwargs):
+        # `revisado` queda derivado de `estado` — así el admin viejo (list_filter
+        # por `revisado`, usado por el dueño durante meses) sigue funcionando
+        # igual sin tener que migrar datos ni tocar las vistas que ya lo leen,
+        # y nunca puede quedar un pedido Confirmado/Rechazado marcado como no
+        # revisado (o viceversa) por un update a mano de uno solo de los dos.
+        self.revisado = self.estado != self.Estado.PENDIENTE
+        super().save(*args, **kwargs)
 
     @property
     def reference_code(self):
@@ -2505,3 +2533,24 @@ class PedidoOnline(models.Model):
         misma referencia mostrada de forma más corta/legible.
         """
         return (self.external_reference or "")[:8].upper()
+
+
+class HistorialPedidoProducido(PedidoOnline):
+    """
+    Proxy de solo lectura sobre `PedidoOnline`: lista, a modo informativo,
+    los pedidos online cuyo `Presupuesto` vinculado ya llegó a
+    `Presupuesto.Status.COMPLETED` (ver `budgets/admin.py::sync_status_from_jobs`
+    y el flujo de `marcar_entregado` — es un estado real del negocio, se
+    alcanza solo o a mano cuando el pedido ya se fabricó y entregó, no un
+    criterio inventado para esta pantalla).
+
+    No agrega ningún dato propio ni ninguna acción — es la misma fila de
+    `PedidoOnline`, filtrada, para separar en el admin "lo que hay que
+    decidir" (Pedido online) de "lo que ya se resolvió y se imprimió"
+    (acá), sin mezclar ambas vistas en un único listado.
+    """
+
+    class Meta:
+        proxy = True
+        verbose_name = _("Historial de pedido producido")
+        verbose_name_plural = _("Historial de pedidos producidos")

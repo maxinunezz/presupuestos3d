@@ -22,6 +22,7 @@ from .models import (
     CanalCargoFijoTramo,
     CanalVenta,
     DisenoNoListoError,
+    HistorialPedidoProducido,
     Metricas,
     MetricasVentas,
     PanelCostos,
@@ -760,13 +761,57 @@ class SocioAdmin(admin.ModelAdmin):
     ordering = ("order", "name")
 
 
+class EstadoPedidoOnlineFilter(admin.SimpleListFilter):
+    """
+    Filtro de `estado` con un default real: sin tocar nada en la URL, el
+    listado muestra solo los Pendientes (lo que hay que revisar hoy) — no
+    "Todos" como haría el filtro estándar de Django. Para ver Confirmados,
+    Rechazados o el total hay que elegirlo a propósito en el filtro de la
+    derecha.
+    """
+
+    title = _("Estado")
+    parameter_name = "estado"
+    _TODOS = "todos"
+
+    def lookups(self, request, model_admin):
+        return (*PedidoOnline.Estado.choices, (self._TODOS, _("Todos")))
+
+    def queryset(self, request, queryset):
+        value = self.value()
+        if value is None:
+            return queryset.filter(estado=PedidoOnline.Estado.PENDIENTE)
+        if value == self._TODOS:
+            return queryset
+        return queryset.filter(estado=value)
+
+    def choices(self, changelist):
+        # Reimplementa `SimpleListFilter.choices()` pero marcando "Pendiente"
+        # como seleccionado cuando no hay filtro explícito en la URL (nuestro
+        # default real, ver `queryset()`), en vez del "Todos" que Django
+        # resalta por defecto cuando `self.value()` es `None`.
+        value = self.value()
+        for lookup, title in self.lookup_choices:
+            selected = (value == str(lookup)) or (
+                value is None and lookup == PedidoOnline.Estado.PENDIENTE
+            )
+            yield {
+                "selected": selected,
+                "query_string": changelist.get_query_string({self.parameter_name: lookup}),
+                "display": title,
+            }
+
+
 @admin.register(PedidoOnline)
 class PedidoOnlineAdmin(admin.ModelAdmin):
     """
-    Avisos de ventas confirmadas en la tienda online (cualquier sub-marca),
-    a la espera de que el dueño los revise y los cargue a mano como
-    `Presupuesto` si corresponde poner a producir. No se genera nada
-    automático — ver docstring de `PedidoOnline` en models.py.
+    Panel para revisar las ventas confirmadas en la tienda online (cualquier
+    sub-marca) y decidir si se cargan a producción: Confirmar (vas a cargarlo
+    como `Presupuesto`) o Rechazar (no se va a producir). Ninguna de las dos
+    acciones genera nada automático (ni Presupuesto, ni costeo, ni cola de
+    impresión) — es una marca de estado nomás, ver docstring de `PedidoOnline`
+    en models.py. El historial de lo efectivamente producido vive aparte, en
+    "Historial de pedidos producidos" (`HistorialPedidoProducido` más abajo).
     """
 
     list_display = (
@@ -777,11 +822,12 @@ class PedidoOnlineAdmin(admin.ModelAdmin):
         "total_display",
         "order_created_at",
         "received_at",
-        "revisado",
+        "estado",
         "presupuesto",
     )
-    list_filter = ("revisado", "brand_slug")
-    list_editable = ("revisado",)
+    list_filter = (EstadoPedidoOnlineFilter, "brand_slug")
+    list_editable = ("estado",)
+    actions = ("confirmar_pedidos", "rechazar_pedidos")
     search_fields = ("external_reference", "customer_email", "brand_name", "brand_slug")
     autocomplete_fields = ("presupuesto",)
     readonly_fields = (
@@ -817,7 +863,7 @@ class PedidoOnlineAdmin(admin.ModelAdmin):
                 )
             },
         ),
-        (_("Seguimiento"), {"fields": ("revisado", "presupuesto")}),
+        (_("Seguimiento"), {"fields": ("estado", "presupuesto")}),
         (_("Debug"), {"fields": ("raw_payload",), "classes": ("collapse",)}),
     )
 
@@ -869,6 +915,151 @@ class PedidoOnlineAdmin(admin.ModelAdmin):
     def has_add_permission(self, request):
         # Lo crea únicamente la API (vía token de integración desde
         # 3darg-backend) — no tiene sentido darlo de alta a mano desde el admin.
+        return False
+
+    @admin.action(description=_("Confirmar pedido/s seleccionado/s"))
+    def confirmar_pedidos(self, request, queryset):
+        # `.update()` en vez de iterar + `.save()`: más rápido para
+        # selecciones grandes, y acá podemos setear `revisado` a mano
+        # (normalmente lo deriva `PedidoOnline.save()`) porque ya sabemos
+        # que `estado=CONFIRMADO` siempre implica `revisado=True`.
+        count = queryset.update(estado=PedidoOnline.Estado.CONFIRMADO, revisado=True)
+        self.message_user(
+            request,
+            gettext("%(count)d pedido/s confirmado/s.") % {"count": count},
+            messages.SUCCESS,
+        )
+
+    @admin.action(description=_("Rechazar pedido/s seleccionado/s"))
+    def rechazar_pedidos(self, request, queryset):
+        count = queryset.update(estado=PedidoOnline.Estado.RECHAZADO, revisado=True)
+        self.message_user(
+            request,
+            gettext("%(count)d pedido/s rechazado/s.") % {"count": count},
+            messages.SUCCESS,
+        )
+
+
+@admin.register(HistorialPedidoProducido)
+class HistorialPedidoProducidoAdmin(admin.ModelAdmin):
+    """
+    Panel de solo lectura: pedidos online cuyo `Presupuesto` vinculado ya
+    llegó a `Presupuesto.Status.COMPLETED` (se fabricó y se entregó). No
+    tiene altas/bajas/ediciones ni acciones — es un registro informativo
+    nomás, ver docstring de `HistorialPedidoProducido` en models.py.
+    """
+
+    list_display = (
+        "brand_name_display",
+        "reference_code_display",
+        "items_summary",
+        "total_display",
+        "presupuesto",
+        "presupuesto_completado_el",
+        "received_at",
+    )
+    list_filter = ("brand_slug",)
+    search_fields = ("external_reference", "customer_email", "brand_name", "brand_slug")
+    ordering = ("-presupuesto__completed_at",)
+    readonly_fields = (
+        "external_reference",
+        "reference_code_display",
+        "brand_slug",
+        "brand_name",
+        "customer_email",
+        "items_display",
+        "total_amount",
+        "currency",
+        "order_created_at",
+        "received_at",
+        "estado",
+        "presupuesto",
+        "presupuesto_completado_el",
+        "raw_payload",
+    )
+    fieldsets = (
+        (
+            _("Venta"),
+            {
+                "fields": (
+                    "brand_name",
+                    "brand_slug",
+                    "reference_code_display",
+                    "external_reference",
+                    "customer_email",
+                    "items_display",
+                    "total_amount",
+                    "currency",
+                    "order_created_at",
+                    "received_at",
+                )
+            },
+        ),
+        (
+            _("Producción"),
+            {"fields": ("estado", "presupuesto", "presupuesto_completado_el")},
+        ),
+        (_("Debug"), {"fields": ("raw_payload",), "classes": ("collapse",)}),
+    )
+
+    def get_queryset(self, request):
+        return (
+            super()
+            .get_queryset(request)
+            .filter(presupuesto__status=Presupuesto.Status.COMPLETED)
+            .select_related("presupuesto")
+        )
+
+    @admin.display(description=_("Marca"))
+    def brand_name_display(self, obj):
+        return obj.brand_name or obj.brand_slug
+
+    @admin.display(description=_("Código de referencia"))
+    def reference_code_display(self, obj):
+        return obj.reference_code or "—"
+
+    @admin.display(description=_("Productos"))
+    def items_summary(self, obj):
+        if not obj.items:
+            return "—"
+        return ", ".join(
+            f"{item.get('product_name', '?')} x{item.get('quantity', '?')}"
+            for item in obj.items
+        )
+
+    @admin.display(description=_("Productos"))
+    def items_display(self, obj):
+        if not obj.items:
+            return "—"
+        filas = format_html_join(
+            "",
+            "<li>{} × {} — {} c/u</li>",
+            (
+                (
+                    item.get("quantity", "?"),
+                    item.get("product_name", "?"),
+                    f"$ {item.get('unit_price', '?')}",
+                )
+                for item in obj.items
+            ),
+        )
+        return mark_safe(f'<ul style="margin:0; padding-left:1.2em;">{filas}</ul>')
+
+    @admin.display(description=_("Total"))
+    def total_display(self, obj):
+        return f"{obj.currency} {obj.total_amount}"
+
+    @admin.display(description=_("Producido/entregado el"))
+    def presupuesto_completado_el(self, obj):
+        return obj.presupuesto.completed_at if obj.presupuesto_id else "—"
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
         return False
 
 

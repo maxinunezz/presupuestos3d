@@ -28,11 +28,15 @@ orden por uno pensado para el flujo real de trabajo:
   relación visible con las ventas) y de "Presupuestos"; "Piezas" (mismo caso,
   antes también en "Presupuestos") pasó a quedar justo debajo de "Costeo de
   productos" (antes "Producto"), ya que es el catálogo que consume ese
-  costeo. "Pedidos online pendientes" (antes también perdido en
+  costeo. "Pedido online" (antes "Pedidos online pendientes", perdido en
   "Presupuestos") se separó en su propia sección "eCommerce": es el único
   modelo que viene de afuera (3darg-backend) y no del costeo/producción
   propio, así que no encajaba bien agrupado con el resto de "Ventas y
-  presupuestos". Dentro de "Inventario y compras", "Totales de inventario" (antes en
+  presupuestos". Ahí mismo vive "Historial de pedidos producidos" (proxy de
+  solo lectura sobre el mismo modelo, filtrado a los que ya llegaron a
+  `Presupuesto.Status.COMPLETED`): separa "lo que hay que decidir" de "lo
+  que ya se resolvió y se imprimió", sin mezclar ambas vistas en un único
+  listado. Dentro de "Inventario y compras", "Totales de inventario" (antes en
   "Métricas") pasó a encabezar la sección, seguido de "Movimientos de
   stock" (el historial completo) y recién después lo operativo (Compras,
   Filamentos, Agregados y sus categorías), dejando "Ajustes manuales de
@@ -108,6 +112,7 @@ _SECTIONS = [
         _("eCommerce"),
         [
             ("budgets", "PedidoOnline"),
+            ("budgets", "HistorialPedidoProducido"),
         ],
     ),
     (
