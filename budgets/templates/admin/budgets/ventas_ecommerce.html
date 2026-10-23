@@ -1,0 +1,117 @@
+{% extends "admin/budgets/_metrics_base.html" %}
+{% load i18n %}
+{# Ventas eCommerce: KPIs del canal online (PedidoOnline CONFIRMADO), separado #}
+{# del Panel de ventas (que mide Presupuesto aprobados). Sin margen/costo ni #}
+{# "conversión" — ver budgets/ecommerce_metrics.py. Sin export en esta v1 #}
+{# (hide_export=True lo setea VentasEcommerceAdmin). #}
+
+{% block mx_intro %}
+{% translate "Pedidos CONFIRMADOS de la tienda online (3darg-backend, todas las sub-marcas) por período, por fecha de la orden. Sin margen ni costos de producción — PedidoOnline no guarda SKU, solo un snapshot del nombre/precio del producto." %}
+<a href="{% url 'admin:budgets_pedidoonline_changelist' %}">→ {% translate "Ver pedidos online (confirmar / rechazar)" %}</a>
+<a href="{% url 'admin:budgets_metricasventas_changelist' %}">→ {% translate "Ver Panel de ventas (presupuestos a medida)" %}</a>
+{% endblock %}
+
+{% block mx_extra_bar %}
+<form method="get" id="mxBrandForm" style="display:flex; align-items:center; gap:6px;">
+    <input type="hidden" name="period" value="{{ period }}">
+    {% if period == "month" %}<input type="hidden" name="date" value="{{ selected_date_value }}">{% endif %}
+    <select name="brand" class="mx-month-select" onchange="document.getElementById('mxBrandForm').submit()">
+        <option value="">{% translate "Todas las marcas" %}</option>
+        {% for slug, name in brands %}
+        <option value="{{ slug }}" {% if slug == selected_brand %}selected{% endif %}>{{ name }}</option>
+        {% endfor %}
+    </select>
+</form>
+{% endblock %}
+
+{% block mx_body %}
+<!-- ===================== VENTAS ECOMMERCE ===================== -->
+<div class="mx-section mx-section--ventas">{% translate "Ventas eCommerce" %}</div>
+<div class="mx-kpis mx-kpis--ventas">
+    <div class="kpi"><span class="n">{{ n_pedidos }}</span><span class="l">{% translate "Pedidos confirmados" %}</span></div>
+    <div class="kpi"><span class="n">{{ facturacion }}</span><span class="l">{% translate "Facturación" %}</span></div>
+    <div class="kpi"><span class="n">{{ ticket }}</span><span class="l">{% translate "Ticket promedio" %}</span></div>
+    <div class="kpi"><span class="n">{{ venta_diaria_promedio }}</span><span class="l">{% translate "Venta diaria promedio" %}</span></div>
+</div>
+
+<div class="mx-grid">
+    <div class="mx-card" style="flex: 1 1 100%;">
+        <h3>{% blocktranslate with pl=period_label|lower %}Facturación por {{ pl }}{% endblocktranslate %}</h3>
+        <canvas id="chartFact" height="150"></canvas>
+    </div>
+</div>
+
+<!-- ============== PRODUCTOS Y CLIENTES (ranking del período) ============== -->
+<div class="mx-grid">
+    <div class="mx-card">
+        <h3>{% translate "Productos más vendidos ($)" %}</h3>
+        <table class="mx">
+            <thead><tr><th>{% translate "Producto" %}</th><th class="num">{% translate "Facturación" %}</th></tr></thead>
+            <tbody>
+                {% for r in top_productos_money %}
+                <tr><td>{{ r.name }}</td><td class="num">{{ r.money }}</td></tr>
+                {% empty %}<tr><td colspan="2" class="empty">{% translate "Sin pedidos confirmados en el período." %}</td></tr>{% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="mx-card">
+        <h3>{% translate "Productos más vendidos (cantidad)" %}</h3>
+        <table class="mx">
+            <thead><tr><th>{% translate "Producto" %}</th><th class="num">{% translate "Cant." %}</th></tr></thead>
+            <tbody>
+                {% for r in top_productos_qty %}
+                <tr><td>{{ r.name }}</td><td class="num">{{ r.qty }}</td></tr>
+                {% empty %}<tr><td colspan="2" class="empty">{% translate "Sin pedidos confirmados en el período." %}</td></tr>{% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="mx-grid">
+    <div class="mx-card">
+        <h3>{% translate "Top clientes ($)" %}</h3>
+        <table class="mx">
+            <thead><tr><th>{% translate "Cliente" %}</th><th class="num">{% translate "Facturación" %}</th></tr></thead>
+            <tbody>
+                {% for r in top_clientes %}
+                <tr><td>{{ r.name }}</td><td class="num">{{ r.money }}</td></tr>
+                {% empty %}<tr><td colspan="2" class="empty">{% translate "Sin pedidos confirmados en el período." %}</td></tr>{% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="mx-card">
+        <h3>{% translate "Top clientes (cantidad)" %}</h3>
+        <table class="mx">
+            <thead><tr><th>{% translate "Cliente" %}</th><th class="num">{% translate "Cant." %}</th></tr></thead>
+            <tbody>
+                {% for r in top_clientes_qty %}
+                <tr><td>{{ r.name }}</td><td class="num">{{ r.qty }}</td></tr>
+                {% empty %}<tr><td colspan="2" class="empty">{% translate "Sin pedidos confirmados en el período." %}</td></tr>{% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- ============== DESGLOSE POR MARCA ============== -->
+<div class="mx-grid">
+    <div class="mx-card" style="flex: 1 1 100%;">
+        <h3>{% translate "Desglose por marca" %}</h3>
+        <table class="mx">
+            <thead><tr><th>{% translate "Marca" %}</th><th class="num">{% translate "Pedidos" %}</th><th class="num">{% translate "Facturación" %}</th></tr></thead>
+            <tbody>
+                {% for r in por_marca %}
+                <tr><td>{{ r.name }}</td><td class="num">{{ r.count }}</td><td class="num">{{ r.total }}</td></tr>
+                {% empty %}<tr><td colspan="3" class="empty">{% translate "Sin pedidos confirmados en el período." %}</td></tr>{% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block mx_charts %}
+    new Chart(document.getElementById("chartFact"), {
+        type: "bar",
+        data: { labels: fact.labels, datasets: [{ label: "{% translate 'Facturación' %}", data: fact.data, backgroundColor: "#2563eb", borderRadius: 4 }] },
+        options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+    });
+{% endblock %}

@@ -36,7 +36,12 @@ orden por uno pensado para el flujo real de trabajo:
   solo lectura sobre el mismo modelo, filtrado a los que ya llegaron a
   `Presupuesto.Status.COMPLETED`): separa "lo que hay que decidir" de "lo
   que ya se resolvió y se imprimió", sin mezclar ambas vistas en un único
-  listado. Dentro de "Inventario y compras", "Totales de inventario" (antes en
+  listado. "Ventas eCommerce" (otro proxy de `PedidoOnline`, al final de la
+  sección) es el dashboard de KPIs del canal online — mismo rol que "Ventas"
+  cumple para los presupuestos a medida, pero separado porque son dos
+  negocios con datos distintos (`Presupuesto` no tiene campo de canal/origen
+  para filtrar ecommerce de forma confiable; ver `budgets/ecommerce_metrics.py`).
+  Dentro de "Inventario y compras", "Totales de inventario" (antes en
   "Métricas") pasó a encabezar la sección, seguido de "Movimientos de
   stock" (el historial completo) y recién después lo operativo (Compras,
   Filamentos, Agregados y sus categorías), dejando "Ajustes manuales de
@@ -113,6 +118,7 @@ _SECTIONS = [
         [
             ("budgets", "PedidoOnline"),
             ("budgets", "HistorialPedidoProducido"),
+            ("budgets", "VentasEcommerce"),
         ],
     ),
     (

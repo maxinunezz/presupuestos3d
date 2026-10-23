@@ -17,6 +17,8 @@ from django.utils.translation import gettext, gettext_lazy as _
 from config.formatting import format_hours
 from production.models import HistorialImpresion, ProductionJob
 
+from .ecommerce_metrics import available_brands, build_ecommerce_metrics
+from .ecommerce_metrics import template_context as ecommerce_template_context
 from .metrics import PERIODS, build_metrics, export_xlsx, template_context
 from .models import (
     CanalCargoFijoTramo,
@@ -40,6 +42,7 @@ from .models import (
     Socio,
     StockPiezas,
     StockProductos,
+    VentasEcommerce,
 )
 from .pdf import (
     format_money,
@@ -1061,6 +1064,98 @@ class HistorialPedidoProducidoAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
+
+
+@admin.register(VentasEcommerce)
+class VentasEcommerceAdmin(admin.ModelAdmin):
+    """
+    Panel de solo lectura con los KPIs del canal ecommerce (facturación,
+    pedidos, ticket promedio, venta diaria promedio, ranking de productos y
+    clientes, desglose por marca) por período — mismo esquema de navegación
+    que el Panel de ventas (`MetricasVentasAdmin`: pestañas semana/mes/año +
+    selector de mes), pero calculado sobre `PedidoOnline` CONFIRMADOS, no
+    sobre `Presupuesto` aprobados. Suma un filtro por marca (`?brand=slug`),
+    que el Panel de ventas no necesita porque `Presupuesto` no es multi-marca.
+
+    Sin margen/costo/beneficio ni "conversión" ni export a Excel/PDF en esta
+    v1 — ver limitaciones documentadas en `budgets/ecommerce_metrics.py`.
+    """
+
+    change_list_template = "admin/budgets/ventas_ecommerce.html"
+    dashboard_title = _("Ventas eCommerce")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def changelist_view(self, request, extra_context=None):
+        period = request.GET.get("period", "month")
+        if period not in PERIODS:
+            period = "month"
+
+        # En la pestaña "Mes" se puede elegir un mes/año puntual con
+        # ?date=YYYY-MM, igual que en el Panel de ventas.
+        selected_month = None
+        if period == "month":
+            date_param = request.GET.get("date", "")
+            try:
+                anio_str, mes_str = date_param.split("-")
+                anio, mes = int(anio_str), int(mes_str)
+                if 1 <= mes <= 12 and 2000 <= anio <= 2100:
+                    selected_month = timezone.make_aware(
+                        datetime(anio, mes, 1), timezone.get_current_timezone()
+                    )
+            except (ValueError, AttributeError):
+                selected_month = None
+
+        brand_slug = request.GET.get("brand") or None
+        metrics = build_ecommerce_metrics(period, now=selected_month, brand_slug=brand_slug)
+
+        # Opciones del dropdown de mes: últimos 24 meses (más reciente
+        # primero), contados desde el mes actual real (no desde el elegido).
+        month_options = []
+        real_now = timezone.localtime(timezone.now()).replace(
+            day=1, hour=0, minute=0, second=0, microsecond=0
+        )
+        cursor = real_now
+        for _ in range(24):
+            month_options.append({"value": cursor.strftime("%Y-%m"), "date": cursor})
+            cursor = (
+                cursor.replace(year=cursor.year - 1, month=12)
+                if cursor.month == 1
+                else cursor.replace(month=cursor.month - 1)
+            )
+        selected_date_value = (
+            timezone.localtime(selected_month).strftime("%Y-%m")
+            if selected_month
+            else real_now.strftime("%Y-%m")
+        )
+
+        context = {
+            **self.admin_site.each_context(request),
+            "title": self.dashboard_title,
+            "periods": [
+                {"key": k, "label": v["label"], "active": k == period}
+                for k, v in PERIODS.items()
+            ],
+            "month_options": month_options,
+            "selected_date_value": selected_date_value,
+            "selected_date": selected_month or real_now,
+            "brands": available_brands(),
+            "selected_brand": brand_slug or "",
+            # Sin export a Excel/PDF en esta v1 (changelist_view no sabe
+            # generarlos) — oculta los botones que `_metrics_base.html`
+            # muestra por default para Métricas/Panel de ventas/Panel de costos.
+            "hide_export": True,
+            **ecommerce_template_context(metrics),
+            **(extra_context or {}),
+        }
+        return TemplateResponse(request, self.change_list_template, context)
 
 
 @admin.register(Producto)

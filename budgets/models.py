@@ -2554,3 +2554,25 @@ class HistorialPedidoProducido(PedidoOnline):
         proxy = True
         verbose_name = _("Historial de pedido producido")
         verbose_name_plural = _("Historial de pedidos producidos")
+
+
+class VentasEcommerce(PedidoOnline):
+    """
+    Proxy de solo lectura sobre `PedidoOnline`: dashboard de KPIs del canal
+    ecommerce (facturación, cantidad de pedidos, ticket promedio, ranking de
+    productos/clientes, desglose por marca), con el mismo patrón de período
+    semana/mes/año que el Panel de ventas (`MetricasVentas`) — pero sobre
+    pedidos CONFIRMADOS de la tienda online, no sobre `Presupuesto` aprobados.
+
+    Separado del Panel de ventas (que mide los presupuestos a medida) porque
+    son dos negocios con datos y granularidad distintos: `Presupuesto` no
+    tiene ningún campo de canal/origen, y el único vínculo con un pedido
+    online es el FK opcional `PedidoOnline.presupuesto` (se completa a mano,
+    no es una fuente confiable para "qué facturación vino de ecommerce").
+    Ver `budgets/ecommerce_metrics.py` para el motor de cálculo.
+    """
+
+    class Meta:
+        proxy = True
+        verbose_name = _("Venta eCommerce")
+        verbose_name_plural = _("Ventas eCommerce")
