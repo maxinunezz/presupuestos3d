@@ -1082,7 +1082,7 @@ class VentasEcommerceAdmin(admin.ModelAdmin):
     """
 
     change_list_template = "admin/budgets/ventas_ecommerce.html"
-    dashboard_title = _("Ventas eCommerce")
+    dashboard_title = _("Panel ventas eCommerce")
 
     def has_add_permission(self, request):
         return False

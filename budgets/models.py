@@ -2570,9 +2570,16 @@ class VentasEcommerce(PedidoOnline):
     online es el FK opcional `PedidoOnline.presupuesto` (se completa a mano,
     no es una fuente confiable para "qué facturación vino de ecommerce").
     Ver `budgets/ecommerce_metrics.py` para el motor de cálculo.
+
+    Vive en el admin como "Panel ventas eCommerce" (`verbose_name_plural`),
+    agrupado en la sección "Ventas y presupuestos" junto a "Ventas" — no en
+    "eCommerce" (donde sí quedan "Pedido online" e "Historial de pedidos
+    producidos": ambos son el flujo operativo del pedido en sí, mientras que
+    este panel es un KPI de ventas, igual que "Ventas"/"Panel de ventas").
+    Ver `config/admin_dashboard.py::_SECTIONS`.
     """
 
     class Meta:
         proxy = True
         verbose_name = _("Venta eCommerce")
-        verbose_name_plural = _("Ventas eCommerce")
+        verbose_name_plural = _("Panel ventas eCommerce")

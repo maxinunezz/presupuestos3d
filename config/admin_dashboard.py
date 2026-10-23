@@ -23,9 +23,14 @@ orden por uno pensado para el flujo real de trabajo:
   Inventario y compras, Gastos), y dentro de cada una: primero lo operativo
   (lo que se toca seguido), al final los catálogos/configuración (lo que se
   carga una vez y no se vuelve a tocar). Dentro de "Ventas y presupuestos",
-  "Ventas" (el panel, antes "Panel de ventas") queda justo arriba de
-  "Canales de venta" (antes perdido en la app real "Presupuestos", sin
-  relación visible con las ventas) y de "Presupuestos"; "Piezas" (mismo caso,
+  "Ventas" (el panel, antes "Panel de ventas") queda primero, y justo debajo
+  "Panel ventas eCommerce" (proxy de `PedidoOnline`, no de `Presupuesto`):
+  mismo rol de dashboard de KPIs que "Ventas" cumple para los presupuestos a
+  medida, pero del canal online, separado porque son dos negocios con datos
+  distintos (`Presupuesto` no tiene campo de canal/origen para filtrar
+  ecommerce de forma confiable; ver `budgets/ecommerce_metrics.py`). Después
+  sigue "Canales de venta" (antes perdido en la app real "Presupuestos", sin
+  relación visible con las ventas) y "Presupuestos"; "Piezas" (mismo caso,
   antes también en "Presupuestos") pasó a quedar justo debajo de "Costeo de
   productos" (antes "Producto"), ya que es el catálogo que consume ese
   costeo. "Pedido online" (antes "Pedidos online pendientes", perdido en
@@ -36,11 +41,8 @@ orden por uno pensado para el flujo real de trabajo:
   solo lectura sobre el mismo modelo, filtrado a los que ya llegaron a
   `Presupuesto.Status.COMPLETED`): separa "lo que hay que decidir" de "lo
   que ya se resolvió y se imprimió", sin mezclar ambas vistas en un único
-  listado. "Ventas eCommerce" (otro proxy de `PedidoOnline`, al final de la
-  sección) es el dashboard de KPIs del canal online — mismo rol que "Ventas"
-  cumple para los presupuestos a medida, pero separado porque son dos
-  negocios con datos distintos (`Presupuesto` no tiene campo de canal/origen
-  para filtrar ecommerce de forma confiable; ver `budgets/ecommerce_metrics.py`).
+  listado — "Panel ventas eCommerce" (arriba, en "Ventas y presupuestos") no
+  encaja acá porque es un KPI de ventas, no el flujo operativo del pedido.
   Dentro de "Inventario y compras", "Totales de inventario" (antes en
   "Métricas") pasó a encabezar la sección, seguido de "Movimientos de
   stock" (el historial completo) y recién después lo operativo (Compras,
@@ -104,6 +106,7 @@ _SECTIONS = [
         _("Ventas y presupuestos"),
         [
             ("budgets", "PanelVentas"),
+            ("budgets", "VentasEcommerce"),
             ("budgets", "CanalVenta"),
             ("budgets", "Presupuesto"),
             ("budgets", "Producto"),
@@ -118,7 +121,6 @@ _SECTIONS = [
         [
             ("budgets", "PedidoOnline"),
             ("budgets", "HistorialPedidoProducido"),
-            ("budgets", "VentasEcommerce"),
         ],
     ),
     (

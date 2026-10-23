@@ -1,5 +1,5 @@
 """
-Motor de métricas de "Ventas eCommerce": mismo patrón que `budgets.metrics`
+Motor de métricas de "Panel ventas eCommerce": mismo patrón que `budgets.metrics`
 (períodos semana/mes/año, buckets, rankings), pero sobre `PedidoOnline` (los
 avisos de venta que llegan desde la tienda online, cualquier sub-marca), no
 sobre `Presupuesto`. Mide el canal ecommerce por separado de la operación de
