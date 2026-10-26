@@ -905,28 +905,49 @@ class PedidoOnlineAdmin(admin.ModelAdmin):
         # El campo `items` es un JSONField; mostrado tal cual en el form de
         # solo lectura sale como JSON crudo, poco legible para el dueño. Acá
         # se renderiza como una tabla (Imagen / Producto / SKU / Cant. /
-        # Precio unit. / Subtotal) con una fila final que compara la suma de
-        # subtotales contra `total_amount` — una discrepancia ahí (ej. envío
-        # incluido en el total, o un item con precio mal mandado) queda
-        # visible sin tener que sacar la cuenta a mano.
+        # Precio unit. / Costo unit. / Margen / Subtotal) con una fila final
+        # que compara la suma de subtotales contra `total_amount` — una
+        # discrepancia ahí (ej. envío incluido en el total, o un item con
+        # precio mal mandado) queda visible sin tener que sacar la cuenta a
+        # mano.
         #
         # `sku`/`product_slug`/`variant_label`/`image_url` son nuevos
         # (2026-10-26, ver `PedidoOnline.items` en models.py) — pedidos
         # avisados antes de ese cambio no los tienen en su `items` crudo, por
         # eso siempre se leen con `.get(..., "")` y se ocultan en blanco en
         # vez de romper o mostrar "?".
+        #
+        # Costo/margen (Nivel 3, 2026-10-26): cruza el `sku` de cada item
+        # contra `Producto.sku` DE ESTE MISMO SISTEMA — no hace falta pasar
+        # por el endpoint HTTP `/api/productos/costo/` (ese es para que
+        # 3darg-backend, un proceso aparte, consulte el costo; estando ya
+        # del lado de presupuestos3d alcanza con el ORM directo, misma
+        # fuente de verdad: `Producto.unit_cost_avg`). El margen se calcula
+        # contra el `unit_price` REAL de la venta (no contra
+        # `Producto.unit_price`, que es el precio de referencia cargado en
+        # el presupuesto y puede no coincidir con lo que efectivamente se
+        # cobró con descuentos/promos). Sin match de SKU (falta `sku` en el
+        # item, o ningún `Producto` lo tiene cargado todavía) se muestra
+        # "—" — no es un error, simplemente no hay costo cargado para cruzar.
         if not obj.items:
             return "—"
 
+        skus = {item.get("sku") for item in obj.items if item.get("sku")}
+        productos_por_sku = (
+            {p.sku: p for p in Producto.objects.filter(sku__in=skus)} if skus else {}
+        )
+
         filas = []
         suma_items = Decimal("0")
+        margen_total = Decimal("0")
+        items_con_costo = 0
         for item in obj.items:
             cantidad = item.get("quantity", "?")
             nombre = item.get("product_name", "?")
             variant_label = item.get("variant_label", "")
             if variant_label:
                 nombre = f"{nombre} — {variant_label}"
-            sku = item.get("sku", "") or "—"
+            sku = item.get("sku", "") or ""
             precio_unit = item.get("unit_price", "?")
             image_url = item.get("image_url", "")
             if image_url:
@@ -943,7 +964,33 @@ class PedidoOnlineAdmin(admin.ModelAdmin):
                 subtotal_display = f"$ {subtotal}"
             except (InvalidOperation, TypeError):
                 subtotal_display = "—"
-            filas.append((thumb, nombre, sku, cantidad, f"$ {precio_unit}", subtotal_display))
+
+            producto = productos_por_sku.get(sku) if sku else None
+            costo_display = "—"
+            margen_display = "—"
+            if producto is not None:
+                try:
+                    costo_unit = producto.unit_cost_avg
+                    precio_unit_dec = Decimal(str(precio_unit))
+                    margen_unit = precio_unit_dec - costo_unit
+                    margen_linea = margen_unit * Decimal(str(cantidad))
+                    margen_total += margen_linea
+                    items_con_costo += 1
+                    costo_display = f"$ {costo_unit}"
+                    if precio_unit_dec > 0:
+                        margen_pct = (margen_unit / precio_unit_dec * Decimal("100")).quantize(
+                            Decimal("0.1")
+                        )
+                        margen_display = f"$ {margen_linea} ({margen_pct}%)"
+                    else:
+                        margen_display = f"$ {margen_linea}"
+                except (InvalidOperation, TypeError):
+                    pass
+
+            filas.append(
+                (thumb, nombre, sku or "—", cantidad, f"$ {precio_unit}",
+                 costo_display, margen_display, subtotal_display)
+            )
 
         filas_html = format_html_join(
             "",
@@ -951,6 +998,8 @@ class PedidoOnlineAdmin(admin.ModelAdmin):
             "<td style='padding:2px 10px 2px 0'>{}</td>"
             "<td style='padding:2px 10px; color:#666; font-size:0.9em'>{}</td>"
             "<td style='padding:2px 10px; text-align:center'>{}</td>"
+            "<td style='padding:2px 10px; text-align:right'>{}</td>"
+            "<td style='padding:2px 10px; text-align:right; color:#666'>{}</td>"
             "<td style='padding:2px 10px; text-align:right'>{}</td>"
             "<td style='padding:2px 0; text-align:right'>{}</td></tr>",
             filas,
@@ -960,9 +1009,10 @@ class PedidoOnlineAdmin(admin.ModelAdmin):
             desajuste = suma_items != Decimal(str(obj.total_amount))
         except InvalidOperation:
             desajuste = False
+        notas = ""
         if desajuste:
-            nota = format_html(
-                '<tr><td colspan="6" style="padding-top:6px; color:#b3261e">'
+            notas += format_html(
+                '<tr><td colspan="8" style="padding-top:6px; color:#b3261e">'
                 "⚠ {}</td></tr>",
                 gettext(
                     "La suma de los items ($ %(suma)s) no coincide con el Total "
@@ -970,8 +1020,16 @@ class PedidoOnlineAdmin(admin.ModelAdmin):
                 )
                 % {"suma": suma_items, "total": obj.total_amount, "moneda": obj.currency},
             )
-        else:
-            nota = ""
+        if items_con_costo > 0:
+            notas += format_html(
+                '<tr><td colspan="8" style="padding-top:6px; color:#15803d">'
+                "{}</td></tr>",
+                gettext(
+                    "Margen bruto estimado: $ %(margen)s (sobre %(n)d/%(total)d "
+                    "item/s con costo cargado en presupuestos3d)."
+                )
+                % {"margen": margen_total, "n": items_con_costo, "total": len(obj.items)},
+            )
 
         return format_html(
             '<table style="border-collapse:collapse">'
@@ -981,11 +1039,14 @@ class PedidoOnlineAdmin(admin.ModelAdmin):
             "<th style='padding:2px 10px 4px'>{}</th>"
             "<th style='padding:2px 10px 4px'>{}</th>"
             "<th style='padding:2px 10px 4px'>{}</th>"
+            "<th style='padding:2px 10px 4px'>{}</th>"
+            "<th style='padding:2px 10px 4px'>{}</th>"
             "<th style='padding:2px 0 4px'>{}</th></tr></thead>"
             "<tbody>{}{}</tbody></table>",
             gettext("Producto"), gettext("SKU"), gettext("Cant."),
-            gettext("Precio unit."), gettext("Subtotal"),
-            filas_html, nota,
+            gettext("Precio unit."), gettext("Costo unit."), gettext("Margen"),
+            gettext("Subtotal"),
+            filas_html, notas,
         )
 
     @admin.display(description=_("Medio de pago"))
