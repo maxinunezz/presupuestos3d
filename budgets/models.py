@@ -2449,11 +2449,37 @@ class PedidoOnline(models.Model):
         blank=True,
         help_text=_(
             "Snapshot de los items comprados: [{product_name, quantity, "
-            "unit_price}, ...]."
+            "unit_price, sku, product_slug, variant_label, image_url}, ...]. "
+            "Los campos `sku`/`product_slug`/`variant_label`/`image_url` son "
+            "nuevos (2026-10-26) — pedidos avisados antes de ese cambio no "
+            "los van a tener en items viejos, por eso siempre se leen con "
+            "`.get()` y nunca se asume que están."
         ),
     )
     total_amount = models.DecimalField(_("Total"), max_digits=12, decimal_places=2)
     currency = models.CharField(_("Moneda"), max_length=10, default="ARS")
+
+    payment_method = models.CharField(
+        _("Medio de pago"),
+        max_length=50,
+        blank=True,
+        help_text=_(
+            "Texto legible (ej. \"Mercado Pago\", \"Transferencia bancaria\") "
+            "tal como lo manda 3darg-backend — no es un choices propio de "
+            "este sistema, solo informativo."
+        ),
+    )
+    shipping_info = models.JSONField(
+        _("Envío"),
+        default=dict,
+        blank=True,
+        help_text=_(
+            "Snapshot de envío al momento del pago: {method, modality, "
+            "city, province}. A propósito NO incluye tracking — para el "
+            "estado real y actualizado del envío, entrar al link de la "
+            "orden (ver abajo)."
+        ),
+    )
 
     order_created_at = models.DateTimeField(
         _("Fecha de la orden"),

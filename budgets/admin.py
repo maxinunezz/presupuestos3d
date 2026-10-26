@@ -844,6 +844,8 @@ class PedidoOnlineAdmin(admin.ModelAdmin):
         "items_display",
         "total_amount",
         "currency",
+        "payment_method_display",
+        "shipping_info_display",
         "order_created_at",
         "received_at",
         "order_admin_link",
@@ -867,6 +869,8 @@ class PedidoOnlineAdmin(admin.ModelAdmin):
                     "items_display",
                     "total_amount",
                     "currency",
+                    "payment_method_display",
+                    "shipping_info_display",
                     "order_created_at",
                     "received_at",
                 )
@@ -900,11 +904,17 @@ class PedidoOnlineAdmin(admin.ModelAdmin):
     def items_display(self, obj):
         # El campo `items` es un JSONField; mostrado tal cual en el form de
         # solo lectura sale como JSON crudo, poco legible para el dueño. Acá
-        # se renderiza como una tabla (Producto / Cant. / Precio unit. /
-        # Subtotal) con una fila final que compara la suma de subtotales
-        # contra `total_amount` — una discrepancia ahí (ej. envío incluido
-        # en el total, o un item con precio mal mandado) queda visible sin
-        # tener que sacar la cuenta a mano.
+        # se renderiza como una tabla (Imagen / Producto / SKU / Cant. /
+        # Precio unit. / Subtotal) con una fila final que compara la suma de
+        # subtotales contra `total_amount` — una discrepancia ahí (ej. envío
+        # incluido en el total, o un item con precio mal mandado) queda
+        # visible sin tener que sacar la cuenta a mano.
+        #
+        # `sku`/`product_slug`/`variant_label`/`image_url` son nuevos
+        # (2026-10-26, ver `PedidoOnline.items` en models.py) — pedidos
+        # avisados antes de ese cambio no los tienen en su `items` crudo, por
+        # eso siempre se leen con `.get(..., "")` y se ocultan en blanco en
+        # vez de romper o mostrar "?".
         if not obj.items:
             return "—"
 
@@ -913,18 +923,33 @@ class PedidoOnlineAdmin(admin.ModelAdmin):
         for item in obj.items:
             cantidad = item.get("quantity", "?")
             nombre = item.get("product_name", "?")
+            variant_label = item.get("variant_label", "")
+            if variant_label:
+                nombre = f"{nombre} — {variant_label}"
+            sku = item.get("sku", "") or "—"
             precio_unit = item.get("unit_price", "?")
+            image_url = item.get("image_url", "")
+            if image_url:
+                thumb = format_html(
+                    '<img src="{}" style="max-width:40px; max-height:40px; '
+                    'object-fit:contain; border-radius:4px" loading="lazy">',
+                    image_url,
+                )
+            else:
+                thumb = "—"
             try:
                 subtotal = Decimal(str(cantidad)) * Decimal(str(precio_unit))
                 suma_items += subtotal
                 subtotal_display = f"$ {subtotal}"
             except (InvalidOperation, TypeError):
                 subtotal_display = "—"
-            filas.append((nombre, cantidad, f"$ {precio_unit}", subtotal_display))
+            filas.append((thumb, nombre, sku, cantidad, f"$ {precio_unit}", subtotal_display))
 
         filas_html = format_html_join(
             "",
             "<tr><td style='padding:2px 10px 2px 0'>{}</td>"
+            "<td style='padding:2px 10px 2px 0'>{}</td>"
+            "<td style='padding:2px 10px; color:#666; font-size:0.9em'>{}</td>"
             "<td style='padding:2px 10px; text-align:center'>{}</td>"
             "<td style='padding:2px 10px; text-align:right'>{}</td>"
             "<td style='padding:2px 0; text-align:right'>{}</td></tr>",
@@ -937,7 +962,7 @@ class PedidoOnlineAdmin(admin.ModelAdmin):
             desajuste = False
         if desajuste:
             nota = format_html(
-                '<tr><td colspan="4" style="padding-top:6px; color:#b3261e">'
+                '<tr><td colspan="6" style="padding-top:6px; color:#b3261e">'
                 "⚠ {}</td></tr>",
                 gettext(
                     "La suma de los items ($ %(suma)s) no coincide con el Total "
@@ -951,14 +976,39 @@ class PedidoOnlineAdmin(admin.ModelAdmin):
         return format_html(
             '<table style="border-collapse:collapse">'
             "<thead><tr style='text-align:left'>"
+            "<th style='padding:2px 10px 4px 0'></th>"
             "<th style='padding:2px 10px 4px 0'>{}</th>"
+            "<th style='padding:2px 10px 4px'>{}</th>"
             "<th style='padding:2px 10px 4px'>{}</th>"
             "<th style='padding:2px 10px 4px'>{}</th>"
             "<th style='padding:2px 0 4px'>{}</th></tr></thead>"
             "<tbody>{}{}</tbody></table>",
-            gettext("Producto"), gettext("Cant."), gettext("Precio unit."), gettext("Subtotal"),
+            gettext("Producto"), gettext("SKU"), gettext("Cant."),
+            gettext("Precio unit."), gettext("Subtotal"),
             filas_html, nota,
         )
+
+    @admin.display(description=_("Medio de pago"))
+    def payment_method_display(self, obj):
+        return obj.payment_method or "—"
+
+    @admin.display(description=_("Envío"))
+    def shipping_info_display(self, obj):
+        # `shipping_info` es nuevo (2026-10-26) — pedidos avisados antes de
+        # ese cambio lo tienen vacío (`default=dict`), se muestra "—".
+        info = obj.shipping_info or {}
+        method = info.get("method")
+        modality = info.get("modality")
+        city = info.get("city")
+        province = info.get("province")
+        if not any([method, modality, city, province]):
+            return "—"
+        partes = [p for p in (method, modality) if p]
+        destino = ", ".join(p for p in (city, province) if p)
+        linea = " — ".join(partes) if partes else ""
+        if destino:
+            linea = f"{linea} ({destino})" if linea else destino
+        return linea or "—"
 
     @admin.display(description=_("Total"))
     def total_display(self, obj):
