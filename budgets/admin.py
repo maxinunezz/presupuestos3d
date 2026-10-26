@@ -2,6 +2,7 @@ from datetime import datetime
 from decimal import Decimal, InvalidOperation
 
 from django import forms
+from django.conf import settings
 from django.contrib import admin, messages
 from django.core.exceptions import ValidationError
 from django.db.models import DecimalField
@@ -10,7 +11,7 @@ from django.http import HttpResponse
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils import timezone
-from django.utils.html import format_html_join
+from django.utils.html import format_html, format_html_join
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext, gettext_lazy as _
 
@@ -839,11 +840,14 @@ class PedidoOnlineAdmin(admin.ModelAdmin):
         "brand_slug",
         "brand_name",
         "customer_email",
+        "cliente_historial_display",
         "items_display",
         "total_amount",
         "currency",
         "order_created_at",
         "received_at",
+        "order_admin_link",
+        "estado_badge_display",
         "raw_payload",
     )
     ordering = ("-received_at",)
@@ -857,7 +861,9 @@ class PedidoOnlineAdmin(admin.ModelAdmin):
                     "brand_slug",
                     "reference_code_display",
                     "external_reference",
+                    "order_admin_link",
                     "customer_email",
+                    "cliente_historial_display",
                     "items_display",
                     "total_amount",
                     "currency",
@@ -866,7 +872,7 @@ class PedidoOnlineAdmin(admin.ModelAdmin):
                 )
             },
         ),
-        (_("Seguimiento"), {"fields": ("estado", "presupuesto")}),
+        (_("Seguimiento"), {"fields": ("estado_badge_display", "estado", "presupuesto")}),
         (_("Debug"), {"fields": ("raw_payload",), "classes": ("collapse",)}),
     )
 
@@ -894,26 +900,115 @@ class PedidoOnlineAdmin(admin.ModelAdmin):
     def items_display(self, obj):
         # El campo `items` es un JSONField; mostrado tal cual en el form de
         # solo lectura sale como JSON crudo, poco legible para el dueño. Acá
-        # se renderiza como una lista prolija, una línea por producto.
+        # se renderiza como una tabla (Producto / Cant. / Precio unit. /
+        # Subtotal) con una fila final que compara la suma de subtotales
+        # contra `total_amount` — una discrepancia ahí (ej. envío incluido
+        # en el total, o un item con precio mal mandado) queda visible sin
+        # tener que sacar la cuenta a mano.
         if not obj.items:
             return "—"
-        filas = format_html_join(
+
+        filas = []
+        suma_items = Decimal("0")
+        for item in obj.items:
+            cantidad = item.get("quantity", "?")
+            nombre = item.get("product_name", "?")
+            precio_unit = item.get("unit_price", "?")
+            try:
+                subtotal = Decimal(str(cantidad)) * Decimal(str(precio_unit))
+                suma_items += subtotal
+                subtotal_display = f"$ {subtotal}"
+            except (InvalidOperation, TypeError):
+                subtotal_display = "—"
+            filas.append((nombre, cantidad, f"$ {precio_unit}", subtotal_display))
+
+        filas_html = format_html_join(
             "",
-            "<li>{} × {} — {} c/u</li>",
-            (
-                (
-                    item.get("quantity", "?"),
-                    item.get("product_name", "?"),
-                    f"$ {item.get('unit_price', '?')}",
-                )
-                for item in obj.items
-            ),
+            "<tr><td style='padding:2px 10px 2px 0'>{}</td>"
+            "<td style='padding:2px 10px; text-align:center'>{}</td>"
+            "<td style='padding:2px 10px; text-align:right'>{}</td>"
+            "<td style='padding:2px 0; text-align:right'>{}</td></tr>",
+            filas,
         )
-        return mark_safe(f'<ul style="margin:0; padding-left:1.2em;">{filas}</ul>')
+
+        try:
+            desajuste = suma_items != Decimal(str(obj.total_amount))
+        except InvalidOperation:
+            desajuste = False
+        if desajuste:
+            nota = format_html(
+                '<tr><td colspan="4" style="padding-top:6px; color:#b3261e">'
+                "⚠ {}</td></tr>",
+                gettext(
+                    "La suma de los items ($ %(suma)s) no coincide con el Total "
+                    "($ %(total)s %(moneda)s) — puede incluir envío u otro ajuste."
+                )
+                % {"suma": suma_items, "total": obj.total_amount, "moneda": obj.currency},
+            )
+        else:
+            nota = ""
+
+        return format_html(
+            '<table style="border-collapse:collapse">'
+            "<thead><tr style='text-align:left'>"
+            "<th style='padding:2px 10px 4px 0'>{}</th>"
+            "<th style='padding:2px 10px 4px'>{}</th>"
+            "<th style='padding:2px 10px 4px'>{}</th>"
+            "<th style='padding:2px 0 4px'>{}</th></tr></thead>"
+            "<tbody>{}{}</tbody></table>",
+            gettext("Producto"), gettext("Cant."), gettext("Precio unit."), gettext("Subtotal"),
+            filas_html, nota,
+        )
 
     @admin.display(description=_("Total"))
     def total_display(self, obj):
         return f"{obj.currency} {obj.total_amount}"
+
+    @admin.display(description=_("Orden en 3darg-backend"))
+    def order_admin_link(self, obj):
+        # `raw_payload.order_id` ya viaja hoy desde 3darg-backend (ver
+        # `orders/signals.py::_notify_presupuestos3d`) pero no se usaba para
+        # nada en esta vista. `API_3DARG_URL` ya existe como setting (lo usa
+        # `config/api_3darg.py` para la sync de costeo) y apunta al dominio
+        # base de 3darg-backend, así que se puede reconstruir el link al
+        # admin de la Order sin pedir ningún dato nuevo.
+        order_id = (obj.raw_payload or {}).get("order_id")
+        api_url = getattr(settings, "API_3DARG_URL", "").rstrip("/")
+        if not order_id or not api_url:
+            return "—"
+        url = f"{api_url}/admin/orders/order/{order_id}/change/"
+        return format_html(
+            '<a href="{}" target="_blank" rel="noopener">{} ↗</a>',
+            url, gettext("Ver orden en el admin de 3darg-backend"),
+        )
+
+    @admin.display(description=_("Cliente"))
+    def cliente_historial_display(self, obj):
+        # Cuenta cuántos OTROS PedidoOnline hay con el mismo email, para que
+        # el dueño vea de un vistazo si es la primera compra de este
+        # cliente o uno recurrente, sin tener que buscarlo a mano.
+        if not obj.customer_email:
+            return "—"
+        previos = (
+            PedidoOnline.objects.filter(customer_email=obj.customer_email)
+            .exclude(pk=obj.pk)
+            .count()
+        )
+        if previos == 0:
+            return gettext("Primera compra de este cliente")
+        return gettext("Cliente recurrente — %(n)d compra/s previa/s") % {"n": previos}
+
+    @admin.display(description=_("Estado"))
+    def estado_badge_display(self, obj):
+        colores = {
+            PedidoOnline.Estado.PENDIENTE: "#b58105",
+            PedidoOnline.Estado.CONFIRMADO: "#15803d",
+            PedidoOnline.Estado.RECHAZADO: "#b3261e",
+        }
+        color = colores.get(obj.estado, "#666")
+        return format_html(
+            '<b style="color:{}">● {}</b>', color, obj.get_estado_display(),
+        )
 
     def has_add_permission(self, request):
         # Lo crea únicamente la API (vía token de integración desde
