@@ -822,6 +822,7 @@ class PedidoOnlineAdmin(admin.ModelAdmin):
         "brand_name_display",
         "reference_code_display",
         "customer_email",
+        "items_thumbnail",
         "items_summary",
         "total_display",
         "order_created_at",
@@ -890,6 +891,41 @@ class PedidoOnlineAdmin(admin.ModelAdmin):
         # en mayúsculas) que el cliente ya ve del lado de 3darg-backend —
         # ver Pedido Online.reference_code en models.py.
         return obj.reference_code or "—"
+
+    @admin.display(description="")
+    def items_thumbnail(self, obj):
+        """
+        Miniatura del primer producto del pedido, para escanear de un
+        vistazo qué se vendió sin entrar al detalle de cada fila. Reutiliza
+        el mismo `image_url` retrocompatible que `items_display` — pedidos
+        avisados antes del 2026-10-26 no lo tienen, y acá se muestra "—"
+        sin romper nada. No hace ninguna query extra: `image_url` ya viaja
+        en el JSON de `items`, a diferencia de `items_display` (detalle),
+        que sí consulta `Producto` para cruzar costo/margen.
+        """
+        if not obj.items:
+            return "—"
+        image_url = obj.items[0].get("image_url", "")
+        if not image_url:
+            return "—"
+        extra = len(obj.items) - 1
+        badge = (
+            format_html(
+                '<span style="position:absolute; bottom:-4px; right:-4px; '
+                "background:#444; color:#fff; border-radius:8px; "
+                'font-size:0.65em; padding:1px 4px; line-height:1">+{}</span>',
+                extra,
+            )
+            if extra > 0
+            else ""
+        )
+        return format_html(
+            '<span style="position:relative; display:inline-block">'
+            '<img src="{}" style="max-width:32px; max-height:32px; '
+            'object-fit:contain; border-radius:4px" loading="lazy">{}</span>',
+            image_url,
+            badge,
+        )
 
     @admin.display(description=_("Productos"))
     def items_summary(self, obj):
