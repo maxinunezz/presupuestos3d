@@ -717,3 +717,34 @@ compras de insumos, que van por inventory). Sirve para el resultado operativo.
   `GET /api/productos/costo/?sku=...` (costo promedio por SKU, para que
   3darg-backend calcule la ganancia neta por canal de venta sin tener que
   cargar el costo a mano).
+
+## Flujo de trabajo
+
+Reglas generales (ramas, checklist antes de pushear, rollback) en
+`~/.claude/CLAUDE.md` (global, no repo-específico). Específico de este
+proyecto:
+
+- **Nunca commit/push directo a `master`** — autodeploya a Vercel (web) y es
+  la rama que Railway sirve de datos vía Postgres compartido. Rama nueva por
+  feature/fix, probar en el venv local antes de mergear.
+- **No hay staging separado en Railway** para este proyecto tampoco (mismo
+  gap que `3darg-backend`) — probar a fondo en local es el mínimo viable,
+  especialmente en cambios a `budgets/` (costeo, `PedidoOnline`) o
+  migraciones sobre datos reales de inventario/presupuestos.
+- **Endpoints usados por `3darg-backend`** (`/api/pedidos-online/`,
+  `/api/productos/costo/`) son contrato compartido entre dos repos — un
+  cambio de forma de respuesta o de auth ahí rompe la integración del lado
+  de `3darg-backend` sin que ese repo tenga ningún commit nuevo. Si se toca
+  alguno de los dos, chequear `3darg-backend/orders/signals.py` y avisar/
+  coordinar el deploy en ambos lados.
+- **Tokens compartidos** (`PRESUPUESTOS3D_API_TOKEN`, usado por
+  `3darg-backend` para autenticar contra estos endpoints): si se rota, hay
+  que actualizar el valor en Railway de `3darg-backend` (servicio `web`) y en
+  su `.env` local al mismo tiempo, o la integración queda rota en silencio
+  (es "no-op sin romper nada" solo cuando la env var está vacía — si está
+  seteada pero vencida, el `POST` falla).
+- **Deploy**: `git push` a `master` autodeploya en Vercel (web) y Railway
+  (si corresponde a ese servicio) — confirmar cuál de los dos lo sirve antes
+  de asumir dónde mirar logs.
+- **Bitácora de deploys**: Slack `#reportes-it` — mandar el mensaje siempre
+  se confirma antes con el dueño, no es automático.

@@ -22,6 +22,8 @@ class PedidoOnlineSerializer(serializers.ModelSerializer):
             "total_amount",
             "currency",
             "order_created_at",
+            "payment_method",
+            "shipping_info",
             "raw_payload",
         ]
         read_only_fields = ["id"]

@@ -100,8 +100,10 @@ class PedidoOnlineCreateView(generics.CreateAPIView):
     reusa el mismo criterio que el resto de la API.
 
     Idempotente por `external_reference`: si ya existe un `PedidoOnline` con
-    esa referencia (reintento del webhook de origen), devuelve el existente
-    en vez de duplicar el aviso.
+    esa referencia (reintento del webhook de origen), ACTUALIZA ese registro
+    con el payload nuevo en vez de duplicar el aviso — ver docstring de
+    `update_or_response()` más abajo para el detalle de por qué hace falta
+    actualizar y no solo devolver el existente sin tocar.
     """
 
     serializer_class = PedidoOnlineSerializer
@@ -113,9 +115,32 @@ class PedidoOnlineCreateView(generics.CreateAPIView):
                 external_reference=external_reference
             ).first()
             if existing is not None:
-                serializer = self.get_serializer(existing)
-                return Response(serializer.data, status=200)
+                return self._update_existing(existing, request)
         return super().create(request, *args, **kwargs)
+
+    def _update_existing(self, existing, request):
+        """Antes esto devolvía `existing` tal cual, sin tocarlo — un reintento
+        desde 3darg-backend (ej. tras un timeout de red del lado de ellos, o
+        un redeploy que agrega campos nuevos al payload) dejaba el snapshot
+        viejo congelado para siempre, aunque el pedido real ya tuviera datos
+        más completos (ej. `items` sin `sku`/`image_url` porque se avisó
+        antes del 2026-10-26, o un `shipping_info` que en el primer intento
+        todavía no existía). Ahora el reintento ACTUALIZA el snapshot con el
+        payload nuevo — sigue devolviendo 200 (no 201, no es un alta nueva).
+
+        Ojo: `PedidoOnlineSerializer.Meta.fields` NO incluye `estado`,
+        `revisado` ni `presupuesto` — son campos de uso exclusivo del lado de
+        presupuestos3d (lo carga/decide el dueño a mano, nunca 3darg-backend)
+        y no viajan en el payload de alta. Por construcción, este `update()`
+        nunca los toca: si el dueño ya revisó/confirmó/vinculó este pedido a
+        un Presupuesto, un reintento tardío no pisa esa decisión — solo
+        refresca el snapshot de la venta en sí (items, total, medio de pago,
+        envío, etc.).
+        """
+        serializer = self.get_serializer(existing, data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=200)
 
 
 class ProductoCostoPorSkuView(APIView):

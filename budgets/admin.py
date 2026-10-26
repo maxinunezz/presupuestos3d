@@ -1,7 +1,9 @@
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
+from urllib.parse import urlencode
 
 from django import forms
+from django.conf import settings
 from django.contrib import admin, messages
 from django.core.exceptions import ValidationError
 from django.db.models import DecimalField
@@ -10,7 +12,7 @@ from django.http import HttpResponse
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils import timezone
-from django.utils.html import format_html_join
+from django.utils.html import format_html, format_html_join
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext, gettext_lazy as _
 
@@ -821,6 +823,7 @@ class PedidoOnlineAdmin(admin.ModelAdmin):
         "brand_name_display",
         "reference_code_display",
         "customer_email",
+        "items_thumbnail",
         "items_summary",
         "total_display",
         "order_created_at",
@@ -839,11 +842,17 @@ class PedidoOnlineAdmin(admin.ModelAdmin):
         "brand_slug",
         "brand_name",
         "customer_email",
+        "cliente_historial_display",
         "items_display",
         "total_amount",
         "currency",
+        "payment_method_display",
+        "shipping_info_display",
         "order_created_at",
         "received_at",
+        "order_admin_link",
+        "estado_badge_display",
+        "cargar_como_presupuesto_display",
         "raw_payload",
     )
     ordering = ("-received_at",)
@@ -857,16 +866,30 @@ class PedidoOnlineAdmin(admin.ModelAdmin):
                     "brand_slug",
                     "reference_code_display",
                     "external_reference",
+                    "order_admin_link",
                     "customer_email",
+                    "cliente_historial_display",
                     "items_display",
                     "total_amount",
                     "currency",
+                    "payment_method_display",
+                    "shipping_info_display",
                     "order_created_at",
                     "received_at",
                 )
             },
         ),
-        (_("Seguimiento"), {"fields": ("estado", "presupuesto")}),
+        (
+            _("Seguimiento"),
+            {
+                "fields": (
+                    "estado_badge_display",
+                    "estado",
+                    "presupuesto",
+                    "cargar_como_presupuesto_display",
+                )
+            },
+        ),
         (_("Debug"), {"fields": ("raw_payload",), "classes": ("collapse",)}),
     )
 
@@ -881,6 +904,41 @@ class PedidoOnlineAdmin(admin.ModelAdmin):
         # ver Pedido Online.reference_code en models.py.
         return obj.reference_code or "—"
 
+    @admin.display(description="")
+    def items_thumbnail(self, obj):
+        """
+        Miniatura del primer producto del pedido, para escanear de un
+        vistazo qué se vendió sin entrar al detalle de cada fila. Reutiliza
+        el mismo `image_url` retrocompatible que `items_display` — pedidos
+        avisados antes del 2026-10-26 no lo tienen, y acá se muestra "—"
+        sin romper nada. No hace ninguna query extra: `image_url` ya viaja
+        en el JSON de `items`, a diferencia de `items_display` (detalle),
+        que sí consulta `Producto` para cruzar costo/margen.
+        """
+        if not obj.items:
+            return "—"
+        image_url = obj.items[0].get("image_url", "")
+        if not image_url:
+            return "—"
+        extra = len(obj.items) - 1
+        badge = (
+            format_html(
+                '<span style="position:absolute; bottom:-4px; right:-4px; '
+                "background:#444; color:#fff; border-radius:8px; "
+                'font-size:0.65em; padding:1px 4px; line-height:1">+{}</span>',
+                extra,
+            )
+            if extra > 0
+            else ""
+        )
+        return format_html(
+            '<span style="position:relative; display:inline-block">'
+            '<img src="{}" style="max-width:32px; max-height:32px; '
+            'object-fit:contain; border-radius:4px" loading="lazy">{}</span>',
+            image_url,
+            badge,
+        )
+
     @admin.display(description=_("Productos"))
     def items_summary(self, obj):
         if not obj.items:
@@ -894,26 +952,285 @@ class PedidoOnlineAdmin(admin.ModelAdmin):
     def items_display(self, obj):
         # El campo `items` es un JSONField; mostrado tal cual en el form de
         # solo lectura sale como JSON crudo, poco legible para el dueño. Acá
-        # se renderiza como una lista prolija, una línea por producto.
+        # se renderiza como una tabla (Imagen / Producto / SKU / Cant. /
+        # Precio unit. / Costo unit. / Margen / Subtotal) con una fila final
+        # que compara la suma de subtotales contra `total_amount` — una
+        # discrepancia ahí (ej. envío incluido en el total, o un item con
+        # precio mal mandado) queda visible sin tener que sacar la cuenta a
+        # mano.
+        #
+        # `sku`/`product_slug`/`variant_label`/`image_url` son nuevos
+        # (2026-10-26, ver `PedidoOnline.items` en models.py) — pedidos
+        # avisados antes de ese cambio no los tienen en su `items` crudo, por
+        # eso siempre se leen con `.get(..., "")` y se ocultan en blanco en
+        # vez de romper o mostrar "?".
+        #
+        # Costo/margen (Nivel 3, 2026-10-26): cruza el `sku` de cada item
+        # contra `Producto.sku` DE ESTE MISMO SISTEMA — no hace falta pasar
+        # por el endpoint HTTP `/api/productos/costo/` (ese es para que
+        # 3darg-backend, un proceso aparte, consulte el costo; estando ya
+        # del lado de presupuestos3d alcanza con el ORM directo, misma
+        # fuente de verdad: `Producto.unit_cost_avg`). El margen se calcula
+        # contra el `unit_price` REAL de la venta (no contra
+        # `Producto.unit_price`, que es el precio de referencia cargado en
+        # el presupuesto y puede no coincidir con lo que efectivamente se
+        # cobró con descuentos/promos). Sin match de SKU (falta `sku` en el
+        # item, o ningún `Producto` lo tiene cargado todavía) se muestra
+        # "—" — no es un error, simplemente no hay costo cargado para cruzar.
         if not obj.items:
             return "—"
-        filas = format_html_join(
-            "",
-            "<li>{} × {} — {} c/u</li>",
-            (
-                (
-                    item.get("quantity", "?"),
-                    item.get("product_name", "?"),
-                    f"$ {item.get('unit_price', '?')}",
-                )
-                for item in obj.items
-            ),
+
+        skus = {item.get("sku") for item in obj.items if item.get("sku")}
+        productos_por_sku = (
+            {p.sku: p for p in Producto.objects.filter(sku__in=skus)} if skus else {}
         )
-        return mark_safe(f'<ul style="margin:0; padding-left:1.2em;">{filas}</ul>')
+
+        filas = []
+        suma_items = Decimal("0")
+        margen_total = Decimal("0")
+        items_con_costo = 0
+        for item in obj.items:
+            cantidad = item.get("quantity", "?")
+            nombre = item.get("product_name", "?")
+            variant_label = item.get("variant_label", "")
+            if variant_label:
+                nombre = f"{nombre} — {variant_label}"
+            sku = item.get("sku", "") or ""
+            precio_unit = item.get("unit_price", "?")
+            image_url = item.get("image_url", "")
+            if image_url:
+                thumb = format_html(
+                    '<img src="{}" style="max-width:40px; max-height:40px; '
+                    'object-fit:contain; border-radius:4px" loading="lazy">',
+                    image_url,
+                )
+            else:
+                thumb = "—"
+            try:
+                subtotal = Decimal(str(cantidad)) * Decimal(str(precio_unit))
+                suma_items += subtotal
+                subtotal_display = f"$ {subtotal}"
+            except (InvalidOperation, TypeError):
+                subtotal_display = "—"
+
+            producto = productos_por_sku.get(sku) if sku else None
+            costo_display = "—"
+            margen_display = "—"
+            if producto is not None:
+                try:
+                    costo_unit = producto.unit_cost_avg
+                    precio_unit_dec = Decimal(str(precio_unit))
+                    margen_unit = precio_unit_dec - costo_unit
+                    margen_linea = margen_unit * Decimal(str(cantidad))
+                    margen_total += margen_linea
+                    items_con_costo += 1
+                    costo_display = f"$ {costo_unit}"
+                    if precio_unit_dec > 0:
+                        margen_pct = (margen_unit / precio_unit_dec * Decimal("100")).quantize(
+                            Decimal("0.1")
+                        )
+                        margen_display = f"$ {margen_linea} ({margen_pct}%)"
+                    else:
+                        margen_display = f"$ {margen_linea}"
+                except (InvalidOperation, TypeError):
+                    pass
+
+            filas.append(
+                (thumb, nombre, sku or "—", cantidad, f"$ {precio_unit}",
+                 costo_display, margen_display, subtotal_display)
+            )
+
+        filas_html = format_html_join(
+            "",
+            "<tr><td style='padding:2px 10px 2px 0'>{}</td>"
+            "<td style='padding:2px 10px 2px 0'>{}</td>"
+            "<td style='padding:2px 10px; color:#666; font-size:0.9em'>{}</td>"
+            "<td style='padding:2px 10px; text-align:center'>{}</td>"
+            "<td style='padding:2px 10px; text-align:right'>{}</td>"
+            "<td style='padding:2px 10px; text-align:right; color:#666'>{}</td>"
+            "<td style='padding:2px 10px; text-align:right'>{}</td>"
+            "<td style='padding:2px 0; text-align:right'>{}</td></tr>",
+            filas,
+        )
+
+        try:
+            desajuste = suma_items != Decimal(str(obj.total_amount))
+        except InvalidOperation:
+            desajuste = False
+        notas = ""
+        if desajuste:
+            notas += format_html(
+                '<tr><td colspan="8" style="padding-top:6px; color:#b3261e">'
+                "⚠ {}</td></tr>",
+                gettext(
+                    "La suma de los items ($ %(suma)s) no coincide con el Total "
+                    "($ %(total)s %(moneda)s) — puede incluir envío u otro ajuste."
+                )
+                % {"suma": suma_items, "total": obj.total_amount, "moneda": obj.currency},
+            )
+        if items_con_costo > 0:
+            notas += format_html(
+                '<tr><td colspan="8" style="padding-top:6px; color:#15803d">'
+                "{}</td></tr>",
+                gettext(
+                    "Margen bruto estimado: $ %(margen)s (sobre %(n)d/%(total)d "
+                    "item/s con costo cargado en presupuestos3d)."
+                )
+                % {"margen": margen_total, "n": items_con_costo, "total": len(obj.items)},
+            )
+
+        return format_html(
+            '<table style="border-collapse:collapse">'
+            "<thead><tr style='text-align:left'>"
+            "<th style='padding:2px 10px 4px 0'></th>"
+            "<th style='padding:2px 10px 4px 0'>{}</th>"
+            "<th style='padding:2px 10px 4px'>{}</th>"
+            "<th style='padding:2px 10px 4px'>{}</th>"
+            "<th style='padding:2px 10px 4px'>{}</th>"
+            "<th style='padding:2px 10px 4px'>{}</th>"
+            "<th style='padding:2px 10px 4px'>{}</th>"
+            "<th style='padding:2px 0 4px'>{}</th></tr></thead>"
+            "<tbody>{}{}</tbody></table>",
+            gettext("Producto"), gettext("SKU"), gettext("Cant."),
+            gettext("Precio unit."), gettext("Costo unit."), gettext("Margen"),
+            gettext("Subtotal"),
+            filas_html, notas,
+        )
+
+    @admin.display(description=_("Medio de pago"))
+    def payment_method_display(self, obj):
+        return obj.payment_method or "—"
+
+    @admin.display(description=_("Envío"))
+    def shipping_info_display(self, obj):
+        # `shipping_info` es nuevo (2026-10-26) — pedidos avisados antes de
+        # ese cambio lo tienen vacío (`default=dict`), se muestra "—".
+        info = obj.shipping_info or {}
+        method = info.get("method")
+        modality = info.get("modality")
+        city = info.get("city")
+        province = info.get("province")
+        if not any([method, modality, city, province]):
+            return "—"
+        partes = [p for p in (method, modality) if p]
+        destino = ", ".join(p for p in (city, province) if p)
+        linea = " — ".join(partes) if partes else ""
+        if destino:
+            linea = f"{linea} ({destino})" if linea else destino
+        return linea or "—"
 
     @admin.display(description=_("Total"))
     def total_display(self, obj):
         return f"{obj.currency} {obj.total_amount}"
+
+    @admin.display(description=_("Orden en 3darg-backend"))
+    def order_admin_link(self, obj):
+        # `raw_payload.order_id` ya viaja hoy desde 3darg-backend (ver
+        # `orders/signals.py::_notify_presupuestos3d`) pero no se usaba para
+        # nada en esta vista. `API_3DARG_URL` ya existe como setting (lo usa
+        # `config/api_3darg.py` para la sync de costeo) y apunta al dominio
+        # base de 3darg-backend, así que se puede reconstruir el link al
+        # admin de la Order sin pedir ningún dato nuevo.
+        order_id = (obj.raw_payload or {}).get("order_id")
+        api_url = getattr(settings, "API_3DARG_URL", "").rstrip("/")
+        if not order_id or not api_url:
+            return "—"
+        url = f"{api_url}/admin/orders/order/{order_id}/change/"
+        return format_html(
+            '<a href="{}" target="_blank" rel="noopener">{} ↗</a>',
+            url, gettext("Ver orden en el admin de 3darg-backend"),
+        )
+
+    @admin.display(description=_("Cliente"))
+    def cliente_historial_display(self, obj):
+        # Cuenta cuántos OTROS PedidoOnline hay con el mismo email, para que
+        # el dueño vea de un vistazo si es la primera compra de este
+        # cliente o uno recurrente, sin tener que buscarlo a mano.
+        if not obj.customer_email:
+            return "—"
+        previos = (
+            PedidoOnline.objects.filter(customer_email=obj.customer_email)
+            .exclude(pk=obj.pk)
+            .count()
+        )
+        if previos == 0:
+            return gettext("Primera compra de este cliente")
+        return gettext("Cliente recurrente — %(n)d compra/s previa/s") % {"n": previos}
+
+    @admin.display(description=_("Estado"))
+    def estado_badge_display(self, obj):
+        colores = {
+            PedidoOnline.Estado.PENDIENTE: "#b58105",
+            PedidoOnline.Estado.CONFIRMADO: "#15803d",
+            PedidoOnline.Estado.RECHAZADO: "#b3261e",
+        }
+        color = colores.get(obj.estado, "#666")
+        return format_html(
+            '<b style="color:{}">● {}</b>', color, obj.get_estado_display(),
+        )
+
+    @admin.display(description=_("Cargar a producción"))
+    def cargar_como_presupuesto_display(self, obj):
+        """
+        Atajo para no tener que volver a tipear nada de lo que ya mandó
+        3darg-backend: abre el alta de `Presupuesto` con `client_name`/
+        `description` prellenados por querystring (Django ya lo soporta
+        solo, ver `ModelAdmin.get_changeform_initial_data()` — no hace falta
+        tocar `PresupuestoAdmin` para esa parte) y manda además
+        `pedido_online_id`, que usan `PresupuestoItemInline.get_formset()`
+        (prellenar las líneas por SKU) y `PresupuestoAdmin.response_add()`
+        (vincular este `PedidoOnline` al presupuesto recién creado) más
+        abajo en este archivo.
+
+        Una vez que ya quedó vinculado a un Presupuesto, no tiene sentido
+        ofrecer el botón de nuevo — se muestra el número en su lugar (el
+        campo `presupuesto` de arriba ya permite entrar a esa ficha).
+        """
+        if obj.presupuesto_id:
+            return gettext("Ya cargado como presupuesto #%(pk)s.") % {
+                "pk": obj.presupuesto_id
+            }
+        if not obj.pk:
+            return "-"
+
+        descripcion_lineas = [
+            gettext("Venta online %(marca)s — pedido %(ref)s.")
+            % {"marca": obj.brand_name or obj.brand_slug, "ref": obj.reference_code},
+        ]
+        if obj.customer_email:
+            descripcion_lineas.append(
+                gettext("Cliente: %(email)s") % {"email": obj.customer_email}
+            )
+        for item in obj.items:
+            descripcion_lineas.append(
+                f"{item.get('quantity', '?')}× {item.get('product_name', '?')}"
+            )
+        descripcion = "\n".join(descripcion_lineas)
+
+        client_name = obj.customer_email or (
+            gettext("Cliente venta online %(ref)s") % {"ref": obj.reference_code}
+        )
+
+        query = urlencode(
+            {
+                "client_name": client_name,
+                "description": descripcion,
+                "pedido_online_id": obj.pk,
+            }
+        )
+        url = f"{reverse('admin:budgets_presupuesto_add')}?{query}"
+        return format_html(
+            '<a class="button" href="{}">{}</a>'
+            '<p class="help" style="margin-top:6px">{}</p>',
+            url,
+            gettext("Cargar como Presupuesto"),
+            gettext(
+                "Prellena cliente, descripción y los items con su SKU/cantidad. "
+                "Ojo: el precio de cada línea que vas a ver ahí es el precio de "
+                "COSTEO ACTUAL del producto, no necesariamente el que pagó el "
+                "cliente en la compra online — revisalo antes de aprobar."
+            ),
+        )
 
     def has_add_permission(self, request):
         # Lo crea únicamente la API (vía token de integración desde
@@ -1472,6 +1789,76 @@ class PresupuestoItemInline(admin.TabularInline):
     def line_total_display(self, obj):
         return f"${obj.line_total}" if obj and obj.pk else "-"
 
+    def _pedido_online_origen(self, request, obj):
+        """
+        Si estamos en el alta de un Presupuesto nuevo (`obj is None`)
+        abierta desde el botón "Cargar como Presupuesto" de `PedidoOnline`
+        (ver `PedidoOnlineAdmin.cargar_como_presupuesto_display` más arriba
+        en este archivo), devuelve ese `PedidoOnline` — se usa para
+        prellenar estas líneas por SKU. En cualquier otro caso (edición de
+        un presupuesto ya existente, alta manual sin ese querystring)
+        devuelve `None` y el inline se comporta como siempre.
+        """
+        if obj is not None:
+            return None
+        pedido_online_id = request.GET.get("pedido_online_id")
+        if not pedido_online_id:
+            return None
+        return PedidoOnline.objects.filter(pk=pedido_online_id).first()
+
+    def get_extra(self, request, obj=None, **kwargs):
+        pedido_online = self._pedido_online_origen(request, obj)
+        if pedido_online is not None and pedido_online.items:
+            return len(pedido_online.items)
+        return super().get_extra(request, obj, **kwargs)
+
+    def get_formset(self, request, obj=None, **kwargs):
+        FormSet = super().get_formset(request, obj, **kwargs)
+        pedido_online = self._pedido_online_origen(request, obj)
+        if pedido_online is None or not pedido_online.items:
+            return FormSet
+
+        # Ojo: el prellenado SOLO debe aplicarse en el GET (render inicial).
+        # Si se inyecta `initial` también en el POST, Django compara cada
+        # fila "extra" contra ese `initial` vía `form.has_changed()` para
+        # decidir si la guarda — y como el dueño puede guardar los valores
+        # sugeridos tal cual (sin tocar nada), `has_changed()` da `False` y
+        # `BaseModelFormSet.save_new_objects()` descarta la fila en
+        # silencio (confirmado con un test HTTP real: el Presupuesto se
+        # crea pero sin ningún PresupuestoItem). En el POST, Django ya tiene
+        # los datos reales en `request.POST`; no hace falta ni conviene
+        # pasarle `initial`.
+        if request.method == "POST":
+            return FormSet
+
+        # Match por SKU contra Producto — igual criterio que
+        # `PedidoOnlineAdmin.items_display` (cruza por `sku`, respeta
+        # `is_active=True` porque es lo que exige `PresupuestoItem.producto`
+        # vía `limit_choices_to`, ver models.py). Sin match (falta `sku` en
+        # el item, o ningún Producto activo lo tiene cargado todavía) la fila
+        # queda con `producto` en blanco y solo `quantity` prellenada — nunca
+        # se omite la fila ni se rompe el prellenado del resto.
+        skus = {item.get("sku") for item in pedido_online.items if item.get("sku")}
+        producto_pk_por_sku = (
+            {p.sku: p.pk for p in Producto.objects.filter(sku__in=skus, is_active=True)}
+            if skus
+            else {}
+        )
+        initial = []
+        for item in pedido_online.items:
+            fila = {"quantity": item.get("quantity") or 1}
+            sku = item.get("sku")
+            if sku and sku in producto_pk_por_sku:
+                fila["producto"] = producto_pk_por_sku[sku]
+            initial.append(fila)
+
+        class FormSetPrellenadoDesdePedidoOnline(FormSet):
+            def __init__(self, *args, **fs_kwargs):
+                fs_kwargs.setdefault("initial", initial)
+                super().__init__(*args, **fs_kwargs)
+
+        return FormSetPrellenadoDesdePedidoOnline
+
 
 class ProductionJobInline(admin.TabularInline):
     model = ProductionJob
@@ -1584,6 +1971,52 @@ class PresupuestoAdmin(admin.ModelAdmin):
             f'inline; filename="{presupuesto_pdf_filename(presupuesto)}"'
         )
         return response
+
+    def response_add(self, request, obj, post_url_continue=None):
+        """
+        Si este alta vino del botón "Cargar como Presupuesto" de
+        `PedidoOnlineAdmin` (ver `cargar_como_presupuesto_display` más
+        arriba en este archivo), vincula automáticamente ese `PedidoOnline`
+        al `Presupuesto` recién creado — mismo efecto que confirmarlo a mano
+        desde su propio admin (`estado=CONFIRMADO`, `revisado=True`), para
+        no obligar a repetir ese paso.
+
+        `pedido_online_id` viaja en el querystring con el que se abrió este
+        form de alta. El template de admin (`change_form.html`) no declara
+        un `action` propio en el `<form>` — así que el navegador reenvía el
+        POST a la URL actual, que sigue incluyendo el querystring original;
+        por eso `request.GET` (no el body) tiene el dato acá, aunque este
+        método corre dentro de un request POST.
+
+        `presupuesto__isnull=True` en el filtro es la guarda contra reusar
+        el mismo link dos veces (ej. doble click, o volver atrás con el
+        botón del navegador y volver a enviar el form): la segunda vez ya
+        no encuentra un `PedidoOnline` sin vincular con ese id y no hace
+        nada, en vez de pisar un vínculo ya hecho a otro Presupuesto.
+        """
+        pedido_online_id = request.GET.get("pedido_online_id")
+        if pedido_online_id:
+            actualizados = PedidoOnline.objects.filter(
+                pk=pedido_online_id, presupuesto__isnull=True
+            ).update(
+                presupuesto=obj,
+                estado=PedidoOnline.Estado.CONFIRMADO,
+                revisado=True,
+            )
+            if actualizados:
+                self.message_user(
+                    request,
+                    gettext(
+                        "Presupuesto #%(pk)s vinculado automáticamente al "
+                        "pedido online que lo originó (se marcó como "
+                        "Confirmado). Ojo: el precio de las líneas es el de "
+                        "costeo actual, no necesariamente el que pagó el "
+                        "cliente online — revisalo antes de aprobar."
+                    )
+                    % {"pk": obj.pk},
+                    level=messages.SUCCESS,
+                )
+        return super().response_add(request, obj, post_url_continue)
 
     @admin.display(description=_("PDF"))
     def pdf_button(self, obj):
