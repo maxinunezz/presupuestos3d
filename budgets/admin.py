@@ -1,5 +1,6 @@
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
+from urllib.parse import urlencode
 
 from django import forms
 from django.conf import settings
@@ -851,6 +852,7 @@ class PedidoOnlineAdmin(admin.ModelAdmin):
         "received_at",
         "order_admin_link",
         "estado_badge_display",
+        "cargar_como_presupuesto_display",
         "raw_payload",
     )
     ordering = ("-received_at",)
@@ -877,7 +879,17 @@ class PedidoOnlineAdmin(admin.ModelAdmin):
                 )
             },
         ),
-        (_("Seguimiento"), {"fields": ("estado_badge_display", "estado", "presupuesto")}),
+        (
+            _("Seguimiento"),
+            {
+                "fields": (
+                    "estado_badge_display",
+                    "estado",
+                    "presupuesto",
+                    "cargar_como_presupuesto_display",
+                )
+            },
+        ),
         (_("Debug"), {"fields": ("raw_payload",), "classes": ("collapse",)}),
     )
 
@@ -1155,6 +1167,69 @@ class PedidoOnlineAdmin(admin.ModelAdmin):
         color = colores.get(obj.estado, "#666")
         return format_html(
             '<b style="color:{}">● {}</b>', color, obj.get_estado_display(),
+        )
+
+    @admin.display(description=_("Cargar a producción"))
+    def cargar_como_presupuesto_display(self, obj):
+        """
+        Atajo para no tener que volver a tipear nada de lo que ya mandó
+        3darg-backend: abre el alta de `Presupuesto` con `client_name`/
+        `description` prellenados por querystring (Django ya lo soporta
+        solo, ver `ModelAdmin.get_changeform_initial_data()` — no hace falta
+        tocar `PresupuestoAdmin` para esa parte) y manda además
+        `pedido_online_id`, que usan `PresupuestoItemInline.get_formset()`
+        (prellenar las líneas por SKU) y `PresupuestoAdmin.response_add()`
+        (vincular este `PedidoOnline` al presupuesto recién creado) más
+        abajo en este archivo.
+
+        Una vez que ya quedó vinculado a un Presupuesto, no tiene sentido
+        ofrecer el botón de nuevo — se muestra el número en su lugar (el
+        campo `presupuesto` de arriba ya permite entrar a esa ficha).
+        """
+        if obj.presupuesto_id:
+            return gettext("Ya cargado como presupuesto #%(pk)s.") % {
+                "pk": obj.presupuesto_id
+            }
+        if not obj.pk:
+            return "-"
+
+        descripcion_lineas = [
+            gettext("Venta online %(marca)s — pedido %(ref)s.")
+            % {"marca": obj.brand_name or obj.brand_slug, "ref": obj.reference_code},
+        ]
+        if obj.customer_email:
+            descripcion_lineas.append(
+                gettext("Cliente: %(email)s") % {"email": obj.customer_email}
+            )
+        for item in obj.items:
+            descripcion_lineas.append(
+                f"{item.get('quantity', '?')}× {item.get('product_name', '?')}"
+            )
+        descripcion = "\n".join(descripcion_lineas)
+
+        client_name = obj.customer_email or (
+            gettext("Cliente venta online %(ref)s") % {"ref": obj.reference_code}
+        )
+
+        query = urlencode(
+            {
+                "client_name": client_name,
+                "description": descripcion,
+                "pedido_online_id": obj.pk,
+            }
+        )
+        url = f"{reverse('admin:budgets_presupuesto_add')}?{query}"
+        return format_html(
+            '<a class="button" href="{}">{}</a>'
+            '<p class="help" style="margin-top:6px">{}</p>',
+            url,
+            gettext("Cargar como Presupuesto"),
+            gettext(
+                "Prellena cliente, descripción y los items con su SKU/cantidad. "
+                "Ojo: el precio de cada línea que vas a ver ahí es el precio de "
+                "COSTEO ACTUAL del producto, no necesariamente el que pagó el "
+                "cliente en la compra online — revisalo antes de aprobar."
+            ),
         )
 
     def has_add_permission(self, request):
@@ -1714,6 +1789,76 @@ class PresupuestoItemInline(admin.TabularInline):
     def line_total_display(self, obj):
         return f"${obj.line_total}" if obj and obj.pk else "-"
 
+    def _pedido_online_origen(self, request, obj):
+        """
+        Si estamos en el alta de un Presupuesto nuevo (`obj is None`)
+        abierta desde el botón "Cargar como Presupuesto" de `PedidoOnline`
+        (ver `PedidoOnlineAdmin.cargar_como_presupuesto_display` más arriba
+        en este archivo), devuelve ese `PedidoOnline` — se usa para
+        prellenar estas líneas por SKU. En cualquier otro caso (edición de
+        un presupuesto ya existente, alta manual sin ese querystring)
+        devuelve `None` y el inline se comporta como siempre.
+        """
+        if obj is not None:
+            return None
+        pedido_online_id = request.GET.get("pedido_online_id")
+        if not pedido_online_id:
+            return None
+        return PedidoOnline.objects.filter(pk=pedido_online_id).first()
+
+    def get_extra(self, request, obj=None, **kwargs):
+        pedido_online = self._pedido_online_origen(request, obj)
+        if pedido_online is not None and pedido_online.items:
+            return len(pedido_online.items)
+        return super().get_extra(request, obj, **kwargs)
+
+    def get_formset(self, request, obj=None, **kwargs):
+        FormSet = super().get_formset(request, obj, **kwargs)
+        pedido_online = self._pedido_online_origen(request, obj)
+        if pedido_online is None or not pedido_online.items:
+            return FormSet
+
+        # Ojo: el prellenado SOLO debe aplicarse en el GET (render inicial).
+        # Si se inyecta `initial` también en el POST, Django compara cada
+        # fila "extra" contra ese `initial` vía `form.has_changed()` para
+        # decidir si la guarda — y como el dueño puede guardar los valores
+        # sugeridos tal cual (sin tocar nada), `has_changed()` da `False` y
+        # `BaseModelFormSet.save_new_objects()` descarta la fila en
+        # silencio (confirmado con un test HTTP real: el Presupuesto se
+        # crea pero sin ningún PresupuestoItem). En el POST, Django ya tiene
+        # los datos reales en `request.POST`; no hace falta ni conviene
+        # pasarle `initial`.
+        if request.method == "POST":
+            return FormSet
+
+        # Match por SKU contra Producto — igual criterio que
+        # `PedidoOnlineAdmin.items_display` (cruza por `sku`, respeta
+        # `is_active=True` porque es lo que exige `PresupuestoItem.producto`
+        # vía `limit_choices_to`, ver models.py). Sin match (falta `sku` en
+        # el item, o ningún Producto activo lo tiene cargado todavía) la fila
+        # queda con `producto` en blanco y solo `quantity` prellenada — nunca
+        # se omite la fila ni se rompe el prellenado del resto.
+        skus = {item.get("sku") for item in pedido_online.items if item.get("sku")}
+        producto_pk_por_sku = (
+            {p.sku: p.pk for p in Producto.objects.filter(sku__in=skus, is_active=True)}
+            if skus
+            else {}
+        )
+        initial = []
+        for item in pedido_online.items:
+            fila = {"quantity": item.get("quantity") or 1}
+            sku = item.get("sku")
+            if sku and sku in producto_pk_por_sku:
+                fila["producto"] = producto_pk_por_sku[sku]
+            initial.append(fila)
+
+        class FormSetPrellenadoDesdePedidoOnline(FormSet):
+            def __init__(self, *args, **fs_kwargs):
+                fs_kwargs.setdefault("initial", initial)
+                super().__init__(*args, **fs_kwargs)
+
+        return FormSetPrellenadoDesdePedidoOnline
+
 
 class ProductionJobInline(admin.TabularInline):
     model = ProductionJob
@@ -1826,6 +1971,52 @@ class PresupuestoAdmin(admin.ModelAdmin):
             f'inline; filename="{presupuesto_pdf_filename(presupuesto)}"'
         )
         return response
+
+    def response_add(self, request, obj, post_url_continue=None):
+        """
+        Si este alta vino del botón "Cargar como Presupuesto" de
+        `PedidoOnlineAdmin` (ver `cargar_como_presupuesto_display` más
+        arriba en este archivo), vincula automáticamente ese `PedidoOnline`
+        al `Presupuesto` recién creado — mismo efecto que confirmarlo a mano
+        desde su propio admin (`estado=CONFIRMADO`, `revisado=True`), para
+        no obligar a repetir ese paso.
+
+        `pedido_online_id` viaja en el querystring con el que se abrió este
+        form de alta. El template de admin (`change_form.html`) no declara
+        un `action` propio en el `<form>` — así que el navegador reenvía el
+        POST a la URL actual, que sigue incluyendo el querystring original;
+        por eso `request.GET` (no el body) tiene el dato acá, aunque este
+        método corre dentro de un request POST.
+
+        `presupuesto__isnull=True` en el filtro es la guarda contra reusar
+        el mismo link dos veces (ej. doble click, o volver atrás con el
+        botón del navegador y volver a enviar el form): la segunda vez ya
+        no encuentra un `PedidoOnline` sin vincular con ese id y no hace
+        nada, en vez de pisar un vínculo ya hecho a otro Presupuesto.
+        """
+        pedido_online_id = request.GET.get("pedido_online_id")
+        if pedido_online_id:
+            actualizados = PedidoOnline.objects.filter(
+                pk=pedido_online_id, presupuesto__isnull=True
+            ).update(
+                presupuesto=obj,
+                estado=PedidoOnline.Estado.CONFIRMADO,
+                revisado=True,
+            )
+            if actualizados:
+                self.message_user(
+                    request,
+                    gettext(
+                        "Presupuesto #%(pk)s vinculado automáticamente al "
+                        "pedido online que lo originó (se marcó como "
+                        "Confirmado). Ojo: el precio de las líneas es el de "
+                        "costeo actual, no necesariamente el que pagó el "
+                        "cliente online — revisalo antes de aprobar."
+                    )
+                    % {"pk": obj.pk},
+                    level=messages.SUCCESS,
+                )
+        return super().response_add(request, obj, post_url_continue)
 
     @admin.display(description=_("PDF"))
     def pdf_button(self, obj):
