@@ -7,7 +7,7 @@ from rest_framework.test import APIClient
 from inventory.models import Filament
 from production.models import Maquina
 
-from .models import Presupuesto, RegistroAgente
+from .models import Presupuesto, Producto, RegistroAgente
 from .tests import add_pieza, make_producto
 
 LECTURA, ESCRITURA = "token-lectura", "token-escritura"
@@ -80,3 +80,32 @@ class CosteoVerificadoTests(TestCase):
 
     def test_trabajos_impresos_trae_lo_de_la_ficha(self):
         self.assertEqual(self.r.get("/api/agentes/trabajos-impresos/?desde=2026-01-01T00:00:00").json()["trabajos"], [])
+
+
+class VerificarSinSincronizarTiendaTests(TestCase):
+    """Prueba real del 26/11/2026: verificar daba 500 porque guardaba el producto y la sincronización con la tienda
+    tardaba más de 10 s."""
+
+    def test_verificar_no_llama_a_la_tienda(self):
+        from unittest import mock
+
+        fil = Filament.objects.create(brand="G", material_type="PLA", color="Rojo", cost_per_kg=Decimal("2000"),
+                                      stock_grams=Decimal("100"))
+        p = make_producto(name="Cortante tienda", sale_price=Decimal("2000"))
+        add_pieza(p, fil, Decimal("10"))
+        with mock.patch("config.api_3darg.sync_costeo_ecommerce") as sync:
+            p.verificar_costeo("Maxi")
+        self.assertFalse(sync.called)
+        self.assertTrue(Producto.objects.get(pk=p.pk).costeo_verificado)
+
+    def test_si_la_tienda_tarda_no_hay_error(self):
+        from types import SimpleNamespace
+        from unittest import mock
+
+        from config import api_3darg
+
+        prod = SimpleNamespace(pk=1, name="X", sku="X", ecommerce_template_name="X", sale_price=Decimal("1"),
+                               weight_kg=None, length_cm=None, width_cm=None, height_cm=None)
+        with override_settings(API_3DARG_URL="https://tienda", API_3DARG_TOKEN="t"), \
+             mock.patch.object(api_3darg.urllib.request, "urlopen", side_effect=TimeoutError("lento")):
+            self.assertIn("error", api_3darg.sync_costeo_ecommerce(prod))
