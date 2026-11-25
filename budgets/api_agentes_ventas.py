@@ -44,6 +44,28 @@ def _resumen(p, q=""):
         "id": p.id, "nombre": p.name, "sku": p.sku, "diseno_listo": p.diseno_listo,
         "tiene_precio": _dec(p.sale_price) > 0, "costeo_completo": _completo(p),
         "exacto": bool(q) and (p.name.strip().lower() == q.strip().lower() or (p.sku or "").lower() == q.strip().lower()),
+        "costeo_verificado": p.costeo_verificado,
+    }
+
+
+def ficha_costeo(p):
+    """Los datos de producción tal como están cargados, para mostrarlos y verificarlos (todo por corrida de gcode)."""
+    return {
+        "merma_pct": str(_dec(p.waste_percent)),
+        "verificado": p.costeo_verificado,
+        "verificado_por": p.costeo_verificado_por,
+        "verificado_el": p.costeo_verificado_el.isoformat() if p.costeo_verificado_el else None,
+        "cambio_despues": bool(p.costeo_huella) and not p.costeo_verificado,
+        "actualizado_el": p.updated_at.isoformat() if p.updated_at else None,
+        "piezas": [{
+            "id": pp.pieza_id, "nombre": pp.pieza.name, "unidades_por_producto": pp.units_needed,
+            "piezas_por_impresion": pp.pieza.pieces_per_gcode, "minutos_por_impresion": str(_dec(pp.pieza.print_time_minutes)),
+            "stock_piezas": pp.pieza.stock_quantity,
+            "filamentos": [{"linea_id": fl.id, "id": fl.filament_id, "nombre": str(fl.filament),
+                            "gramos_por_impresion": str(_dec(fl.grams_used))} for fl in pp.pieza.filament_lines.all()],
+        } for pp in p.producto_piezas.all()],
+        "insumos": [{"id": li.aggregate_id, "nombre": str(li.aggregate), "cantidad": str(_dec(li.quantity))}
+                    for li in p.aggregate_lines.all()],
     }
 
 
@@ -72,6 +94,7 @@ def _costeo(p):
                         "gramos": str(p.filament_grams_needed(g, 1))} for f, g in p.aggregated_filament()],
         "insumos": [{"id": li.aggregate_id, "nombre": str(li.aggregate), "cantidad": str(li.quantity)}
                     for li in p.aggregate_lines.all()],
+        "costeo": ficha_costeo(p),
     }
 
 
@@ -245,3 +268,55 @@ class PresupuestoDetalleAgentes(_VistaAgentes):
                        "precio": _dinero(i.unit_price if i.unit_price is not None else i.producto.sale_price)}
                       for i in p.items.all()],
         })
+
+
+class CosteosPendientesAgentes(_VistaAgentes):
+    """GET costeos-pendientes/ — productos activos con costeo cargado pero SIN verificar (o que cambió después de
+    verificarlo), los más vendidos primero."""
+
+    def get(self, request):
+        from django.db.models import Sum
+
+        from .models import PresupuestoItem
+
+        vendidos = dict(PresupuestoItem.objects.exclude(presupuesto__status="CANCELLED")
+                        .values_list("producto_id").annotate(n=Sum("quantity")).values_list("producto_id", "n"))
+        pendientes = [p for p in _productos_qs() if _completo(p) and not p.costeo_verificado]
+        pendientes.sort(key=lambda p: (-(vendidos.get(p.id) or 0), p.name))
+        return Response({"total": len(pendientes), "productos": [
+            {"id": p.id, "nombre": p.name, "vendidos": vendidos.get(p.id) or 0,
+             "cambio_despues": bool(p.costeo_huella)} for p in pendientes[:50]]})
+
+
+class TrabajosImpresosAgentes(_VistaAgentes):
+    """GET trabajos-impresos/?desde=ISO — trabajos marcados impresos desde esa fecha, con lo que la ficha de costeo
+    decía que iban a tardar y usar (para comparar con lo real)."""
+
+    def get(self, request):
+        from datetime import datetime, timedelta
+
+        from production.models import ProductionJob
+
+        try:
+            desde = datetime.fromisoformat(request.query_params.get("desde") or "")
+        except ValueError:
+            desde = timezone.now() - timedelta(days=1)
+        if timezone.is_naive(desde):
+            desde = timezone.make_aware(desde)
+        trabajos = (ProductionJob.objects.filter(status="DONE", finished_at__gte=desde)
+                    .select_related("producto", "pieza", "presupuesto", "machine").order_by("finished_at"))
+        datos = []
+        for j in trabajos[:100]:
+            runs = j.gcode_runs if j.pieza else None
+            waste = j.producto.waste_multiplier if j.producto else Decimal("1")
+            datos.append({
+                "id": j.id, "presupuesto_id": j.presupuesto_id, "producto_id": j.producto_id,
+                "producto": str(j.producto or ""), "pieza_id": j.pieza_id, "pieza": str(j.pieza or ""),
+                "cantidad": j.quantity, "impresiones": runs, "maquina": str(j.machine or ""),
+                "terminado": j.finished_at.isoformat() if j.finished_at else None,
+                "minutos_ficha": str(_dec(j.pieza.print_time_minutes) * runs) if j.pieza else None,
+                "gramos_ficha": [{"linea_id": fl.id, "nombre": str(fl.filament),
+                                  "gramos": str((_dec(fl.grams_used) * runs * waste).quantize(CENT))}
+                                 for fl in j.pieza.filament_lines.select_related("filament")] if j.pieza else [],
+            })
+        return Response({"trabajos": datos})

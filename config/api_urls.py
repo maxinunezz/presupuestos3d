@@ -15,6 +15,8 @@ from budgets.api_agentes import (
     StockAgentes,
 )
 from budgets.api_agentes_ventas import (
+    CosteosPendientesAgentes,
+    TrabajosImpresosAgentes,
     PrecioRapidoAgentes,
     PresupuestoDetalleAgentes,
     ProductoAgentes,
@@ -22,6 +24,8 @@ from budgets.api_agentes_ventas import (
     SimularPedidoAgentes,
 )
 from budgets.api_agentes_escritura import (
+    CorregirCosteoEscritura,
+    VerificarCosteoEscritura,
     CrearCompraEscritura,
     CrearGastoEscritura,
     AprobarPresupuestoEscritura,
@@ -65,6 +69,8 @@ urlpatterns = router.urls + [
     path("agentes/simular-pedido/", SimularPedidoAgentes.as_view(), name="agentes-simular-pedido"),
     path("agentes/precio-rapido/", PrecioRapidoAgentes.as_view(), name="agentes-precio-rapido"),
     path("agentes/presupuestos/<int:pk>/", PresupuestoDetalleAgentes.as_view(), name="agentes-presupuesto"),
+    path("agentes/costeos-pendientes/", CosteosPendientesAgentes.as_view(), name="agentes-costeos-pendientes"),
+    path("agentes/trabajos-impresos/", TrabajosImpresosAgentes.as_view(), name="agentes-trabajos-impresos"),
     # Escritura de Roque (token aparte, solo POST, auditada): ver budgets/api_agentes_escritura.py
     path("agentes/escritura/presupuestos/", CrearPresupuestoEscritura.as_view(), name="agentes-escritura-crear"),
     path("agentes/escritura/presupuestos/<int:pk>/aprobar/", AprobarPresupuestoEscritura.as_view(),
@@ -75,6 +81,10 @@ urlpatterns = router.urls + [
          name="agentes-escritura-completar"),
     path("agentes/escritura/compras/", CrearCompraEscritura.as_view(), name="agentes-escritura-compra"),
     path("agentes/escritura/gastos/", CrearGastoEscritura.as_view(), name="agentes-escritura-gasto"),
+    path("agentes/escritura/productos/<int:pk>/verificar-costeo/", VerificarCosteoEscritura.as_view(),
+         name="agentes-escritura-verificar-costeo"),
+    path("agentes/escritura/piezas/<int:pk>/corregir-costeo/", CorregirCosteoEscritura.as_view(),
+         name="agentes-escritura-corregir-costeo"),
     path(
         "productos/costo/",
         ProductoCostoPorSkuView.as_view(),
