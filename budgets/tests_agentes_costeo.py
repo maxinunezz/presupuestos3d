@@ -90,6 +90,20 @@ class CosteoVerificadoTests(TestCase):
         self.assertEqual(fil[0]["stock_hoy"], str(Filament.objects.get(pk=self.rojo.pk).stock_grams))
         self.assertTrue(d["trabajos"])
 
+    def test_costo_promedio_y_ultima_venta(self):
+        d = self.r.get(f"/api/agentes/productos/{self.cortante.id}/").json()
+        self.assertIsNone(d["ultima_venta"])
+        self.assertEqual(d["costo_unitario"], str(self.cortante.unit_cost_avg))
+        for clave, precio, cliente in (("u1", "1800", "Sol"), ("u2", "2100", "Luna")):
+            self.w.post("/api/agentes/escritura/presupuestos/", {
+                "clave": clave, "aprobo": "Lucas", "cliente": cliente,
+                "items": [{"producto_id": self.cortante.id, "cantidad": 3, "precio": precio}]}, format="json")
+        u = self.r.get(f"/api/agentes/productos/{self.cortante.id}/").json()["ultima_venta"]
+        self.assertEqual((u["precio"], u["cliente"], u["cantidad"]), ("2100.00", "Luna", 3))
+        Presupuesto.objects.filter(client_name="Luna").update(status=Presupuesto.Status.CANCELLED)
+        u = self.r.get(f"/api/agentes/productos/{self.cortante.id}/").json()["ultima_venta"]
+        self.assertEqual(u["cliente"], "Sol")  # las canceladas no cuentan
+
     def test_trabajos_impresos_trae_lo_de_la_ficha(self):
         self.assertEqual(self.r.get("/api/agentes/trabajos-impresos/?desde=2026-01-01T00:00:00").json()["trabajos"], [])
 
