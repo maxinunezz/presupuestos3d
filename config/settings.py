@@ -114,6 +114,8 @@ REST_FRAMEWORK = {
 # complete la env var correspondiente.
 # Token de solo lectura para los agentes de IA (Roque). Vacío = /api/agentes/ responde 403.
 AGENTES_API_TOKEN = os.environ.get('AGENTES_API_TOKEN', '')
+# Token APARTE para que Roque escriba (crear/aprobar/cancelar presupuestos). Vacío = escritura apagada.
+AGENTES_ESCRITURA_TOKEN = os.environ.get('AGENTES_ESCRITURA_TOKEN', '')
 
 ZAPIER_WEBHOOKS = {
     'stock_bajo': os.environ.get('ZAPIER_WEBHOOK_STOCK_BAJO', ''),
