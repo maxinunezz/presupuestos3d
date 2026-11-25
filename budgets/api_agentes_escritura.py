@@ -5,12 +5,14 @@ con doble pregunta:
 - POST escritura/presupuestos/                 → crea un presupuesto en BORRADOR (no toca stock ni cola)
 - POST escritura/presupuestos/<id>/aprobar/    → lo aprueba con Presupuesto.approve(): descuenta stock, arma la cola
 - POST escritura/presupuestos/<id>/cancelar/   → lo cancela con Presupuesto.cancel(): devuelve stock, saca de la cola
+- POST escritura/presupuestos/<id>/completar/  → lo marca entregado (misma regla que la acción del admin)
 
 Reglas:
 - Token PROPIO (`X-Agentes-Escritura-Token` contra AGENTES_ESCRITURA_TOKEN): el de lectura no sirve acá y este no
   sirve para leer. Sin la variable configurada, todo 403 (falla cerrado). Solo POST.
 - Cada pedido trae `clave` (idempotencia) y `aprobo` (quién lo aprobó en Telegram). Todo queda en RegistroAgente.
-- Roque solo puede aprobar o cancelar presupuestos que creó él (los cargados a mano no se tocan).
+- Puede operar sobre cualquier presupuesto, también los cargados a mano (cambio del 25/11/2026): la protección es
+  la aprobación del CEO con doble pregunta en Telegram (o de IT como suplente a las 12 h), del lado de Roque.
 - No toca precios de productos, stock directo, cobros ni caja.
 """
 
@@ -66,7 +68,7 @@ class _VistaEscritura(APIView):
 
 
 def _estado(p):
-    return {"id": p.id, "estado": p.get_status_display(), "status": p.status, "cliente": p.client_name,
+    return {"id": p.id, "cargado_por_roque": p.registros_agente.filter(operacion="crear").exists(), "estado": p.get_status_display(), "status": p.status, "cliente": p.client_name,
             "vendedor": p.vendedor, "total": _dinero(p.total), "entrega": p.due_date.isoformat() if p.due_date else None}
 
 
@@ -101,9 +103,8 @@ class CrearPresupuestoEscritura(_VistaEscritura):
         return Response(resultado, status=201)
 
 
-def _de_roque(pk):
-    """Solo los presupuestos que creó Roque."""
-    return Presupuesto.objects.filter(pk=pk, registros_agente__operacion="crear").first()
+def _presupuesto(pk):
+    return Presupuesto.objects.filter(pk=pk).first()
 
 
 class AprobarPresupuestoEscritura(_VistaEscritura):
@@ -111,9 +112,9 @@ class AprobarPresupuestoEscritura(_VistaEscritura):
         clave, aprobo, resp = self._base(request)
         if resp:
             return resp
-        p = _de_roque(pk)
+        p = _presupuesto(pk)
         if not p:
-            return Response({"error": "Ese presupuesto no existe o no lo cargó Roque."}, status=404)
+            return Response({"error": "Ese presupuesto no existe."}, status=404)
         try:
             r = p.approve()
         except (DisenoNoListoError, PresupuestoNotApprovableError) as exc:
@@ -133,13 +134,40 @@ class CancelarPresupuestoEscritura(_VistaEscritura):
         clave, aprobo, resp = self._base(request)
         if resp:
             return resp
-        p = _de_roque(pk)
+        p = _presupuesto(pk)
         if not p:
-            return Response({"error": "Ese presupuesto no existe o no lo cargó Roque."}, status=404)
+            return Response({"error": "Ese presupuesto no existe."}, status=404)
         if p.status in (Presupuesto.Status.COMPLETED, Presupuesto.Status.CANCELLED):
             return Response({"error": f"No se puede cancelar: está {p.get_status_display()}."}, status=409)
         r = p.cancel()
         p.refresh_from_db()
         resultado = {**_estado(p), "trabajos_cancelados": r.get("jobs_cancelled", 0)}
         self._registrar("cancelar", clave, aprobo, p, request.data, resultado)
+        return Response(resultado)
+
+
+class CompletarPresupuestoEscritura(_VistaEscritura):
+    """Marcar entregado: igual que la acción del admin, solo si está listo para entregar (aprobado y sin trabajos
+    de impresión pendientes). Si tiene impresiones abiertas, hay que marcarlas primero (no se deja la cola sucia)."""
+
+    def post(self, request, pk):
+        clave, aprobo, resp = self._base(request)
+        if resp:
+            return resp
+        p = _presupuesto(pk)
+        if not p:
+            return Response({"error": "Ese presupuesto no existe."}, status=404)
+        abiertos = p.jobs.exclude(status__in=["DONE", "CANCELLED"]).count()
+        listo = p.is_ready_to_deliver or (p.status in (Presupuesto.Status.APPROVED, Presupuesto.Status.IN_PRODUCTION)
+                                          and p.stock_provisioned and not p.para_stock and abiertos == 0)
+        if not listo:
+            motivo = (f"tiene {abiertos} trabajo(s) de impresión sin terminar: marcalos impresos en presupuestos3d primero"
+                      if abiertos else f"está {p.get_status_display().lower()}")
+            return Response({"error": f"No se puede marcar entregado: {motivo}."}, status=409)
+        old = p.status
+        p.status = Presupuesto.Status.COMPLETED
+        p.apply_status_change(old)
+        p.save()
+        resultado = _estado(p)
+        self._registrar("completar", clave, aprobo, p, request.data, resultado)
         return Response(resultado)

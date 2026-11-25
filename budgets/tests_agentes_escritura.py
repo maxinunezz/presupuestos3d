@@ -77,13 +77,29 @@ class EscrituraAgentesTests(TestCase):
         self.assertEqual((r.status_code, r.json()["motivo"]), (409, "DisenoNoListoError"))
         self.assertEqual(Filament.objects.get(pk=self.rojo.pk).stock_grams, Decimal("2000"))
 
-    def test_no_toca_presupuestos_cargados_a_mano(self):
+    def test_presupuestos_cargados_a_mano_tambien(self):
+        from .models import PresupuestoItem
+
         manual = Presupuesto.objects.create(client_name="Manual")
-        for op in ("aprobar", "cancelar"):
-            r = self.c.post(f"/api/agentes/escritura/presupuestos/{manual.id}/{op}/", {"clave": f"m-{op}", "aprobo": "Lucas"}, format="json")
-            self.assertEqual(r.status_code, 404)
-        manual.refresh_from_db()
-        self.assertEqual(manual.status, Presupuesto.Status.DRAFT)
+        PresupuestoItem.objects.create(presupuesto=manual, producto=self.estrella, quantity=2)
+        r = self.c.post(f"/api/agentes/escritura/presupuestos/{manual.id}/aprobar/", {"clave": "m-a", "aprobo": "Lucas"}, format="json")
+        self.assertEqual((r.status_code, r.json()["cargado_por_roque"]), (200, False))
+        self.assertEqual(RegistroAgente.objects.get(clave="m-a").presupuesto_id, manual.id)
+        r = self.c.post(f"/api/agentes/escritura/presupuestos/{manual.id}/completar/", {"clave": "m-c", "aprobo": "Lucas"}, format="json")
+        self.assertEqual(r.status_code, 409)  # tiene 1 trabajo de impresión abierto
+        self.assertIn("sin terminar", r.json()["error"])
+        ProductionJob.objects.filter(presupuesto=manual).update(status=ProductionJob.Status.DONE)
+        r = self.c.post(f"/api/agentes/escritura/presupuestos/{manual.id}/completar/", {"clave": "m-c2", "aprobo": "Lucas"}, format="json")
+        self.assertEqual((r.status_code, r.json()["status"]), (200, "COMPLETED"))
+        self.assertEqual(self.c.post("/api/agentes/escritura/presupuestos/99999/aprobar/", {"clave": "x9", "aprobo": "L"},
+                                     format="json").status_code, 404)
+
+    def test_detalle_de_presupuesto_con_token_de_lectura(self):
+        lectura = APIClient()
+        lectura.credentials(HTTP_X_AGENTES_TOKEN=LECTURA)
+        pid = self._crear().json()["id"]
+        r = lectura.get(f"/api/agentes/presupuestos/{pid}/").json()
+        self.assertEqual((r["cliente"], r["items"][0]["cantidad"], r["status"]), ("Panadería Sol", 10, "DRAFT"))
 
     def test_faltan_datos(self):
         self.assertEqual(self.c.post("/api/agentes/escritura/presupuestos/", {"aprobo": "Lucas"}, format="json").status_code, 400)
