@@ -22,6 +22,8 @@ from budgets.api_agentes_ventas import (
     SimularPedidoAgentes,
 )
 from budgets.api_agentes_escritura import (
+    CrearCompraEscritura,
+    CrearGastoEscritura,
     AprobarPresupuestoEscritura,
     CancelarPresupuestoEscritura,
     CompletarPresupuestoEscritura,
@@ -71,6 +73,8 @@ urlpatterns = router.urls + [
          name="agentes-escritura-cancelar"),
     path("agentes/escritura/presupuestos/<int:pk>/completar/", CompletarPresupuestoEscritura.as_view(),
          name="agentes-escritura-completar"),
+    path("agentes/escritura/compras/", CrearCompraEscritura.as_view(), name="agentes-escritura-compra"),
+    path("agentes/escritura/gastos/", CrearGastoEscritura.as_view(), name="agentes-escritura-gasto"),
     path(
         "productos/costo/",
         ProductoCostoPorSkuView.as_view(),

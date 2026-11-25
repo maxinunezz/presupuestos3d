@@ -22,7 +22,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from caja.models import CuentaCaja, MovimientoCaja
-from gastos.models import Gasto, TopeGasto
+from gastos.models import CategoriaGasto, Gasto, MedioPagoGasto, TopeGasto
 from inventory.models import Aggregate, Filament
 from production.models import Maquina, ProductionJob
 
@@ -191,6 +191,9 @@ class GastosAgentes(_VistaAgentes):
             "total": _dinero(sum((g.monto for g in gastos), Decimal("0"))),
             "por_categoria": {k: _dinero(v) for k, v in sorted(por_categoria.items())},
             "topes": topes,
+            # para que Roque clasifique un gasto nuevo con lo que ya existe
+            "categorias": list(CategoriaGasto.objects.values_list("nombre", flat=True)),
+            "medios_pago": list(MedioPagoGasto.objects.values_list("nombre", flat=True)),
             "gastos": [
                 {"fecha": g.fecha, "concepto": g.concepto, "categoria": str(g.categoria or ""),
                  "area": str(g.area or ""), "monto": _dinero(g.monto), "proveedor": g.proveedor,
