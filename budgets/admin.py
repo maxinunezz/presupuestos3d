@@ -37,6 +37,7 @@ from .models import (
     Presupuesto,
     PresupuestoItem,
     PresupuestoNotApprovableError,
+    RegistroAgente,
     Producto,
     ProductoAggregateLine,
     ProductoCanalPrecio,
@@ -1901,8 +1902,8 @@ class PresupuestoAdmin(admin.ModelAdmin):
         "pdf_button",
         "created_at",
     )
-    list_filter = ("status", "para_stock")
-    search_fields = ("client_name", "description")
+    list_filter = ("status", "para_stock", "vendedor")
+    search_fields = ("client_name", "description", "vendedor")
     list_editable = ("status",)
     inlines = (PresupuestoItemInline, ProductionJobInline)
     formfield_overrides = DECIMAL_LOCALIZE
@@ -1920,7 +1921,7 @@ class PresupuestoAdmin(admin.ModelAdmin):
     actions = ("approve_presupuestos", "marcar_entregado", "cancelar_presupuestos")
 
     fieldsets = (
-        (None, {"fields": ("client_name", "para_stock", "description", "status")}),
+        (None, {"fields": ("client_name", "vendedor", "para_stock", "description", "status")}),
         (_("Precio del pedido"), {"fields": ("fixed_cost", "totals_summary")}),
         (
             _("Producción y entrega"),
@@ -2629,3 +2630,22 @@ class PanelCostosAdmin(_MetricsDashboardAdmin):
     pdf_slug = "panel_de_costos"
 
 
+
+
+@admin.register(RegistroAgente)
+class RegistroAgenteAdmin(admin.ModelAdmin):
+    """Solo lectura: lo que escribió Roque, quién lo aprobó y qué pasó."""
+
+    list_display = ("creado", "operacion", "presupuesto", "aprobo")
+    list_filter = ("operacion",)
+    search_fields = ("aprobo", "clave")
+    readonly_fields = ("creado", "operacion", "clave", "presupuesto", "aprobo", "pedido", "resultado")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False

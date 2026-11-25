@@ -20,6 +20,11 @@ from budgets.api_agentes_ventas import (
     ProductosAgentes,
     SimularPedidoAgentes,
 )
+from budgets.api_agentes_escritura import (
+    AprobarPresupuestoEscritura,
+    CancelarPresupuestoEscritura,
+    CrearPresupuestoEscritura,
+)
 from inventory.views import AggregateViewSet, FilamentViewSet, StockMovementViewSet
 
 # Nota: el flujo de Costeo de productos / Presupuestos (Producto, Presupuesto)
@@ -55,6 +60,12 @@ urlpatterns = router.urls + [
     path("agentes/productos/<int:pk>/", ProductoAgentes.as_view(), name="agentes-producto"),
     path("agentes/simular-pedido/", SimularPedidoAgentes.as_view(), name="agentes-simular-pedido"),
     path("agentes/precio-rapido/", PrecioRapidoAgentes.as_view(), name="agentes-precio-rapido"),
+    # Escritura de Roque (token aparte, solo POST, auditada): ver budgets/api_agentes_escritura.py
+    path("agentes/escritura/presupuestos/", CrearPresupuestoEscritura.as_view(), name="agentes-escritura-crear"),
+    path("agentes/escritura/presupuestos/<int:pk>/aprobar/", AprobarPresupuestoEscritura.as_view(),
+         name="agentes-escritura-aprobar"),
+    path("agentes/escritura/presupuestos/<int:pk>/cancelar/", CancelarPresupuestoEscritura.as_view(),
+         name="agentes-escritura-cancelar"),
     path(
         "productos/costo/",
         ProductoCostoPorSkuView.as_view(),

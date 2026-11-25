@@ -1206,6 +1206,10 @@ class Presupuesto(models.Model):
     }
 
     client_name = models.CharField(_("Cliente"), max_length=150)
+    vendedor = models.CharField(
+        _("Vendedor"), max_length=60, blank=True,
+        help_text=_("Quién del equipo hizo la venta (lo completa Roque al registrar una venta)."),
+    )
     description = models.TextField(_("Notas / descripción"), blank=True)
 
     para_stock = models.BooleanField(
@@ -2612,3 +2616,29 @@ class VentasEcommerce(PedidoOnline):
         proxy = True
         verbose_name = _("Venta eCommerce")
         verbose_name_plural = _("Panel ventas eCommerce")
+
+
+class RegistroAgente(models.Model):
+    """
+    Auditoría de todo lo que Roque (agente de IA) escribe en el sistema: qué operación, sobre qué presupuesto,
+    quién la aprobó en Telegram y qué resultó. La `clave` hace idempotente cada operación: si el mismo pedido
+    llega dos veces (dos toques en el botón, un reintento), no se repite y se devuelve el mismo resultado.
+    """
+
+    creado = models.DateTimeField(_("Fecha"), auto_now_add=True)
+    operacion = models.CharField(_("Operación"), max_length=20)  # crear | aprobar | cancelar
+    clave = models.CharField(_("Clave de idempotencia"), max_length=80, unique=True)
+    presupuesto = models.ForeignKey(
+        Presupuesto, null=True, blank=True, on_delete=models.SET_NULL, related_name="registros_agente"
+    )
+    aprobo = models.CharField(_("Aprobó"), max_length=120)
+    pedido = models.JSONField(_("Pedido recibido"), default=dict)
+    resultado = models.JSONField(_("Resultado"), default=dict)
+
+    class Meta:
+        verbose_name = _("Registro de Roque")
+        verbose_name_plural = _("Registros de Roque")
+        ordering = ["-creado"]
+
+    def __str__(self):
+        return f"{self.creado:%d/%m %H:%M} {self.operacion} #{self.presupuesto_id} ({self.aprobo})"
