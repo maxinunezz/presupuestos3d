@@ -343,10 +343,14 @@ class Producto(models.Model):
         return bool(self.costeo_huella) and self.costeo_huella == self.huella_costeo()
 
     def verificar_costeo(self, quien: str):
+        """Con update() y no save(): verificar no cambia nada de lo que usa la tienda, así que no tiene que disparar
+        la sincronización con 3darg-backend (que hace save() y, si la tienda tarda, frenaba la verificación)."""
         self.costeo_verificado_por = quien[:60]
         self.costeo_verificado_el = timezone.now()
         self.costeo_huella = self.huella_costeo()
-        self.save(update_fields=["costeo_verificado_por", "costeo_verificado_el", "costeo_huella", "updated_at"])
+        Producto.objects.filter(pk=self.pk).update(
+            costeo_verificado_por=self.costeo_verificado_por, costeo_verificado_el=self.costeo_verificado_el,
+            costeo_huella=self.costeo_huella)
 
     # ---- Totales de las piezas (sumatoria de todas las piezas del producto) ----
 

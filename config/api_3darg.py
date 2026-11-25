@@ -83,7 +83,9 @@ def sync_costeo_ecommerce(producto) -> dict | None:
             producto.name, producto.sku, e.code, body_text,
         )
         return {"error": body_text}
-    except URLError as e:
+    except (URLError, TimeoutError, OSError) as e:
+        # TimeoutError (la tienda tardó más de TIMEOUT en contestar) no es URLError: sin esto, guardar un producto
+        # daba error 500 cuando 3darg-backend estaba lento.
         logger.error(
             "Error de red al sincronizar costeo con 3darg-backend (producto=%s, sku=%s): %s",
             producto.name, producto.sku, e,
