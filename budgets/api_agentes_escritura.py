@@ -6,6 +6,8 @@ con doble pregunta:
 - POST escritura/presupuestos/<id>/aprobar/    → lo aprueba con Presupuesto.approve(): descuenta stock, arma la cola
 - POST escritura/presupuestos/<id>/cancelar/   → lo cancela con Presupuesto.cancel(): devuelve stock, saca de la cola
 - POST escritura/presupuestos/<id>/completar/  → lo marca entregado (misma regla que la acción del admin)
+- POST escritura/compras/                      → compra de insumos CONFIRMADA: suma stock y actualiza el precio
+- POST escritura/gastos/                       → un gasto (lo que no es insumo)
 
 Reglas:
 - Token PROPIO (`X-Agentes-Escritura-Token` contra AGENTES_ESCRITURA_TOKEN): el de lectura no sirve acá y este no
@@ -13,7 +15,8 @@ Reglas:
 - Cada pedido trae `clave` (idempotencia) y `aprobo` (quién lo aprobó en Telegram). Todo queda en RegistroAgente.
 - Puede operar sobre cualquier presupuesto, también los cargados a mano (cambio del 25/11/2026): la protección es
   la aprobación del CEO con doble pregunta en Telegram (o de IT como suplente a las 12 h), del lado de Roque.
-- No toca precios de productos, stock directo, cobros ni caja.
+- No toca precios de productos, stock directo ni cobros. En caja solo deja BORRADORES de egreso (los confirma el
+  dueño).
 """
 
 import hmac
@@ -21,6 +24,7 @@ from decimal import Decimal, InvalidOperation
 
 from django.conf import settings
 from django.db import IntegrityError, transaction
+from django.utils import timezone
 from rest_framework.permissions import BasePermission
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -171,3 +175,136 @@ class CompletarPresupuestoEscritura(_VistaEscritura):
         resultado = _estado(p)
         self._registrar("completar", clave, aprobo, p, request.data, resultado)
         return Response(resultado)
+
+
+# ---------------------------------------------------------------- compras y gastos (26/11/2026)
+# Lo que se compra va por uno de dos caminos, igual que en el admin:
+#   - INSUMO (filamento o agregado que ya existe en Inventario) → una Compra confirmada: suma el stock, actualiza el
+#     precio del artículo con lo pagado y registra el movimiento de stock (motivo Compra).
+#   - GASTO (todo lo demás: contador, envío, herramienta, publicidad…) → un Gasto en el panel de gastos.
+# En los dos, si se pagó con un medio de "caja inmediata" (efectivo, transferencia, Mercado Pago, Ualá) y hay una
+# sola cuenta de caja para ese medio, queda un BORRADOR de egreso en caja para que el dueño lo confirme.
+
+def _decimal(x):
+    try:
+        v = Decimal(str(x).replace(",", "."))
+    except (InvalidOperation, TypeError, ValueError):
+        return None
+    return v if v.is_finite() else None
+
+
+def _cuenta_caja(medio_nombre):
+    from caja.models import CuentaCaja
+    from gastos.models import _NOMBRE_A_CODIGO_MEDIO_PAGO, _normalizar
+
+    codigo = _NOMBRE_A_CODIGO_MEDIO_PAGO.get(_normalizar(medio_nombre or ""))
+    if not codigo:
+        return None
+    cuentas = CuentaCaja.objects.filter(medio_pago_default=codigo, is_active=True)
+    return cuentas.first() if cuentas.count() == 1 else None
+
+
+class CrearCompraEscritura(_VistaEscritura):
+    """POST escritura/compras/ {clave, aprobo, proveedor, factura, notas, medio_pago,
+    lineas: [{filamento_id | insumo_id, cantidad (g para filamento), precio_total}]} → Compra confirmada."""
+
+    def post(self, request):
+        from inventory.models import Aggregate, Compra, CompraLine, Filament
+
+        clave, aprobo, resp = self._base(request)
+        if resp:
+            return resp
+        d = request.data
+        lineas = d.get("lineas") or []
+        if not lineas:
+            return Response({"error": "Faltan 'lineas'."}, status=400)
+        armadas = []
+        for li in lineas:
+            cantidad = _decimal(li.get("cantidad"))
+            precio = _decimal(li["precio_total"]) if li.get("precio_total") not in (None, "") else None
+            fil_id, ins_id = li.get("filamento_id"), li.get("insumo_id")
+            if not cantidad or cantidad <= 0 or (precio is not None and precio < 0) or bool(fil_id) == bool(ins_id):
+                return Response({"error": "Línea inválida: [{filamento_id o insumo_id, cantidad, precio_total}]"},
+                                status=400)
+            item = (Filament.objects.filter(pk=fil_id, is_active=True).first() if fil_id
+                    else Aggregate.objects.filter(pk=ins_id, is_active=True).first())
+            if not item:
+                return Response({"error": f"No existe el {'filamento' if fil_id else 'insumo'} {fil_id or ins_id}."},
+                                status=400)
+            armadas.append((item, bool(fil_id), cantidad, precio))
+        with transaction.atomic():
+            compra = Compra.objects.create(
+                supplier=str(d.get("proveedor") or "")[:150], invoice_number=str(d.get("factura") or "")[:100],
+                notes=(str(d.get("notas") or "") + f"\n\nCargada por Roque · aprobó {aprobo}").strip())
+            antes = []
+            for item, es_fil, cantidad, precio in armadas:
+                antes.append((item, es_fil, item.stock_grams if es_fil else item.stock_quantity,
+                              item.cost_per_kg if es_fil else item.cost_per_unit))
+                CompraLine.objects.create(compra=compra, filament=item if es_fil else None,
+                                          aggregate=None if es_fil else item, quantity=cantidad, unit_price=precio)
+            compra.confirm()
+            detalle = []
+            for item, es_fil, stock_antes, precio_antes in antes:
+                item.refresh_from_db()
+                detalle.append({
+                    "tipo": "filamento" if es_fil else "insumo", "id": item.id,
+                    "nombre": f"{item.material_type} {item.color} ({item.brand})" if es_fil else item.name,
+                    "stock_antes": str(stock_antes), "stock_despues": str(item.stock_grams if es_fil else item.stock_quantity),
+                    "precio_antes": _dinero(precio_antes),
+                    "precio_despues": _dinero(item.cost_per_kg if es_fil else item.cost_per_unit)})
+            caja = None
+            cuenta = _cuenta_caja(d.get("medio_pago"))
+            if cuenta and compra.total > 0:
+                from caja.models import MovimientoCaja
+
+                MovimientoCaja.crear_borrador_automatico(
+                    cuenta=cuenta, tipo=MovimientoCaja.Tipo.EGRESO, monto=compra.total,
+                    fecha=timezone.localdate(), concepto=f"Compra #{compra.pk} — {compra.supplier or 'sin proveedor'}",
+                    compra=compra)
+                caja = cuenta.nombre
+            resultado = {"compra_id": compra.pk, "estado": compra.get_status_display(), "total": _dinero(compra.total),
+                         "lineas": detalle, "caja_borrador": caja}
+            self._registrar("compra", clave, aprobo, None, d, resultado)
+        return Response(resultado, status=201)
+
+
+class CrearGastoEscritura(_VistaEscritura):
+    """POST escritura/gastos/ {clave, aprobo, concepto, monto, fecha, categoria, proveedor, medio_pago, notas,
+    extraordinario} → Gasto. La categoría y el medio de pago tienen que existir (se buscan por nombre)."""
+
+    def post(self, request):
+        from datetime import date
+
+        from gastos.models import CategoriaGasto, Gasto, MedioPagoGasto
+
+        clave, aprobo, resp = self._base(request)
+        if resp:
+            return resp
+        d = request.data
+        monto = _decimal(d.get("monto"))
+        concepto = str(d.get("concepto") or "").strip()
+        if not concepto or not monto or monto <= 0:
+            return Response({"error": "Faltan 'concepto' y 'monto' (mayor a 0)."}, status=400)
+        categoria = CategoriaGasto.objects.filter(nombre__iexact=str(d.get("categoria") or "").strip()).first()
+        if not categoria:
+            return Response({"error": "Esa categoría de gasto no existe.",
+                             "categorias": list(CategoriaGasto.objects.values_list("nombre", flat=True))}, status=400)
+        medio = None
+        if d.get("medio_pago"):
+            medio = MedioPagoGasto.objects.filter(nombre__iexact=str(d["medio_pago"]).strip()).first()
+        try:
+            fecha = date.fromisoformat(str(d["fecha"])) if d.get("fecha") else timezone.localdate()
+        except ValueError:
+            return Response({"error": "Fecha inválida (YYYY-MM-DD)."}, status=400)
+        with transaction.atomic():
+            g = Gasto.objects.create(
+                categoria=categoria, concepto=concepto[:150], monto=monto.quantize(Decimal("0.01")), fecha=fecha,
+                proveedor=str(d.get("proveedor") or "")[:150], medio_pago=medio,
+                tipo=Gasto.Tipo.EXTRAORDINARIO if d.get("extraordinario") else Gasto.Tipo.OPERATIVO,
+                notas=(str(d.get("notas") or "") + f"\n\nCargado por Roque · aprobó {aprobo}").strip())
+            caja = g.movimientos_caja.filter(origen_automatico=True).first() if hasattr(g, "movimientos_caja") else None
+            resultado = {"gasto_id": g.pk, "concepto": g.concepto, "categoria": categoria.nombre,
+                         "monto": _dinero(g.monto), "fecha": g.fecha.isoformat(),
+                         "medio_pago": medio.nombre if medio else "", "caja_borrador": caja.cuenta.nombre if caja else None}
+            self._registrar("gasto", clave, aprobo, None, d, resultado)
+        return Response(resultado, status=201)
