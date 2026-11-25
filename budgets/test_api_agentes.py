@@ -72,3 +72,10 @@ class ApiAgentesTests(TestCase):
         d = self.c.get("/api/agentes/gastos/", **self.ok).json()
         self.assertEqual(d["por_categoria"]["Publicidad"], "30000.00")
         self.assertTrue(d["topes"][0]["superado"])
+
+
+class SaludTests(TestCase):
+    def test_salud_responde_ok_con_el_host_del_healthcheck(self):
+        r = self.client.get("/salud/", HTTP_HOST="healthcheck.railway.app")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json(), {"ok": True})

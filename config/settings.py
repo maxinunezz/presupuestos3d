@@ -40,6 +40,8 @@ DEBUG = os.environ.get('DEBUG', '1') == '1'
 
 # En producción Vercel sirve bajo *.vercel.app (y el dominio propio si se agrega).
 ALLOWED_HOSTS = _env_list('ALLOWED_HOSTS') or (['*'] if DEBUG else [])
+# El healthcheck de Railway entra con este Host (ver /salud/ en config/urls.py).
+ALLOWED_HOSTS += ['healthcheck.railway.app']
 if not DEBUG:
     ALLOWED_HOSTS += ['.vercel.app']
 

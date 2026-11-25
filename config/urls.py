@@ -17,6 +17,7 @@ Including another URLconf
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
+from django.http import JsonResponse
 from django.urls import include, path
 
 from config.admin_dashboard import patch_admin_site
@@ -25,6 +26,8 @@ from config.admin_dashboard import patch_admin_site
 patch_admin_site()
 
 urlpatterns = [
+    # Healthcheck de Railway: mientras el deploy nuevo no responda acá, sigue sirviendo el anterior.
+    path('salud/', lambda request: JsonResponse({'ok': True}), name='salud'),
     path('admin/', admin.site.urls),
     path('api/', include('config.api_urls')),
     # Vista set_language para el selector de idioma del admin (POST con 'language').
