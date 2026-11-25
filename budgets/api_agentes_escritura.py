@@ -8,6 +8,8 @@ con doble pregunta:
 - POST escritura/presupuestos/<id>/completar/  → lo marca entregado (misma regla que la acción del admin)
 - POST escritura/compras/                      → compra de insumos CONFIRMADA: suma stock y actualiza el precio
 - POST escritura/gastos/                       → un gasto (lo que no es insumo)
+- POST escritura/productos/<id>/verificar-costeo/ → marca el costeo como revisado por Producción
+- POST escritura/piezas/<id>/corregir-costeo/   → corrige piezas por impresión, minutos o gramos de una pieza
 
 Reglas:
 - Token PROPIO (`X-Agentes-Escritura-Token` contra AGENTES_ESCRITURA_TOKEN): el de lectura no sirve acá y este no
@@ -119,6 +121,13 @@ class AprobarPresupuestoEscritura(_VistaEscritura):
         p = _presupuesto(pk)
         if not p:
             return Response({"error": "Ese presupuesto no existe."}, status=404)
+        productos = [i.producto for i in p.items.select_related("producto") if i.producto]
+        # si falta el diseño, manda ese error (es lo primero que hay que resolver)
+        sin_verificar = [] if any(not x.diseno_listo for x in productos) else sorted(
+            {x.name for x in productos if not x.costeo_verificado})
+        if sin_verificar:  # Roque no descuenta stock con datos de producción que nadie revisó (26/11/2026)
+            return Response({"error": "Costeo sin verificar: " + ", ".join(sin_verificar) + ".",
+                             "motivo": "CosteoSinVerificar", "productos": sin_verificar}, status=409)
         try:
             r = p.approve()
         except (DisenoNoListoError, PresupuestoNotApprovableError) as exc:
@@ -308,3 +317,72 @@ class CrearGastoEscritura(_VistaEscritura):
                          "medio_pago": medio.nombre if medio else "", "caja_borrador": caja.cuenta.nombre if caja else None}
             self._registrar("gasto", clave, aprobo, None, d, resultado)
         return Response(resultado, status=201)
+
+
+
+# ---------------------------------------------------------------- costeo verificado (26/11/2026)
+# Antes de descontar stock con los datos de producción de un producto, alguien de Producción tiene que haber
+# revisado que son reales. Verificar guarda la huella de los datos; si después cambian, se cae sola.
+
+class VerificarCosteoEscritura(_VistaEscritura):
+    def post(self, request, pk):
+        clave, aprobo, resp = self._base(request)
+        if resp:
+            return resp
+        p = Producto.objects.filter(pk=pk).first()
+        if not p:
+            return Response({"error": "Ese producto no existe."}, status=404)
+        if not p.producto_piezas.exists():
+            return Response({"error": "Ese producto no tiene piezas cargadas: no hay costeo para verificar."}, status=409)
+        p.verificar_costeo(aprobo)
+        resultado = {"producto_id": p.id, "nombre": p.name, "verificado": p.costeo_verificado,
+                     "verificado_por": p.costeo_verificado_por}
+        self._registrar("verificar", clave, aprobo, None, request.data, resultado)
+        return Response(resultado)
+
+
+class CorregirCosteoEscritura(_VistaEscritura):
+    """{clave, aprobo, piezas_por_impresion?, minutos?, gramos?: {linea_id: g}}. No verifica: después de corregir,
+    el producto se verifica aparte (con los datos nuevos a la vista)."""
+
+    def post(self, request, pk):
+        from .models import Pieza
+
+        clave, aprobo, resp = self._base(request)
+        if resp:
+            return resp
+        pieza = Pieza.objects.filter(pk=pk).first()
+        if not pieza:
+            return Response({"error": "Esa pieza no existe."}, status=404)
+        d = request.data
+        antes = {"piezas_por_impresion": pieza.pieces_per_gcode, "minutos": str(pieza.print_time_minutes),
+                 "gramos": {str(fl.id): str(fl.grams_used) for fl in pieza.filament_lines.all()}}
+        try:
+            with transaction.atomic():
+                if d.get("piezas_por_impresion") not in (None, ""):
+                    n = int(d["piezas_por_impresion"])
+                    if n < 1:
+                        raise ValueError
+                    pieza.pieces_per_gcode = n
+                if d.get("minutos") not in (None, ""):
+                    m = Decimal(str(d["minutos"]))
+                    if m <= 0:
+                        raise ValueError
+                    pieza.print_time_minutes = m
+                pieza.save(update_fields=["pieces_per_gcode", "print_time_minutes"])
+                for linea_id, g in (d.get("gramos") or {}).items():
+                    fl = pieza.filament_lines.filter(pk=int(linea_id)).first()
+                    g = Decimal(str(g))
+                    if not fl or g <= 0:
+                        raise ValueError
+                    fl.grams_used = g
+                    fl.save(update_fields=["grams_used"])
+                pieza.refresh_from_db()
+                despues = {"piezas_por_impresion": pieza.pieces_per_gcode, "minutos": str(pieza.print_time_minutes),
+                           "gramos": {str(fl.id): str(fl.grams_used) for fl in pieza.filament_lines.all()}}
+                resultado = {"pieza_id": pieza.id, "nombre": pieza.name, "antes": antes, "despues": despues}
+                self._registrar("corregir", clave, aprobo, None, d, resultado)
+        except (ValueError, TypeError, InvalidOperation):
+            return Response({"error": "Datos inválidos: piezas por impresión ≥ 1, minutos y gramos > 0, líneas de "
+                                      "esa pieza."}, status=400)
+        return Response(resultado)

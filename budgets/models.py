@@ -216,6 +216,14 @@ class Producto(models.Model):
     created_at = models.DateTimeField(_("Creado"), auto_now_add=True)
     updated_at = models.DateTimeField(_("Actualizado"), auto_now=True)
 
+    # --- Costeo verificado (26/11/2026) ---
+    # Alguien de Producción revisó que los datos de producción (piezas por impresión, minutos, gramos, merma,
+    # insumos) son reales. `costeo_huella` es la foto de esos datos al verificarlos: si después cambia cualquiera,
+    # la verificación se cae sola (ver `costeo_verificado`) y Roque no deja descontar stock con datos sin revisar.
+    costeo_verificado_por = models.CharField(_("Costeo verificado por"), max_length=60, blank=True)
+    costeo_verificado_el = models.DateTimeField(_("Costeo verificado el"), null=True, blank=True)
+    costeo_huella = models.CharField(_("Huella del costeo verificado"), max_length=64, blank=True, editable=False)
+
     # --- Handoff diseño → producción ---
     diseno_listo = models.BooleanField(
         _("Diseño listo"),
@@ -311,6 +319,34 @@ class Producto(models.Model):
     @property
     def waste_multiplier(self) -> Decimal:
         return Decimal("1") + (self.waste_percent / Decimal("100"))
+
+    def huella_costeo(self) -> str:
+        """Foto de los datos de producción: merma, piezas (unidades, piezas por impresión, minutos, gramos por
+        filamento) e insumos. Si cambia cualquiera, cambia la huella."""
+        import hashlib
+        import json
+
+        def n(x):  # 5 y 5.00 son lo mismo (en memoria vs. leído de la base)
+            return f"{_dec(x):.2f}"
+
+        piezas = sorted(
+            [pp.pieza_id, pp.units_needed, pp.pieza.pieces_per_gcode, n(pp.pieza.print_time_minutes),
+             sorted([fl.filament_id, n(fl.grams_used)] for fl in pp.pieza.filament_lines.all())]
+            for pp in self.producto_piezas.select_related("pieza").all()
+        )
+        insumos = sorted([li.aggregate_id, n(li.quantity)] for li in self.aggregate_lines.all())
+        datos = json.dumps([n(self.waste_percent), piezas, insumos], separators=(",", ":"))
+        return hashlib.sha256(datos.encode()).hexdigest()
+
+    @property
+    def costeo_verificado(self) -> bool:
+        return bool(self.costeo_huella) and self.costeo_huella == self.huella_costeo()
+
+    def verificar_costeo(self, quien: str):
+        self.costeo_verificado_por = quien[:60]
+        self.costeo_verificado_el = timezone.now()
+        self.costeo_huella = self.huella_costeo()
+        self.save(update_fields=["costeo_verificado_por", "costeo_verificado_el", "costeo_huella", "updated_at"])
 
     # ---- Totales de las piezas (sumatoria de todas las piezas del producto) ----
 

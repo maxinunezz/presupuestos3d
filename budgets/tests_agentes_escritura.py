@@ -25,6 +25,8 @@ class EscrituraAgentesTests(TestCase):
         add_pieza(self.estrella, self.rojo, Decimal("64"), print_hours=Decimal("0.5"))
         self.sin_diseno = make_producto(name="Vaso", sale_price=Decimal("3000"), diseno_listo=False)
         add_pieza(self.sin_diseno, self.rojo, Decimal("100"), name="Vaso")
+        self.estrella.verificar_costeo("Maxi")
+        self.sin_diseno.verificar_costeo("Maxi")
 
     def _crear(self, clave="venta-1-crear", producto=None, cantidad=10):
         return self.c.post("/api/agentes/escritura/presupuestos/", {
