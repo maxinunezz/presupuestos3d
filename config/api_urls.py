@@ -14,6 +14,12 @@ from budgets.api_agentes import (
     ReporteMensualAgentes,
     StockAgentes,
 )
+from budgets.api_agentes_ventas import (
+    PrecioRapidoAgentes,
+    ProductoAgentes,
+    ProductosAgentes,
+    SimularPedidoAgentes,
+)
 from inventory.views import AggregateViewSet, FilamentViewSet, StockMovementViewSet
 
 # Nota: el flujo de Costeo de productos / Presupuestos (Producto, Presupuesto)
@@ -45,6 +51,10 @@ urlpatterns = router.urls + [
     path("agentes/caja/", CajaAgentes.as_view(), name="agentes-caja"),
     path("agentes/gastos/", GastosAgentes.as_view(), name="agentes-gastos"),
     path("agentes/reporte-mensual/", ReporteMensualAgentes.as_view(), name="agentes-reporte-mensual"),
+    path("agentes/productos/", ProductosAgentes.as_view(), name="agentes-productos"),
+    path("agentes/productos/<int:pk>/", ProductoAgentes.as_view(), name="agentes-producto"),
+    path("agentes/simular-pedido/", SimularPedidoAgentes.as_view(), name="agentes-simular-pedido"),
+    path("agentes/precio-rapido/", PrecioRapidoAgentes.as_view(), name="agentes-precio-rapido"),
     path(
         "productos/costo/",
         ProductoCostoPorSkuView.as_view(),
