@@ -110,6 +110,9 @@ REST_FRAMEWORK = {
 # var; si a un evento le falta la URL, config.zapier.notificar() no hace nada
 # (no-op), así que agregar un evento nuevo acá no rompe nada hasta que se
 # complete la env var correspondiente.
+# Token de solo lectura para los agentes de IA (Roque). Vacío = /api/agentes/ responde 403.
+AGENTES_API_TOKEN = os.environ.get('AGENTES_API_TOKEN', '')
+
 ZAPIER_WEBHOOKS = {
     'stock_bajo': os.environ.get('ZAPIER_WEBHOOK_STOCK_BAJO', ''),
     'presupuesto_aprobado': os.environ.get('ZAPIER_WEBHOOK_PRESUPUESTO_APROBADO', ''),
