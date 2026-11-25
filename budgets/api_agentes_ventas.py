@@ -95,7 +95,23 @@ def _costeo(p):
         "insumos": [{"id": li.aggregate_id, "nombre": str(li.aggregate), "cantidad": str(li.quantity)}
                     for li in p.aggregate_lines.all()],
         "costeo": ficha_costeo(p),
+        "costo_sin_sobrantes": _dinero(p.unit_cost),
+        "ultima_venta": ultima_venta(p),
     }
+
+
+def ultima_venta(p):
+    """El último presupuesto (no cancelado) que incluyó este producto: a cuánto se vendió, cuándo y a quién."""
+    from .models import PresupuestoItem
+
+    i = (PresupuestoItem.objects.filter(producto=p).exclude(presupuesto__status="CANCELLED")
+         .select_related("presupuesto").order_by("-presupuesto__created_at", "-id").first())
+    if not i:
+        return None
+    pr = i.presupuesto
+    return {"precio": _dinero(i.unit_price if i.unit_price is not None else p.sale_price), "cantidad": i.quantity,
+            "fecha": pr.created_at.date().isoformat(), "cliente": pr.client_name, "presupuesto_id": pr.id,
+            "estado": pr.get_status_display()}
 
 
 class ProductoAgentes(_VistaAgentes):
