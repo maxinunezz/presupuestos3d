@@ -225,3 +225,23 @@ class PrecioRapidoAgentes(_VistaAgentes):
             "base": {"material": material, "costo_kg": _dinero(costo_kg), "merma_pct": str(merma.quantize(CENT)),
                      "maquina_hora": _dinero(maq), "mano_obra_hora": _dinero(mo), "productos_para_margen": len(margenes)},
         })
+
+
+class PresupuestoDetalleAgentes(_VistaAgentes):
+    """GET presupuestos/<id>/ — detalle para que Roque arme el impacto antes de pedir una aprobación."""
+
+    def get(self, request, pk):
+        from .models import Presupuesto
+
+        p = Presupuesto.objects.filter(pk=pk).prefetch_related("items__producto", "jobs").first()
+        if not p:
+            return Response({"error": "No existe ese presupuesto."}, status=404)
+        return Response({
+            "id": p.id, "cliente": p.client_name, "vendedor": p.vendedor, "estado": p.get_status_display(),
+            "status": p.status, "total": _dinero(p.total), "vencimiento": p.due_date, "para_stock": p.para_stock,
+            "trabajos_abiertos": p.jobs.exclude(status__in=["DONE", "CANCELLED"]).count(),
+            "listo_para_entregar": p.is_ready_to_deliver,
+            "items": [{"producto_id": i.producto_id, "producto": i.producto.name, "cantidad": i.quantity,
+                       "precio": _dinero(i.unit_price if i.unit_price is not None else i.producto.sale_price)}
+                      for i in p.items.all()],
+        })
