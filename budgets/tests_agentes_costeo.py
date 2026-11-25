@@ -78,6 +78,18 @@ class CosteoVerificadoTests(TestCase):
         self.pieza.refresh_from_db()
         self.assertEqual(self.pieza.print_time_minutes, Decimal("199.80"))
 
+    def test_detalle_trae_lo_que_movio_en_el_stock(self):
+        self.cortante.verificar_costeo("Maxi")
+        pid = self.w.post("/api/agentes/escritura/presupuestos/", {
+            "clave": "c9", "aprobo": "Lucas", "cliente": "Sol",
+            "items": [{"producto_id": self.cortante.id, "cantidad": 2, "precio": "2000"}]}, format="json").json()["id"]
+        self.w.post(f"/api/agentes/escritura/presupuestos/{pid}/aprobar/", {"clave": "a9", "aprobo": "Lucas"}, format="json")
+        d = self.r.get(f"/api/agentes/presupuestos/{pid}/").json()
+        fil = [m for m in d["movimientos"] if m["tipo"] == "filamento"]
+        self.assertEqual(len(fil), 1)
+        self.assertEqual(fil[0]["stock_hoy"], str(Filament.objects.get(pk=self.rojo.pk).stock_grams))
+        self.assertTrue(d["trabajos"])
+
     def test_trabajos_impresos_trae_lo_de_la_ficha(self):
         self.assertEqual(self.r.get("/api/agentes/trabajos-impresos/?desde=2026-01-01T00:00:00").json()["trabajos"], [])
 
