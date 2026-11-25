@@ -267,6 +267,19 @@ class PresupuestoDetalleAgentes(_VistaAgentes):
             "items": [{"producto_id": i.producto_id, "producto": i.producto.name, "cantidad": i.quantity,
                        "precio": _dinero(i.unit_price if i.unit_price is not None else i.producto.sale_price)}
                       for i in p.items.all()],
+            # Lo que este presupuesto movió en el stock (al aprobarlo se descuenta; al cancelarlo se devuelve), y
+            # cuánto hay hoy de cada material: para responder «¿cómo quedó el filamento después del 16?».
+            "movimientos": [
+                {"fecha": m.created_at.isoformat(), "motivo": m.get_reason_display(),
+                 "material": str(m.filament or m.aggregate), "tipo": "filamento" if m.filament_id else "insumo",
+                 "cantidad": str(m.quantity), "unidad": "g" if m.filament_id else "u",
+                 "stock_hoy": str(m.filament.stock_grams if m.filament_id else m.aggregate.stock_quantity)}
+                for m in p.stock_movements.select_related("filament", "aggregate").order_by("created_at")
+            ],
+            "trabajos": [{"id": j.id, "estado": j.get_status_display(), "maquina": str(j.machine or ""),
+                          "cantidad": j.quantity, "fin_estimado": j.estimated_print_end.isoformat()
+                          if j.estimated_print_end else None}
+                         for j in p.jobs.select_related("machine").all()],
         })
 
 
