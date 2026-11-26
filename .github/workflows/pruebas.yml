@@ -1,0 +1,22 @@
+# Pruebas automáticas en cada push y en cada PR (decisión del 26/11/2026): así no hace falta correrlas a mano y,
+# con «Wait for CI» en Railway, un deploy a producción espera a que estén en verde.
+name: Pruebas
+on:
+  push:
+  pull_request:
+jobs:
+  pruebas:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Pruebas (SQLite descartable, sin credenciales reales)
+        env:
+          DATABASE_URL: ""
+          SECRET_KEY: ci-solo-pruebas
+        run: python manage.py test
