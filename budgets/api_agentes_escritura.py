@@ -214,8 +214,10 @@ def _cuenta_caja(medio_nombre):
 
 
 class CrearCompraEscritura(_VistaEscritura):
-    """POST escritura/compras/ {clave, aprobo, proveedor, factura, notas, medio_pago,
-    lineas: [{filamento_id | insumo_id, cantidad (g para filamento), precio_total}]} → Compra confirmada."""
+    """POST escritura/compras/ {clave, aprobo, proveedor, factura, notas, medio_pago, fecha (YYYY-MM-DD),
+    lineas: [{filamento_id | insumo_id | nuevo_insumo | nuevo_filamento, cantidad (g para filamento), precio_total}]}
+    → Compra confirmada. nuevo_insumo {nombre, unidad (UNIT/PAIR/METER/GRAM), categoria, min_stock, notas} y
+    nuevo_filamento {marca, material, color, min_stock} dan de alta el artículo en el mismo paso (27/11/2026)."""
 
     def post(self, request):
         from inventory.models import Aggregate, Compra, CompraLine, Filament
@@ -227,14 +229,41 @@ class CrearCompraEscritura(_VistaEscritura):
         lineas = d.get("lineas") or []
         if not lineas:
             return Response({"error": "Faltan 'lineas'."}, status=400)
+        from datetime import date, datetime, time
+
+        from inventory.models import AggregateCategory
+
+        try:
+            fecha = date.fromisoformat(str(d["fecha"])) if d.get("fecha") else None
+        except ValueError:
+            return Response({"error": "Fecha inválida (YYYY-MM-DD)."}, status=400)
         armadas = []
         for li in lineas:
             cantidad = _decimal(li.get("cantidad"))
             precio = _decimal(li["precio_total"]) if li.get("precio_total") not in (None, "") else None
             fil_id, ins_id = li.get("filamento_id"), li.get("insumo_id")
-            if not cantidad or cantidad <= 0 or (precio is not None and precio < 0) or bool(fil_id) == bool(ins_id):
-                return Response({"error": "Línea inválida: [{filamento_id o insumo_id, cantidad, precio_total}]"},
-                                status=400)
+            nuevo_i, nuevo_f = li.get("nuevo_insumo"), li.get("nuevo_filamento")
+            if (not cantidad or cantidad <= 0 or (precio is not None and precio < 0)
+                    or sum(bool(x) for x in (fil_id, ins_id, nuevo_i, nuevo_f)) != 1):
+                return Response({"error": "Línea inválida: [{filamento_id | insumo_id | nuevo_insumo | nuevo_filamento, "
+                                          "cantidad, precio_total}]"}, status=400)
+            if nuevo_i:
+                nombre = str(nuevo_i.get("nombre") or "").strip()[:150]
+                unidad = str(nuevo_i.get("unidad") or "UNIT").upper()
+                if not nombre or unidad not in Aggregate.Unit.values:
+                    return Response({"error": f"Insumo nuevo inválido (nombre y unidad: {', '.join(Aggregate.Unit.values)})."},
+                                    status=400)
+                if Aggregate.objects.filter(name__iexact=nombre, is_active=True).exists():
+                    return Response({"error": f"Ya existe el insumo «{nombre}»: usá su id."}, status=409)
+                armadas.append((("insumo", nuevo_i, nombre, unidad), False, cantidad, precio))
+                continue
+            if nuevo_f:
+                mat = str(nuevo_f.get("material") or "").upper()
+                if mat not in Filament.MaterialType.values or not nuevo_f.get("marca") or not nuevo_f.get("color"):
+                    return Response({"error": f"Filamento nuevo inválido (marca, color y material: "
+                                              f"{', '.join(Filament.MaterialType.values)})."}, status=400)
+                armadas.append((("filamento", nuevo_f, mat, None), True, cantidad, precio))
+                continue
             item = (Filament.objects.filter(pk=fil_id, is_active=True).first() if fil_id
                     else Aggregate.objects.filter(pk=ins_id, is_active=True).first())
             if not item:
@@ -242,6 +271,24 @@ class CrearCompraEscritura(_VistaEscritura):
                                 status=400)
             armadas.append((item, bool(fil_id), cantidad, precio))
         with transaction.atomic():
+            altas = []
+            for i, (item, es_fil, cantidad, precio) in enumerate(armadas):
+                if not isinstance(item, tuple):
+                    continue
+                tipo, datos_n, a, b = item
+                unitario = (precio / (cantidad / 1000 if es_fil else cantidad)).quantize(Decimal("0.01")) if precio else Decimal("0")
+                minimo = _decimal(datos_n.get("min_stock")) or Decimal("0")
+                if tipo == "insumo":
+                    cat = AggregateCategory.objects.filter(nombre__iexact=str(datos_n.get("categoria") or "").strip()).first()
+                    nuevo = Aggregate.objects.create(name=a, unit=b, cost_per_unit=unitario, min_stock=minimo,
+                                                     notes=str(datos_n.get("notas") or "Alta por Roque")[:500],
+                                                     **({"category": cat} if cat else {}))
+                else:
+                    nuevo = Filament.objects.create(brand=str(datos_n["marca"])[:100], material_type=a,
+                                                    color=str(datos_n["color"])[:100], cost_per_kg=unitario,
+                                                    min_stock=minimo if minimo else Decimal("1000"))
+                armadas[i] = (nuevo, es_fil, cantidad, precio)
+                altas.append({"tipo": tipo, "id": nuevo.pk, "nombre": str(nuevo)})
             compra = Compra.objects.create(
                 supplier=str(d.get("proveedor") or "")[:150], invoice_number=str(d.get("factura") or "")[:100],
                 notes=(str(d.get("notas") or "") + f"\n\nCargada por Roque · aprobó {aprobo}").strip())
@@ -251,6 +298,8 @@ class CrearCompraEscritura(_VistaEscritura):
                               item.cost_per_kg if es_fil else item.cost_per_unit))
                 CompraLine.objects.create(compra=compra, filament=item if es_fil else None,
                                           aggregate=None if es_fil else item, quantity=cantidad, unit_price=precio)
+            if fecha:
+                compra.confirmed_at = timezone.make_aware(datetime.combine(fecha, time(12)))
             compra.confirm()
             detalle = []
             for item, es_fil, stock_antes, precio_antes in antes:
@@ -268,11 +317,11 @@ class CrearCompraEscritura(_VistaEscritura):
 
                 MovimientoCaja.crear_borrador_automatico(
                     cuenta=cuenta, tipo=MovimientoCaja.Tipo.EGRESO, monto=compra.total,
-                    fecha=timezone.localdate(), concepto=f"Compra #{compra.pk} — {compra.supplier or 'sin proveedor'}",
+                    fecha=fecha or timezone.localdate(), concepto=f"Compra #{compra.pk} — {compra.supplier or 'sin proveedor'}",
                     compra=compra)
                 caja = cuenta.nombre
             resultado = {"compra_id": compra.pk, "estado": compra.get_status_display(), "total": _dinero(compra.total),
-                         "lineas": detalle, "caja_borrador": caja}
+                         "lineas": detalle, "caja_borrador": caja, "altas": altas}
             self._registrar("compra", clave, aprobo, None, d, resultado)
         return Response(resultado, status=201)
 
@@ -300,7 +349,12 @@ class CrearGastoEscritura(_VistaEscritura):
                              "categorias": list(CategoriaGasto.objects.values_list("nombre", flat=True))}, status=400)
         medio = None
         if d.get("medio_pago"):
-            medio = MedioPagoGasto.objects.filter(nombre__iexact=str(d["medio_pago"]).strip()).first()
+            from gastos.models import _NOMBRE_A_CODIGO_MEDIO_PAGO, _normalizar
+
+            nombre_medio = str(d["medio_pago"]).strip()
+            medio = next((m for m in MedioPagoGasto.objects.all() if _normalizar(m.nombre) == _normalizar(nombre_medio)), None)
+            if not medio and _normalizar(nombre_medio) in _NOMBRE_A_CODIGO_MEDIO_PAGO:
+                medio = MedioPagoGasto.objects.create(nombre=nombre_medio[:50])
         try:
             fecha = date.fromisoformat(str(d["fecha"])) if d.get("fecha") else timezone.localdate()
         except ValueError:

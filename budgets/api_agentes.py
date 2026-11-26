@@ -23,7 +23,7 @@ from rest_framework.views import APIView
 
 from caja.models import CuentaCaja, MovimientoCaja
 from gastos.models import CategoriaGasto, Gasto, MedioPagoGasto, TopeGasto
-from inventory.models import Aggregate, Filament
+from inventory.models import Aggregate, AggregateCategory, Filament
 from production.models import Maquina, ProductionJob
 
 from .api_views import ReporteEjecutivoMensualView
@@ -88,6 +88,7 @@ class StockAgentes(_VistaAgentes):
         return Response({
             "filamentos": filamentos, "insumos": insumos,
             "bajo_stock": [x for x in filamentos + insumos if x["bajo"]],
+            "categorias_insumo": list(AggregateCategory.objects.values_list("nombre", flat=True)),
         })
 
 

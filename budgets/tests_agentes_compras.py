@@ -64,6 +64,46 @@ class ComprasGastosAgentesTests(TestCase):
         self.negro.refresh_from_db()
         self.assertEqual(self.negro.stock_grams, Decimal("500"))
 
+    def test_compra_con_insumo_nuevo_lo_da_de_alta_con_fecha_y_caja(self):
+        """Caso real 27/11: «Pegamento Unipox 100 ml x2 a 16872, Mercado Libre, pagué con Mercado Pago el 17/10»."""
+        CuentaCaja.objects.update_or_create(nombre="Mercado Pago", defaults={"medio_pago_default": "MERCADOPAGO",
+                                                                            "fecha_saldo_inicial": date(2026, 1, 1)})
+        r = self.c.post("/api/agentes/escritura/compras/", {
+            "clave": "unipox", "aprobo": "Lucas", "proveedor": "Mercado Libre", "medio_pago": "Mercado Pago",
+            "fecha": "2026-10-17", "lineas": [{"nuevo_insumo": {"nombre": "Pegamento Unipox 100 ml", "unidad": "UNIT"},
+                                              "cantidad": "2", "precio_total": "16872"}]}, format="json")
+        self.assertEqual(r.status_code, 201, r.content)
+        unipox = Aggregate.objects.get(name="Pegamento Unipox 100 ml")
+        self.assertEqual((unipox.stock_quantity, unipox.cost_per_unit), (Decimal("2"), Decimal("8436")))
+        self.assertEqual(r.json()["altas"][0]["id"], unipox.id)
+        compra = Compra.objects.get()
+        self.assertEqual(compra.confirmed_at.date().isoformat(), "2026-10-17")
+        mov = MovimientoCaja.objects.get()
+        self.assertEqual((mov.cuenta.nombre, mov.monto, mov.fecha.isoformat()), ("Mercado Pago", Decimal("16872"), "2026-10-17"))
+
+    def test_insumo_nuevo_repetido_o_unidad_invalida_no_crea_nada(self):
+        r = self.c.post("/api/agentes/escritura/compras/", {"clave": "x", "aprobo": "Lucas", "lineas": [
+            {"nuevo_insumo": {"nombre": "bolsa", "unidad": "UNIT"}, "cantidad": "1", "precio_total": "10"}]}, format="json")
+        self.assertEqual(r.status_code, 409)
+        r = self.c.post("/api/agentes/escritura/compras/", {"clave": "y", "aprobo": "Lucas", "lineas": [
+            {"nuevo_insumo": {"nombre": "Unipox", "unidad": "MM"}, "cantidad": "1", "precio_total": "10"}]}, format="json")
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(Aggregate.objects.count(), 1)
+
+    def test_compra_filamento_nuevo(self):
+        r = self.c.post("/api/agentes/escritura/compras/", {"clave": "f", "aprobo": "Maxi", "lineas": [
+            {"nuevo_filamento": {"marca": "Tp3d", "material": "PETG", "color": "Rojo"}, "cantidad": "1000",
+             "precio_total": "20000"}]}, format="json")
+        self.assertEqual(r.status_code, 201, r.content)
+        f = Filament.objects.get(brand="Tp3d")
+        self.assertEqual((f.stock_grams, f.cost_per_kg, f.material_type), (Decimal("1000"), Decimal("20000"), "PETG"))
+
+    def test_gasto_con_mercado_pago_crea_el_medio(self):
+        r = self.c.post("/api/agentes/escritura/gastos/", {"clave": "g9", "aprobo": "Lucas", "concepto": "Envío",
+                        "monto": "3000", "categoria": "Administración", "medio_pago": "Mercado Pago"}, format="json")
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual(r.json()["medio_pago"], "Mercado Pago")
+
     def test_gasto_queda_en_gastos_y_no_toca_stock(self):
         r = self.c.post("/api/agentes/escritura/gastos/", {
             "clave": "g1", "aprobo": "Lucas", "concepto": "Contador", "monto": "45000", "categoria": "administración",
