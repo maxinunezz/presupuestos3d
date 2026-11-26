@@ -11,7 +11,7 @@ from inventory.models import Filament
 from .models import Presupuesto
 
 TOKEN = "token-de-prueba-agentes"
-URLS = ["stock", "produccion", "presupuestos", "caja", "gastos", "reporte-mensual"]
+URLS = ["stock", "produccion", "presupuestos", "caja", "gastos", "reporte-mensual", "compras"]
 
 
 @override_settings(AGENTES_API_TOKEN=TOKEN)
@@ -79,3 +79,33 @@ class SaludTests(TestCase):
         r = self.client.get("/salud/", HTTP_HOST="healthcheck.railway.app")
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.json(), {"ok": True})
+
+
+@override_settings(AGENTES_API_TOKEN=TOKEN)
+class ComprasAgentesTests(TestCase):
+    """GET /api/agentes/compras/: compras confirmadas con proveedor y precio unitario (para Proveedores en Notion)."""
+
+    def test_compras_con_proveedor_y_precio_unitario(self):
+        from datetime import datetime
+        from decimal import Decimal
+
+        from django.utils import timezone
+
+        from inventory.models import Aggregate, Compra, CompraLine, Filament
+
+        fil = Filament.objects.create(brand="Grilon3", material_type="PLA", color="Negro", cost_per_kg=Decimal("20000"))
+        arg = Aggregate.objects.create(name="Argolla", cost_per_unit=Decimal("50"))
+        c = Compra.objects.create(supplier="Grilon3", status=Compra.Status.CONFIRMED,
+                                  confirmed_at=timezone.make_aware(datetime(2026, 11, 14, 12)))
+        CompraLine.objects.create(compra=c, filament=fil, quantity=Decimal("2000"), unit_price=Decimal("50000"))
+        CompraLine.objects.create(compra=c, aggregate=arg, quantity=Decimal("100"), unit_price=Decimal("7800"))
+        Compra.objects.create(supplier="Borrador SA")   # sin confirmar: no aparece
+        r = self.client.get("/api/agentes/compras/?desde=2026-11-01&hasta=2026-11-30", HTTP_X_AGENTES_TOKEN=TOKEN)
+        self.assertEqual(r.status_code, 200)
+        compras = r.json()["compras"]
+        self.assertEqual([x["proveedor"] for x in compras], ["Grilon3"])
+        lineas = {l["tipo"]: l for l in compras[0]["lineas"]}
+        self.assertEqual(lineas["filamento"]["precio_unitario"], "25000.00")
+        self.assertEqual(lineas["filamento"]["precio_por"], "kg")
+        self.assertEqual(lineas["insumo"]["precio_unitario"], "78.00")
+        self.assertEqual(self.client.get("/api/agentes/compras/", HTTP_X_AGENTES_TOKEN="otro").status_code, 403)
