@@ -1914,6 +1914,35 @@ class PresupuestoAdmin(admin.ModelAdmin):
     )
     actions = ("approve_presupuestos", "marcar_entregado", "cancelar_presupuestos")
 
+    # ---- Borrar: solo lo que no dejó huella (ver Presupuesto.motivo_no_borrar). Una venta aprobada se CANCELA.
+    def has_delete_permission(self, request, obj=None):
+        if obj is not None and obj.motivo_no_borrar():
+            return False   # sin botón «Eliminar» en el detalle
+        return super().has_delete_permission(request, obj)
+
+    def _borrar_borradores_de_caja(self, presupuestos):
+        from caja.models import MovimientoCaja
+
+        MovimientoCaja.objects.filter(presupuesto__in=presupuestos, estado=MovimientoCaja.Estado.BORRADOR).delete()
+
+    def delete_model(self, request, obj):
+        motivo = obj.motivo_no_borrar()
+        if motivo:
+            self.message_user(request, gettext("No se borró el presupuesto #%(pk)s: %(motivo)s.") % {"pk": obj.pk, "motivo": motivo},
+                              level=messages.ERROR)
+            return
+        self._borrar_borradores_de_caja([obj])
+        super().delete_model(request, obj)
+
+    def delete_queryset(self, request, queryset):
+        protegidos = [p for p in queryset if p.motivo_no_borrar()]
+        for p in protegidos:
+            self.message_user(request, gettext("No se borró el presupuesto #%(pk)s (%(cliente)s): %(motivo)s.")
+                              % {"pk": p.pk, "cliente": p.client_name, "motivo": p.motivo_no_borrar()}, level=messages.ERROR)
+        borrables = queryset.exclude(pk__in=[p.pk for p in protegidos])
+        self._borrar_borradores_de_caja(list(borrables))
+        super().delete_queryset(request, borrables)
+
     fieldsets = (
         (None, {"fields": ("client_name", "vendedor", "para_stock", "description", "status")}),
         (_("Precio del pedido"), {"fields": ("fixed_cost", "totals_summary")}),
