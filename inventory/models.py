@@ -180,6 +180,7 @@ class Aggregate(models.Model):
         PAIR = "PAIR", _("Par")
         METER = "METER", _("Metro")
         GRAM = "GRAM", _("Gramo")
+        ML = "ML", _("Mililitro")
 
     name = models.CharField(_("Nombre"), max_length=150)
     category = models.ForeignKey(
@@ -196,7 +197,7 @@ class Aggregate(models.Model):
         decimal_places=2,
         help_text=_(
             "Precio en pesos por la unidad que tenga cargada este agregado "
-            "(el campo Unidad de más arriba: Unidad, Par, Metro o Gramo). Los "
+            "(el campo Unidad de más arriba: Unidad, Par, Metro, Gramo o Mililitro). Los "
             "decimales pueden ir con coma o con punto (12,50 o 12.50)."
         ),
     )
