@@ -196,6 +196,8 @@ class GastosAgentes(_VistaAgentes):
             "categorias": list(CategoriaGasto.objects.values_list("nombre", flat=True)),
             "medios_pago": list(MedioPagoGasto.objects.values_list("nombre", flat=True)),
             "areas": list(AreaResponsable.objects.values_list("nombre", flat=True)),
+            # medios con cuenta de caja (si no hay, el gasto no genera egreso en caja y Roque lo avisa)
+            "cuentas_caja": list(CuentaCaja.objects.filter(is_active=True).values_list("medio_pago_default", flat=True)),
             "gastos": [
                 {"fecha": g.fecha, "concepto": g.concepto, "categoria": str(g.categoria or ""),
                  "area": str(g.area or ""), "monto": _dinero(g.monto), "proveedor": g.proveedor,
