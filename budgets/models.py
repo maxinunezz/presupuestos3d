@@ -1963,6 +1963,26 @@ class Presupuesto(models.Model):
 
         return result
 
+    def motivo_no_borrar(self) -> str:
+        """Por qué este presupuesto NO se puede borrar ("" si se puede).
+
+        Borrar no devuelve el material descontado al aprobar ni anula el cobro en caja (quedan huérfanos): una venta
+        aprobada, en producción, completada, que descontó material sin devolverlo o que tiene un cobro CONFIRMADO en
+        caja se CANCELA (Estado → Cancelado), no se borra. Se pueden borrar borradores, enviados y cancelados sin cobro
+        confirmado (27/11/2026)."""
+        from caja.models import MovimientoCaja
+
+        Status = Presupuesto.Status
+        if self.status in (Status.APPROVED, Status.IN_PRODUCTION, Status.COMPLETED):
+            return gettext("está %(estado)s: primero cancelalo (Estado → Cancelado) para devolver el material y anular "
+                           "el cobro") % {"estado": self.get_status_display().lower()}
+        if self.stock_provisioned and not self.stock_reversed:
+            return gettext("descontó material que todavía no se devolvió: cancelalo primero")
+        if MovimientoCaja.objects.filter(presupuesto=self, estado=MovimientoCaja.Estado.CONFIRMADO).exists():
+            return gettext("tiene un cobro confirmado en caja: queda cancelado como registro (si el cobro fue un error, "
+                           "anulalo primero en el Panel de caja)")
+        return ""
+
     def cancel(self, old_status=None):
         """
         Cancela el pedido y, si estaba APROBADO o EN PRODUCCIÓN y todavía no se
