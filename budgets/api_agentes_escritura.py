@@ -95,11 +95,30 @@ class CrearPresupuestoEscritura(_VistaEscritura):
         productos = {p.id: p for p in Producto.objects.filter(pk__in=[x[0] for x in lineas], is_active=True)}
         if len(productos) != len({x[0] for x in lineas}) or any(c <= 0 for _, c, _ in lineas):
             return Response({"error": "Algún producto no existe o la cantidad es inválida."}, status=400)
+        from datetime import date, datetime, time
+
+        extra = {}
+        try:
+            if d.get("fecha_entrega"):
+                dia = date.fromisoformat(str(d["fecha_entrega"]))
+                extra.update(due_date=timezone.make_aware(datetime.combine(dia, time(18))), due_date_is_manual=True)
+        except ValueError:
+            return Response({"error": "fecha_entrega inválida (YYYY-MM-DD)."}, status=400)
+        if d.get("medio_pago"):
+            mp = str(d["medio_pago"]).upper().replace(" ", "").replace("Á", "A")
+            if mp not in Presupuesto.MedioPago.values:
+                return Response({"error": f"medio_pago inválido ({', '.join(Presupuesto.MedioPago.values)})."}, status=400)
+            extra["medio_pago"] = mp
+        if d.get("estado_venta"):
+            ev = str(d["estado_venta"]).upper()
+            if ev not in Presupuesto.EstadoVenta.values:
+                return Response({"error": f"estado_venta inválido ({', '.join(Presupuesto.EstadoVenta.values)})."}, status=400)
+            extra["estado_venta"] = ev
         with transaction.atomic():
             p = Presupuesto.objects.create(
                 client_name=str(d["cliente"])[:150], vendedor=str(d.get("vendedor") or "")[:60],
                 description=(str(d.get("notas") or "") + f"\n\nCargado por Roque · aprobó {aprobo}").strip(),
-                status=Presupuesto.Status.DRAFT,
+                status=Presupuesto.Status.DRAFT, **extra,
             )
             for pid, cantidad, precio in lineas:
                 PresupuestoItem.objects.create(presupuesto=p, producto=productos[pid], quantity=cantidad,
@@ -327,8 +346,9 @@ class CrearCompraEscritura(_VistaEscritura):
 
 
 class CrearGastoEscritura(_VistaEscritura):
-    """POST escritura/gastos/ {clave, aprobo, concepto, monto, fecha, categoria, proveedor, medio_pago, notas,
-    extraordinario} → Gasto. La categoría y el medio de pago tienen que existir (se buscan por nombre)."""
+    """POST escritura/gastos/ {clave, aprobo, concepto, monto, fecha, categoria, area, proveedor, medio_pago, notas,
+    extraordinario, periodicidad (UNICA/MENSUAL/ANUAL), cuota_actual, cuotas_totales} → Gasto. La categoría tiene que
+    existir; el área también (si viene); el medio de pago de caja se crea si falta."""
 
     def post(self, request):
         from datetime import date
@@ -347,10 +367,10 @@ class CrearGastoEscritura(_VistaEscritura):
         if not categoria:
             return Response({"error": "Esa categoría de gasto no existe.",
                              "categorias": list(CategoriaGasto.objects.values_list("nombre", flat=True))}, status=400)
+        from gastos.models import _NOMBRE_A_CODIGO_MEDIO_PAGO, _normalizar
+
         medio = None
         if d.get("medio_pago"):
-            from gastos.models import _NOMBRE_A_CODIGO_MEDIO_PAGO, _normalizar
-
             nombre_medio = str(d["medio_pago"]).strip()
             medio = next((m for m in MedioPagoGasto.objects.all() if _normalizar(m.nombre) == _normalizar(nombre_medio)), None)
             if not medio and _normalizar(nombre_medio) in _NOMBRE_A_CODIGO_MEDIO_PAGO:
@@ -359,10 +379,28 @@ class CrearGastoEscritura(_VistaEscritura):
             fecha = date.fromisoformat(str(d["fecha"])) if d.get("fecha") else timezone.localdate()
         except ValueError:
             return Response({"error": "Fecha inválida (YYYY-MM-DD)."}, status=400)
+        from gastos.models import AreaResponsable
+
+        area = None
+        if d.get("area"):
+            area = next((a for a in AreaResponsable.objects.all() if _normalizar(a.nombre) == _normalizar(str(d["area"]))), None)
+            if not area:
+                return Response({"error": "Esa área no existe.",
+                                 "areas": list(AreaResponsable.objects.values_list("nombre", flat=True))}, status=400)
+        periodicidad = str(d.get("periodicidad") or "UNICA").upper()
+        if periodicidad not in Gasto.Periodicidad.values:
+            return Response({"error": f"Periodicidad inválida ({', '.join(Gasto.Periodicidad.values)})."}, status=400)
+        try:
+            cuota, cuotas = int(d.get("cuota_actual") or 0) or None, int(d.get("cuotas_totales") or 0) or None
+        except (TypeError, ValueError):
+            return Response({"error": "Cuotas inválidas."}, status=400)
+        if bool(cuota) != bool(cuotas) or (cuotas and cuota > cuotas):
+            return Response({"error": "Las cuotas van juntas: cuota_actual y cuotas_totales (ej. 1 de 6)."}, status=400)
         with transaction.atomic():
             g = Gasto.objects.create(
                 categoria=categoria, concepto=concepto[:150], monto=monto.quantize(Decimal("0.01")), fecha=fecha,
-                proveedor=str(d.get("proveedor") or "")[:150], medio_pago=medio,
+                proveedor=str(d.get("proveedor") or "")[:150], medio_pago=medio, area=area,
+                es_recurrente=periodicidad != "UNICA", periodicidad=periodicidad, cuota_actual=cuota, cuotas_totales=cuotas,
                 tipo=Gasto.Tipo.EXTRAORDINARIO if d.get("extraordinario") else Gasto.Tipo.OPERATIVO,
                 notas=(str(d.get("notas") or "") + f"\n\nCargado por Roque · aprobó {aprobo}").strip())
             caja = g.movimientos_caja.filter(origen_automatico=True).first() if hasattr(g, "movimientos_caja") else None
@@ -440,3 +478,75 @@ class CorregirCosteoEscritura(_VistaEscritura):
             return Response({"error": "Datos inválidos: piezas por impresión ≥ 1, minutos y gramos > 0, líneas de "
                                       "esa pieza."}, status=400)
         return Response(resultado)
+
+
+class CrearProductoEscritura(_VistaEscritura):
+    """POST escritura/productos/ {clave, aprobo, nombre, precio_venta, post_minutos, mano_obra_hora, descripcion,
+    piezas: [{nombre, piezas_por_impresion, minutos, unidades, ams, filamentos: [{filamento_id, gramos}]}],
+    agregados: [{insumo_id, cantidad}], verificado_por} → Producto con su ficha de costeo (27/11/2026).
+
+    minutos y gramos son POR IMPRESIÓN (como el gcode). Si viene verificado_por (alguien de Producción cargó los
+    datos y los confirmó en dos pasos), el costeo queda verificado. El diseño queda NO listo (lo marca Diseño)."""
+
+    def post(self, request):
+        from inventory.models import Aggregate, Filament
+
+        from .models import Pieza, PiezaFilamentLine, ProductoAggregateLine, ProductoPieza
+
+        clave, aprobo, resp = self._base(request)
+        if resp:
+            return resp
+        d = request.data
+        nombre = str(d.get("nombre") or "").strip()[:200]
+        piezas = d.get("piezas") or []
+        if not nombre or not piezas:
+            return Response({"error": "Faltan 'nombre' y 'piezas'."}, status=400)
+        if Producto.objects.filter(name__iexact=nombre, is_active=True).exists():
+            return Response({"error": f"Ya existe el producto «{nombre}»."}, status=409)
+        armadas = []
+        for pz in piezas:
+            minutos, por_imp = _decimal(pz.get("minutos")), _decimal(pz.get("piezas_por_impresion") or 1)
+            fils = pz.get("filamentos") or []
+            if not minutos or minutos <= 0 or not por_imp or por_imp < 1 or not fils:
+                return Response({"error": "Cada pieza necesita minutos (>0), piezas_por_impresion (≥1) y filamentos."},
+                                status=400)
+            lineas = []
+            for f in fils:
+                fil = Filament.objects.filter(pk=f.get("filamento_id"), is_active=True).first()
+                gramos = _decimal(f.get("gramos"))
+                if not fil or not gramos or gramos <= 0:
+                    return Response({"error": "Filamento inexistente o gramos inválidos."}, status=400)
+                lineas.append((fil, gramos))
+            armadas.append((pz, minutos, int(por_imp), lineas))
+        agregados = []
+        for a in d.get("agregados") or []:
+            ag, cant = Aggregate.objects.filter(pk=a.get("insumo_id"), is_active=True).first(), _decimal(a.get("cantidad"))
+            if not ag or not cant or cant <= 0:
+                return Response({"error": "Insumo inexistente o cantidad inválida."}, status=400)
+            agregados.append((ag, cant))
+        extra = {}
+        for campo, clave_d in (("sale_price", "precio_venta"), ("post_processing_minutes", "post_minutos"),
+                               ("labor_cost_per_hour", "mano_obra_hora")):
+            if d.get(clave_d) not in (None, ""):
+                v = _decimal(d[clave_d])
+                if v is None or v < 0:
+                    return Response({"error": f"'{clave_d}' inválido."}, status=400)
+                extra[campo] = v
+        with transaction.atomic():
+            prod = Producto.objects.create(name=nombre, description=str(d.get("descripcion") or "")[:2000], **extra)
+            for orden, (pz, minutos, por_imp, lineas) in enumerate(armadas):
+                pieza = Pieza.objects.create(name=str(pz.get("nombre") or nombre)[:150], pieces_per_gcode=por_imp,
+                                             print_time_minutes=minutos, requires_ams=bool(pz.get("ams")))
+                for fil, gramos in lineas:
+                    PiezaFilamentLine.objects.create(pieza=pieza, filament=fil, grams_used=gramos)
+                ProductoPieza.objects.create(producto=prod, pieza=pieza, units_needed=int(pz.get("unidades") or 1),
+                                             order=orden)
+            for ag, cant in agregados:
+                ProductoAggregateLine.objects.create(producto=prod, aggregate=ag, quantity=cant)
+            prod.refresh_from_db()
+            if d.get("verificado_por"):
+                prod.verificar_costeo(str(d["verificado_por"]))
+            resultado = {"producto_id": prod.pk, "nombre": prod.name, "precio_venta": _dinero(prod.sale_price),
+                         "verificado": bool(d.get("verificado_por"))}
+            self._registrar("producto", clave, aprobo, None, d, resultado)
+        return Response(resultado, status=201)
