@@ -8,6 +8,7 @@ from budgets.api_views import (
 )
 from budgets.api_agentes import (
     CajaAgentes,
+    ComprasAgentes,
     GastosAgentes,
     PresupuestosAgentes,
     ProduccionAgentes,
@@ -64,6 +65,7 @@ urlpatterns = router.urls + [
     path("agentes/presupuestos/", PresupuestosAgentes.as_view(), name="agentes-presupuestos"),
     path("agentes/caja/", CajaAgentes.as_view(), name="agentes-caja"),
     path("agentes/gastos/", GastosAgentes.as_view(), name="agentes-gastos"),
+    path("agentes/compras/", ComprasAgentes.as_view(), name="agentes-compras"),
     path("agentes/reporte-mensual/", ReporteMensualAgentes.as_view(), name="agentes-reporte-mensual"),
     path("agentes/productos/", ProductosAgentes.as_view(), name="agentes-productos"),
     path("agentes/productos/<int:pk>/", ProductoAgentes.as_view(), name="agentes-producto"),

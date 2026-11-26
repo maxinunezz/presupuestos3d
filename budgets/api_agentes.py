@@ -23,7 +23,7 @@ from rest_framework.views import APIView
 
 from caja.models import CuentaCaja, MovimientoCaja
 from gastos.models import AreaResponsable, CategoriaGasto, Gasto, MedioPagoGasto, TopeGasto
-from inventory.models import Aggregate, AggregateCategory, Filament
+from inventory.models import Aggregate, AggregateCategory, Compra, Filament
 from production.models import Maquina, ProductionJob
 
 from .api_views import ReporteEjecutivoMensualView
@@ -205,6 +205,34 @@ class GastosAgentes(_VistaAgentes):
                 for g in gastos[:300]
             ],
         })
+
+
+class ComprasAgentes(_VistaAgentes):
+    """GET /api/agentes/compras/?desde&hasta — compras confirmadas del período con proveedor, material y precio
+    unitario (lo usa Roque para el directorio de Proveedores de Notion; presupuestos3d es la fuente de verdad)."""
+
+    def get(self, request):
+        desde, hasta = _rango(request, dias_default=180)
+        compras = (Compra.objects.filter(status=Compra.Status.CONFIRMED, confirmed_at__date__gte=desde,
+                                         confirmed_at__date__lte=hasta)
+                   .prefetch_related("lines__filament", "lines__aggregate__category").order_by("-confirmed_at"))
+        datos = []
+        for c in compras[:300]:
+            lineas = []
+            for l in c.lines.all():
+                art = l.filament or l.aggregate
+                lineas.append({
+                    "tipo": "filamento" if l.filament_id else "insumo", "material": str(art),
+                    "categoria": "Filamentos" if l.filament_id else str(getattr(l.aggregate, "category", "") or "Insumos"),
+                    "cantidad": str(l.quantity), "unidad": "g" if l.filament_id else l.aggregate.get_unit_display(),
+                    "total": _dinero(l.unit_price) if l.unit_price is not None else None,
+                    # costo unitario: por kg para filamento, por unidad para insumos
+                    "precio_unitario": _dinero(l.effective_unit_price),
+                    "precio_por": "kg" if l.filament_id else l.aggregate.get_unit_display(),
+                })
+            datos.append({"id": c.id, "fecha": timezone.localtime(c.confirmed_at).date() if c.confirmed_at else None,
+                          "proveedor": c.supplier, "total": _dinero(c.total), "lineas": lineas})
+        return Response({"desde": desde, "hasta": hasta, "compras": datos})
 
 
 class ReporteMensualAgentes(_VistaAgentes, ReporteEjecutivoMensualView):
