@@ -22,7 +22,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from caja.models import CuentaCaja, MovimientoCaja
-from gastos.models import CategoriaGasto, Gasto, MedioPagoGasto, TopeGasto
+from gastos.models import AreaResponsable, CategoriaGasto, Gasto, MedioPagoGasto, TopeGasto
 from inventory.models import Aggregate, AggregateCategory, Filament
 from production.models import Maquina, ProductionJob
 
@@ -195,6 +195,7 @@ class GastosAgentes(_VistaAgentes):
             # para que Roque clasifique un gasto nuevo con lo que ya existe
             "categorias": list(CategoriaGasto.objects.values_list("nombre", flat=True)),
             "medios_pago": list(MedioPagoGasto.objects.values_list("nombre", flat=True)),
+            "areas": list(AreaResponsable.objects.values_list("nombre", flat=True)),
             "gastos": [
                 {"fecha": g.fecha, "concepto": g.concepto, "categoria": str(g.categoria or ""),
                  "area": str(g.area or ""), "monto": _dinero(g.monto), "proveedor": g.proveedor,

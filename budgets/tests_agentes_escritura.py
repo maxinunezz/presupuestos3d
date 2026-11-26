@@ -7,7 +7,7 @@ from rest_framework.test import APIClient
 from inventory.models import Filament
 from production.models import Maquina, ProductionJob
 
-from .models import Presupuesto, RegistroAgente
+from .models import Presupuesto, Producto, RegistroAgente
 from .tests import add_pieza, make_producto
 
 LECTURA, ESCRITURA = "token-lectura", "token-escritura"
@@ -32,6 +32,39 @@ class EscrituraAgentesTests(TestCase):
         return self.c.post("/api/agentes/escritura/presupuestos/", {
             "clave": clave, "aprobo": "Lucas", "cliente": "Panadería Sol", "vendedor": "Miguel",
             "items": [{"producto_id": (producto or self.estrella).id, "cantidad": cantidad, "precio": "1500"}]}, format="json")
+
+    def test_crear_con_fecha_de_entrega_y_sena(self):
+        r = self.c.post("/api/agentes/escritura/presupuestos/", {
+            "clave": "v-fecha", "aprobo": "Lucas", "cliente": "Panadería Sol", "vendedor": "Miguel",
+            "fecha_entrega": "2026-12-12", "medio_pago": "Mercado Pago", "estado_venta": "PARCIAL",
+            "items": [{"producto_id": self.estrella.id, "cantidad": 10, "precio": "1500"}]}, format="json")
+        self.assertEqual(r.status_code, 201, r.content)
+        p = Presupuesto.objects.get(client_name="Panadería Sol")
+        p.save()   # una fecha a mano no se recalcula
+        p.refresh_from_db()
+        from django.utils import timezone
+
+        self.assertEqual((timezone.localtime(p.due_date).date().isoformat(), p.due_date_is_manual, p.medio_pago, p.estado_venta),
+                         ("2026-12-12", True, "MERCADOPAGO", "PARCIAL"))
+
+    def test_alta_de_producto_con_ficha_de_costeo(self):
+        """Caso real 27/11: Soporte joystick doble, 58 g de PLA, 120 min, $6.000, sin mano de obra."""
+        cuerpo = {"clave": "prod-1", "aprobo": "Lucas", "nombre": "Soporte joystick doble", "precio_venta": "6000",
+                  "mano_obra_hora": "0", "post_minutos": "5", "verificado_por": "Lucas",
+                  "piezas": [{"nombre": "Soporte joystick", "piezas_por_impresion": 1, "minutos": 120, "unidades": 1,
+                              "filamentos": [{"filamento_id": self.rojo.id, "gramos": 58}]}]}
+        r = self.c.post("/api/agentes/escritura/productos/", cuerpo, format="json")
+        self.assertEqual(r.status_code, 201, r.content)
+        p = Producto.objects.get(name="Soporte joystick doble")
+        self.assertEqual((p.sale_price, p.labor_cost_per_hour, p.costeo_verificado_por), (Decimal("6000"), Decimal("0"), "Lucas"))
+        pz = p.producto_piezas.get().pieza if hasattr(p, "producto_piezas") else None
+        self.assertTrue(r.json()["verificado"])
+        self.assertTrue(self.c.post("/api/agentes/escritura/productos/", cuerpo, format="json").json().get("repetido"))
+        r = self.c.post("/api/agentes/escritura/productos/", {**cuerpo, "clave": "prod-2"}, format="json")
+        self.assertEqual(r.status_code, 409)
+        r = self.c.post("/api/agentes/escritura/productos/", {**cuerpo, "clave": "prod-3", "nombre": "Otro",
+                        "piezas": [{"minutos": 0, "filamentos": []}]}, format="json")
+        self.assertEqual(r.status_code, 400)
 
     def test_tokens_separados_y_solo_post(self):
         self.assertEqual(APIClient().post("/api/agentes/escritura/presupuestos/", {}).status_code, 403)

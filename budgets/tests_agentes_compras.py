@@ -107,6 +107,23 @@ class ComprasGastosAgentesTests(TestCase):
         f = Filament.objects.get(brand="Tp3d")
         self.assertEqual((f.stock_grams, f.cost_per_kg, f.material_type), (Decimal("1000"), Decimal("20000"), "PETG"))
 
+    def test_gasto_recurrente_en_cuotas_con_area(self):
+        from gastos.models import AreaResponsable
+
+        AreaResponsable.objects.get_or_create(nombre="IT")
+        r = self.c.post("/api/agentes/escritura/gastos/", {"clave": "g10", "aprobo": "Maxi", "concepto": "Claude",
+                        "monto": "20", "categoria": "Administración", "area": "it", "periodicidad": "MENSUAL"}, format="json")
+        self.assertEqual(r.status_code, 201, r.content)
+        g = Gasto.objects.get(concepto="Claude")
+        self.assertEqual((g.area.nombre, g.es_recurrente, g.periodicidad), ("IT", True, "MENSUAL"))
+        r = self.c.post("/api/agentes/escritura/gastos/", {"clave": "g11", "aprobo": "Maxi", "concepto": "Impresora",
+                        "monto": "100000", "categoria": "Administración", "cuota_actual": 1, "cuotas_totales": 6}, format="json")
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual(Gasto.objects.get(concepto="Impresora").cuotas_totales, 6)
+        r = self.c.post("/api/agentes/escritura/gastos/", {"clave": "g12", "aprobo": "Maxi", "concepto": "X",
+                        "monto": "1", "categoria": "Administración", "area": "Marte"}, format="json")
+        self.assertEqual(r.status_code, 400)
+
     def test_gasto_con_mercado_pago_crea_el_medio(self):
         r = self.c.post("/api/agentes/escritura/gastos/", {"clave": "g9", "aprobo": "Lucas", "concepto": "Envío",
                         "monto": "3000", "categoria": "Administración", "medio_pago": "Mercado Pago"}, format="json")

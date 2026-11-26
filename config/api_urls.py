@@ -24,6 +24,7 @@ from budgets.api_agentes_ventas import (
     SimularPedidoAgentes,
 )
 from budgets.api_agentes_escritura import (
+    CrearProductoEscritura,
     CorregirCosteoEscritura,
     VerificarCosteoEscritura,
     CrearCompraEscritura,
@@ -81,6 +82,7 @@ urlpatterns = router.urls + [
          name="agentes-escritura-completar"),
     path("agentes/escritura/compras/", CrearCompraEscritura.as_view(), name="agentes-escritura-compra"),
     path("agentes/escritura/gastos/", CrearGastoEscritura.as_view(), name="agentes-escritura-gasto"),
+    path("agentes/escritura/productos/", CrearProductoEscritura.as_view(), name="agentes-escritura-producto"),
     path("agentes/escritura/productos/<int:pk>/verificar-costeo/", VerificarCosteoEscritura.as_view(),
          name="agentes-escritura-verificar-costeo"),
     path("agentes/escritura/piezas/<int:pk>/corregir-costeo/", CorregirCosteoEscritura.as_view(),
