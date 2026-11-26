@@ -7,6 +7,7 @@ from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 from django.core.exceptions import ValidationError
 from django.db.models import DecimalField, F, Q
 from django.template.response import TemplateResponse
+from django.utils import timezone
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext
 from django.utils.translation import gettext_lazy as _
@@ -358,7 +359,7 @@ class CompraAdmin(admin.ModelAdmin):
     list_filter = ("status",)
     search_fields = ("supplier", "invoice_number", "notes")
     inlines = (CompraLineInline,)
-    readonly_fields = ("confirmed_at", "totals_summary")
+    readonly_fields = ("totals_summary",)
     actions = ("confirm_compras",)
 
     fieldsets = (
@@ -468,14 +469,18 @@ class StockMovementAdmin(admin.ModelAdmin):
         "note",
     )
     list_filter = ("reason",)
-    readonly_fields = ("created_at",)
     formfield_overrides = DECIMAL_LOCALIZE
 
     def has_add_permission(self, request):
         return False
 
     def has_change_permission(self, request, obj=None):
-        return False
+        # Solo se puede corregir la FECHA (no toca el stock real); el resto
+        # del movimiento queda de solo lectura.
+        return True
+
+    def get_readonly_fields(self, request, obj=None):
+        return [f.name for f in self.model._meta.fields if f.name != "created_at"]
 
     def has_delete_permission(self, request, obj=None):
         return False
@@ -502,9 +507,18 @@ class StockMovementAdmin(admin.ModelAdmin):
 
 
 class AjusteStockForm(forms.ModelForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if "created_at" in self.fields:
+            # Opcional: vacío = ahora. Sirve para cargar un ajuste con fecha pasada.
+            self.fields["created_at"].required = False
+            self.fields["created_at"].help_text = _(
+                "Fecha del ajuste. Si la dejás vacía se usa el momento actual."
+            )
+
     class Meta:
         model = AjusteStock
-        fields = ("filament", "aggregate", "quantity", "note")
+        fields = ("filament", "aggregate", "quantity", "note", "created_at")
         help_texts = {
             "filament": _("Elegí el filamento a ajustar (o un agregado, no ambos)."),
             "aggregate": _("Elegí el agregado a ajustar (o un filamento, no ambos)."),
@@ -537,6 +551,8 @@ class AjusteStockForm(forms.ModelForm):
             )
         if not cleaned.get("quantity"):
             raise ValidationError(gettext("Ingresá una cantidad distinta de cero."))
+        if "created_at" in self.fields and not cleaned.get("created_at"):
+            cleaned["created_at"] = timezone.now()
         return cleaned
 
 
@@ -574,9 +590,15 @@ class AjusteStockAdmin(admin.ModelAdmin):
         )
 
     def has_change_permission(self, request, obj=None):
-        # Solo alta + consulta en lista: un ajuste no se re-edita (evita
-        # re-aplicar la diferencia y descuadrar el stock).
-        return False
+        # Un ajuste ya hecho solo permite corregir su FECHA: cantidad y
+        # artículo quedan de solo lectura (re-aplicar la diferencia
+        # descuadraría el stock). Ver get_readonly_fields / save_model.
+        return True
+
+    def get_readonly_fields(self, request, obj=None):
+        if obj is None:
+            return ()
+        return [f.name for f in self.model._meta.fields if f.name != "created_at"]
 
     def has_delete_permission(self, request, obj=None):
         return False
@@ -584,6 +606,10 @@ class AjusteStockAdmin(admin.ModelAdmin):
     def save_model(self, request, obj, form, change):
         # Motivo fijo y aplicación de la diferencia al stock del artículo,
         # cappeada en 0 (el stock nunca queda negativo).
+        if change:
+            # Edición de un ajuste existente: solo cambia la fecha.
+            super().save_model(request, obj, form, change)
+            return
         obj.reason = StockMovement.Reason.MANUAL_ADJUSTMENT
         delta = obj.quantity
         if obj.filament_id:

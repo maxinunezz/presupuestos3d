@@ -233,8 +233,18 @@ class Gasto(models.Model):
         return f"{self.categoria} · {self.concepto} (${self.monto})"
 
     def save(self, *args, **kwargs):
+        old_fecha = (
+            Gasto.objects.filter(pk=self.pk).values_list("fecha", flat=True).first()
+            if self.pk
+            else None
+        )
         super().save(*args, **kwargs)
         self._autogenerar_movimiento_caja()
+        if old_fecha and old_fecha != self.fecha:
+            # Fecha editada → el borrador automático de caja la acompaña.
+            from caja.models import MovimientoCaja
+
+            MovimientoCaja.sincronizar_fecha_borradores(self.fecha, gasto=self)
 
     def _autogenerar_movimiento_caja(self):
         """

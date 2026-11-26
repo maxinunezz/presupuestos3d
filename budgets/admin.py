@@ -1908,12 +1908,6 @@ class PresupuestoAdmin(admin.ModelAdmin):
     inlines = (PresupuestoItemInline, ProductionJobInline)
     formfield_overrides = DECIMAL_LOCALIZE
     readonly_fields = (
-        "created_at",
-        "approved_at",
-        "sent_at",
-        "production_started_at",
-        "production_finished_at",
-        "completed_at",
         "totals_summary",
         "production_summary",
         "pdf_link",

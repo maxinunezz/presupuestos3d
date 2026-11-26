@@ -344,8 +344,18 @@ class StockMovement(models.Model):
         on_delete=models.SET_NULL,
         related_name="stock_movements",
     )
+    related_compra = models.ForeignKey(
+        "inventory.Compra",
+        verbose_name=_("Compra relacionada"),
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="stock_movements",
+    )
     note = models.CharField(_("Nota"), max_length=255, blank=True)
-    created_at = models.DateTimeField(_("Fecha"), auto_now_add=True)
+    # Editable (antes auto_now_add): la fecha del movimiento es la fecha de
+    # negocio (cuándo entró/salió el material), y se puede corregir a mano.
+    created_at = models.DateTimeField(_("Fecha"), default=timezone.now)
 
     class Meta:
         verbose_name = _("Movimiento de stock")
@@ -414,7 +424,17 @@ class Compra(models.Model):
     status = models.CharField(
         _("Estado"), max_length=20, choices=Status.choices, default=Status.DRAFT
     )
-    confirmed_at = models.DateTimeField(_("Confirmada el"), null=True, blank=True)
+    confirmed_at = models.DateTimeField(
+        _("Fecha de la compra"),
+        null=True,
+        blank=True,
+        help_text=_(
+            "Cuándo se hizo la compra. Si la dejás vacía, al confirmar se usa "
+            "el momento de la confirmación. Se puede corregir después: los "
+            "movimientos de stock de esta compra (y su borrador de caja, si "
+            "tiene) se mueven a la nueva fecha."
+        ),
+    )
 
     created_at = models.DateTimeField(_("Creada"), auto_now_add=True)
     updated_at = models.DateTimeField(_("Actualizada"), auto_now=True)
@@ -453,12 +473,43 @@ class Compra(models.Model):
             )
 
         with transaction.atomic():
+            # Si ya se cargó una fecha de compra (ej. una compra vieja que se
+            # carga hoy), se respeta; si no, es la fecha de confirmación.
+            if not self.confirmed_at:
+                self.confirmed_at = timezone.now()
             for line in self.lines.select_related("filament", "aggregate").all():
                 line.apply_to_inventory()
 
             self.status = Compra.Status.CONFIRMED
-            self.confirmed_at = timezone.now()
             self.save(update_fields=["status", "confirmed_at", "updated_at"])
+
+    def save(self, *args, **kwargs):
+        old_date = None
+        if self.pk:
+            old_date = (
+                Compra.objects.filter(pk=self.pk)
+                .values_list("confirmed_at", flat=True)
+                .first()
+            )
+        super().save(*args, **kwargs)
+        if (
+            self.status == Compra.Status.CONFIRMED
+            and self.confirmed_at
+            and old_date
+            and old_date != self.confirmed_at
+        ):
+            self.propagar_fecha()
+
+    def propagar_fecha(self):
+        """
+        Lleva la fecha de la compra a lo que depende de ella: sus movimientos
+        de stock (motivo Compra) y su borrador automático de caja. Las
+        métricas de compras ya leen `confirmed_at`, así que se actualizan solas.
+        """
+        from caja.models import MovimientoCaja
+
+        self.stock_movements.update(created_at=self.confirmed_at)
+        MovimientoCaja.sincronizar_fecha_borradores(self.confirmed_at, compra=self)
 
 
 class CompraLine(models.Model):
@@ -608,6 +659,8 @@ class CompraLine(models.Model):
                 filament=fil,
                 quantity=self.quantity,
                 reason=StockMovement.Reason.PURCHASE,
+                related_compra=self.compra,
+                created_at=self.compra.confirmed_at or timezone.now(),
                 note=note,
             )
         else:
@@ -626,5 +679,7 @@ class CompraLine(models.Model):
                 aggregate=agg,
                 quantity=self.quantity,
                 reason=StockMovement.Reason.PURCHASE,
+                related_compra=self.compra,
+                created_at=self.compra.confirmed_at or timezone.now(),
                 note=note,
             )

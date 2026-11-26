@@ -1052,8 +1052,20 @@ class Herramienta(models.Model):
             )
 
     def save(self, *args, **kwargs):
+        old_fecha = (
+            Herramienta.objects.filter(pk=self.pk)
+            .values_list("fecha_compra", flat=True)
+            .first()
+            if self.pk
+            else None
+        )
         super().save(*args, **kwargs)
         self._autogenerar_movimiento_caja()
+        if old_fecha and old_fecha != self.fecha_compra:
+            # Fecha de compra editada → el borrador automático de caja la acompaña.
+            from caja.models import MovimientoCaja
+
+            MovimientoCaja.sincronizar_fecha_borradores(self.fecha_compra, herramienta=self)
 
     def _autogenerar_movimiento_caja(self):
         """
