@@ -104,6 +104,14 @@ class CosteoVerificadoTests(TestCase):
         u = self.r.get(f"/api/agentes/productos/{self.cortante.id}/").json()["ultima_venta"]
         self.assertEqual(u["cliente"], "Sol")  # las canceladas no cuentan
 
+    def test_busqueda_con_error_de_tipeo_trae_parecidos(self):
+        make_producto(name="Llavero Idrop", sale_price=Decimal("500"))
+        d = self.r.get("/api/agentes/productos/?q=cortnte").json()["productos"]
+        self.assertEqual(d[0]["nombre"], "Cortante 8cm")
+        self.assertTrue(d[0]["parecido"])
+        self.assertFalse(d[0]["exacto"])
+        self.assertEqual(self.r.get("/api/agentes/productos/?q=zzzzqqq").json()["productos"], [])
+
     def test_trabajos_impresos_trae_lo_de_la_ficha(self):
         self.assertEqual(self.r.get("/api/agentes/trabajos-impresos/?desde=2026-01-01T00:00:00").json()["trabajos"], [])
 

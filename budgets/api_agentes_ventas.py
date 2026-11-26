@@ -82,7 +82,30 @@ class ProductosAgentes(_VistaAgentes):
         # Primero la coincidencia exacta, después las que contienen todas las palabras, después el resto.
         palabras = [w.lower() for w in q.split()]
         datos.sort(key=lambda d: (not d["exacto"], -sum(w in d["nombre"].lower() for w in palabras), d["nombre"]))
+        if q and not datos:  # nada contiene esas palabras (un error de tipeo, otra forma de decirlo): los más parecidos
+            datos = [{**_resumen(p, q), "parecido": True} for p in _parecidos(q, _productos_qs())]
         return Response({"q": q, "productos": datos[:10]})
+
+
+def _parecidos(q, qs, n=5, minimo=0.45):
+    """Los `n` productos cuyo nombre más se parece a `q` (difflib, sin mayúsculas ni acentos)."""
+    import difflib
+    import unicodedata
+
+    def norm(t):
+        t = unicodedata.normalize("NFKD", (t or "").lower())
+        return "".join(c for c in t if not unicodedata.combining(c))
+
+    nq = norm(q)
+    puntajes = []
+    for p in qs:
+        nombre = norm(p.name)
+        r = max(difflib.SequenceMatcher(None, nq, nombre).ratio(),
+                max((difflib.SequenceMatcher(None, w, x).ratio() for w in nq.split() for x in nombre.split()), default=0) * 0.9)
+        if r >= minimo:
+            puntajes.append((r, p))
+    puntajes.sort(key=lambda x: (-x[0], x[1].name))
+    return [p for _, p in puntajes[:n]]
 
 
 def _costeo(p):
