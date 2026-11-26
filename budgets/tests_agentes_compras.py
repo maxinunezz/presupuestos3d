@@ -90,6 +90,15 @@ class ComprasGastosAgentesTests(TestCase):
         self.assertEqual(r.status_code, 400)
         self.assertEqual(Aggregate.objects.count(), 1)
 
+    def test_insumo_nuevo_en_mililitros(self):
+        """2 pomos de 100 ml a $16.872 → 200 ml en stock a $84,36 el ml (para saber cuánto queda)."""
+        r = self.c.post("/api/agentes/escritura/compras/", {"clave": "ml", "aprobo": "Maxi", "lineas": [
+            {"nuevo_insumo": {"nombre": "Pegamento Unipox", "unidad": "ML", "notas": "Pomo de 100 ml"},
+             "cantidad": "200", "precio_total": "16872"}]}, format="json")
+        self.assertEqual(r.status_code, 201, r.content)
+        a = Aggregate.objects.get(name="Pegamento Unipox")
+        self.assertEqual((a.unit, a.stock_quantity, a.cost_per_unit), ("ML", Decimal("200"), Decimal("84.36")))
+
     def test_compra_filamento_nuevo(self):
         r = self.c.post("/api/agentes/escritura/compras/", {"clave": "f", "aprobo": "Maxi", "lineas": [
             {"nuevo_filamento": {"marca": "Tp3d", "material": "PETG", "color": "Rojo"}, "cantidad": "1000",

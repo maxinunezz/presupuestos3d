@@ -216,7 +216,7 @@ def _cuenta_caja(medio_nombre):
 class CrearCompraEscritura(_VistaEscritura):
     """POST escritura/compras/ {clave, aprobo, proveedor, factura, notas, medio_pago, fecha (YYYY-MM-DD),
     lineas: [{filamento_id | insumo_id | nuevo_insumo | nuevo_filamento, cantidad (g para filamento), precio_total}]}
-    → Compra confirmada. nuevo_insumo {nombre, unidad (UNIT/PAIR/METER/GRAM), categoria, min_stock, notas} y
+    → Compra confirmada. nuevo_insumo {nombre, unidad (UNIT/PAIR/METER/GRAM/ML), categoria, min_stock, notas} y
     nuevo_filamento {marca, material, color, min_stock} dan de alta el artículo en el mismo paso (27/11/2026)."""
 
     def post(self, request):
