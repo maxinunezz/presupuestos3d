@@ -23,6 +23,7 @@ from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 ZERO = Decimal("0")
@@ -266,6 +267,24 @@ class MovimientoCaja(models.Model):
         mov.full_clean()
         mov.save()
         return mov
+
+    @classmethod
+    def sincronizar_fecha_borradores(cls, fecha, **origen_kwargs):
+        """
+        Mueve a `fecha` los movimientos que generó el sistema
+        (`origen_automatico=True`) y que siguen en BORRADOR para el documento
+        de origen dado (`presupuesto=`, `compra=`, `gasto=` o `herramienta=`).
+        Se llama cuando se edita la fecha del documento de origen. Los
+        movimientos ya confirmados (o cargados a mano) NO se tocan: alguien
+        ya los revisó y su fecha es la fecha real de la plata.
+        """
+        if fecha is None:
+            return 0
+        if hasattr(fecha, "date") and callable(fecha.date):
+            fecha = timezone.localtime(fecha).date() if timezone.is_aware(fecha) else fecha.date()
+        return cls.objects.filter(
+            origen_automatico=True, estado=cls.Estado.BORRADOR, **origen_kwargs
+        ).exclude(fecha=fecha).update(fecha=fecha)
 
 
 class PanelCaja(MovimientoCaja):

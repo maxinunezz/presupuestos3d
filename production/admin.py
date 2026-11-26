@@ -311,8 +311,6 @@ class ProductionJobAdmin(admin.ModelAdmin):
     readonly_fields = (
         "estimated_start",
         "estimated_print_end",
-        "started_at",
-        "finished_at",
         "created_at",
     )
     actions = ("marcar_obsoleta", "marcar_imprimiendo", "marcar_impreso")

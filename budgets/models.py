@@ -1365,7 +1365,8 @@ class Presupuesto(models.Model):
         ),
     )
 
-    created_at = models.DateTimeField(_("Creado"), auto_now_add=True)
+    # Editable (antes auto_now_add): se puede corregir la fecha de alta.
+    created_at = models.DateTimeField(_("Creado"), default=timezone.now)
     updated_at = models.DateTimeField(_("Actualizado"), auto_now=True)
 
     class Meta:
@@ -1387,8 +1388,42 @@ class Presupuesto(models.Model):
             update_fields = kwargs.get("update_fields")
             if update_fields is not None:
                 kwargs["update_fields"] = set(update_fields) | {"fecha_cobro"}
+        old = None
+        if self.pk:
+            old = (
+                Presupuesto.objects.filter(pk=self.pk)
+                .values("approved_at", "fecha_cobro")
+                .first()
+            )
         super().save(*args, **kwargs)
         self._autogenerar_movimiento_caja()
+        if old:
+            self._propagar_fechas(old)
+
+    def _propagar_fechas(self, old):
+        """
+        Fechas editadas a mano → lo que depende de ellas:
+          - `approved_at`: los movimientos de stock que se generaron AL
+            APROBAR (descuento de material) pasan a la nueva fecha de
+            aprobación. Se reconocen porque se crearon dentro de los 10
+            minutos de la aprobación anterior; los de impresiones posteriores
+            no se tocan. Ventas/métricas ya leen `approved_at`.
+          - `fecha_cobro`: el borrador automático de caja del cobro pasa a la
+            nueva fecha (si ya se confirmó en caja, no se toca).
+        """
+        import datetime as _dt
+
+        from caja.models import MovimientoCaja
+
+        old_approved = old.get("approved_at")
+        if old_approved and self.approved_at and old_approved != self.approved_at:
+            margen = _dt.timedelta(minutes=10)
+            self.stock_movements.filter(
+                created_at__gte=old_approved - margen,
+                created_at__lte=old_approved + margen,
+            ).update(created_at=self.approved_at)
+        if self.fecha_cobro and old.get("fecha_cobro") != self.fecha_cobro:
+            MovimientoCaja.sincronizar_fecha_borradores(self.fecha_cobro, presupuesto=self)
 
     def _autogenerar_movimiento_caja(self):
         """
