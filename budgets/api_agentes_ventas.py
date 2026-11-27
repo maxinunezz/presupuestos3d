@@ -45,6 +45,7 @@ def _resumen(p, q=""):
         "tiene_precio": _dec(p.sale_price) > 0, "costeo_completo": _completo(p),
         "exacto": bool(q) and (p.name.strip().lower() == q.strip().lower() or (p.sku or "").lower() == q.strip().lower()),
         "costeo_verificado": p.costeo_verificado,
+        "etapa_diseno": p.get_estado_diseno_display(), "rondas_cliente": p.rondas_cliente,
     }
 
 
@@ -303,8 +304,21 @@ class PresupuestoDetalleAgentes(_VistaAgentes):
             "status": p.status, "total": _dinero(p.total), "vencimiento": p.due_date, "para_stock": p.para_stock,
             "trabajos_abiertos": p.jobs.exclude(status__in=["DONE", "CANCELLED"]).count(),
             "listo_para_entregar": p.is_ready_to_deliver,
-            "items": [{"producto_id": i.producto_id, "producto": i.producto.name, "cantidad": i.quantity,
-                       "precio": _dinero(i.unit_price if i.unit_price is not None else i.producto.sale_price)}
+            "entrega": p.due_date.isoformat() if p.due_date else None,
+            "prioridad": p.get_prioridad_display(),
+            "estado_venta": p.get_estado_venta_display(), "cobrado": _dinero(p.total_cobrado),
+            "saldo": _dinero(p.saldo), "sena_faltante": _dinero(p.sena_faltante()),
+            "pagos": [{"tipo": x.get_tipo_display(), "monto": _dinero(x.monto), "fecha": x.fecha.isoformat(),
+                       "medio": x.get_medio_pago_display()} for x in p.pagos.all()],
+            "envio": (f"{p.get_forma_entrega_display()} · ${_dinero(p.costo_envio)}"
+                      + (" (lo paga el cliente)" if p.envio_cobrado_al_cliente else "")
+                      + (f" · {p.direccion_envio}" if p.direccion_envio else "")
+                      + (f" · seguimiento {p.seguimiento_envio}" if p.seguimiento_envio else "")) if p.forma_entrega else "",
+            "entregado_por": p.delivered_by,
+            "items": [{"id": i.id, "producto_id": i.producto_id, "producto": i.producto.name, "cantidad": i.quantity,
+                       "precio": _dinero(i.unit_price if i.unit_price is not None else i.producto.sale_price),
+                       "esperando_diseno": p.stock_provisioned and not i.produccion_generada,
+                       "precio_provisorio": i.precio_provisorio}
                       for i in p.items.all()],
             # Lo que este presupuesto movió en el stock (al aprobarlo se descuenta; al cancelarlo se devuelve), y
             # cuánto hay hoy de cada material: para responder «¿cómo quedó el filamento después del 16?».
@@ -320,6 +334,25 @@ class PresupuestoDetalleAgentes(_VistaAgentes):
                           if j.estimated_print_end else None}
                          for j in p.jobs.select_related("machine").all()],
         })
+
+
+class CatalogoAgentes(_VistaAgentes):
+    """GET catalogo/ — todos los productos activos (id, nombre, sku, etapa de diseño), para que el agente elija."""
+
+    def get(self, request):
+        return Response({"productos": [
+            {"id": p.id, "nombre": p.name, "sku": p.sku or "", "etapa_diseno": p.get_estado_diseno_display()}
+            for p in _productos_qs().order_by("name")]})
+
+
+class ClientesAgentes(_VistaAgentes):
+    """GET clientes/ — clientes con su prioridad en la cola."""
+
+    def get(self, request):
+        from .models import Cliente
+
+        return Response({"clientes": [{"nombre": c.nombre, "prioridad": c.get_prioridad_display()}
+                                      for c in Cliente.objects.all()]})
 
 
 class CosteosPendientesAgentes(_VistaAgentes):

@@ -116,6 +116,8 @@ REST_FRAMEWORK = {
 AGENTES_API_TOKEN = os.environ.get('AGENTES_API_TOKEN', '')
 # Token APARTE para que Roque escriba (crear/aprobar/cancelar presupuestos). Vacío = escritura apagada.
 AGENTES_ESCRITURA_TOKEN = os.environ.get('AGENTES_ESCRITURA_TOKEN', '')
+# Quién puede marcar «Diseño listo» por Roque (27/11/2026: solo Lucas cierra diseño y cotización).
+DISENO_LISTO_APRUEBAN = [x.strip() for x in os.environ.get('DISENO_LISTO_APRUEBAN', 'Lucas').split(',') if x.strip()]
 
 ZAPIER_WEBHOOKS = {
     'stock_bajo': os.environ.get('ZAPIER_WEBHOOK_STOCK_BAJO', ''),

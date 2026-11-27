@@ -16,6 +16,8 @@ from budgets.api_agentes import (
     StockAgentes,
 )
 from budgets.api_agentes_ventas import (
+    CatalogoAgentes,
+    ClientesAgentes,
     CosteosPendientesAgentes,
     TrabajosImpresosAgentes,
     PrecioRapidoAgentes,
@@ -23,6 +25,16 @@ from budgets.api_agentes_ventas import (
     ProductoAgentes,
     ProductosAgentes,
     SimularPedidoAgentes,
+)
+from budgets.api_agentes_circuito import (
+    EditarPresupuestoEscritura,
+    EnvioEscritura,
+    EtapaDisenoEscritura,
+    PagoEscritura,
+    PostImpresionEscritura,
+    PrioridadClienteEscritura,
+    PrototipoEscritura,
+    VencerPresupuestosEscritura,
 )
 from budgets.api_agentes_escritura import (
     CrearProductoEscritura,
@@ -89,6 +101,22 @@ urlpatterns = router.urls + [
          name="agentes-escritura-verificar-costeo"),
     path("agentes/escritura/piezas/<int:pk>/corregir-costeo/", CorregirCosteoEscritura.as_view(),
          name="agentes-escritura-corregir-costeo"),
+    # Circuito venta → diseño → producción → entrega (27/11/2026)
+    path("agentes/catalogo/", CatalogoAgentes.as_view(), name="agentes-catalogo"),
+    path("agentes/clientes/", ClientesAgentes.as_view(), name="agentes-clientes"),
+    path("agentes/escritura/presupuestos/<int:pk>/pago/", PagoEscritura.as_view(), name="agentes-escritura-pago"),
+    path("agentes/escritura/presupuestos/<int:pk>/post-impresion/", PostImpresionEscritura.as_view(),
+         name="agentes-escritura-post-impresion"),
+    path("agentes/escritura/presupuestos/<int:pk>/envio/", EnvioEscritura.as_view(), name="agentes-escritura-envio"),
+    path("agentes/escritura/presupuestos/<int:pk>/editar/", EditarPresupuestoEscritura.as_view(),
+         name="agentes-escritura-editar"),
+    path("agentes/escritura/presupuestos/vencer/", VencerPresupuestosEscritura.as_view(),
+         name="agentes-escritura-vencer"),
+    path("agentes/escritura/productos/<int:pk>/etapa-diseno/", EtapaDisenoEscritura.as_view(),
+         name="agentes-escritura-etapa-diseno"),
+    path("agentes/escritura/clientes/prioridad/", PrioridadClienteEscritura.as_view(),
+         name="agentes-escritura-prioridad"),
+    path("agentes/escritura/prototipos/", PrototipoEscritura.as_view(), name="agentes-escritura-prototipo"),
     path(
         "productos/costo/",
         ProductoCostoPorSkuView.as_view(),

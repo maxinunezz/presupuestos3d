@@ -121,8 +121,10 @@ class CrearPresupuestoEscritura(_VistaEscritura):
                 status=Presupuesto.Status.DRAFT, **extra,
             )
             for pid, cantidad, precio in lineas:
+                # Sin precio: lo toma del producto y, si el producto sigue en diseño, queda como precio provisorio
+                # (se actualiza solo cuando Lucas marca Diseño listo).
                 PresupuestoItem.objects.create(presupuesto=p, producto=productos[pid], quantity=cantidad,
-                                               unit_price=precio if precio is not None else productos[pid].sale_price)
+                                               unit_price=precio)
             resultado = _estado(p)
             self._registrar("crear", clave, aprobo, p, d, resultado)
         return Response(resultado, status=201)
