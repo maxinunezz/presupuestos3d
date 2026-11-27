@@ -1957,6 +1957,17 @@ class PresupuestoAdmin(admin.ModelAdmin):
             },
         ),
         (
+            _("Envío"),
+            {
+                "fields": (
+                    "forma_entrega",
+                    ("costo_envio", "envio_cobrado_al_cliente"),
+                    "direccion_envio",
+                    "seguimiento_envio",
+                )
+            },
+        ),
+        (
             _("Fechas"),
             {
                 "classes": ("collapse",),

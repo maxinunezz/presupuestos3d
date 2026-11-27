@@ -1345,6 +1345,30 @@ class Presupuesto(models.Model):
         _("Entrega fijada a mano"), default=False
     )
 
+    # --- Envío (27/11/2026): cómo se entrega y cuánto cuesta ---
+    class FormaEntrega(models.TextChoices):
+        RETIRA = "RETIRA", _("Retira el cliente")
+        MOTO = "MOTO", _("Moto / cadete")
+        CORREO = "CORREO", _("Correo / transporte")
+        OTRO = "OTRO", _("Otro")
+
+    forma_entrega = models.CharField(
+        _("Forma de entrega"), max_length=10, choices=FormaEntrega.choices, blank=True, default=""
+    )
+    costo_envio = models.DecimalField(
+        _("Costo del envío"), max_digits=12, decimal_places=2, default=Decimal("0"),
+        help_text=_("Lo que cuesta mandarlo (moto, correo). 0 si retira."),
+    )
+    envio_cobrado_al_cliente = models.BooleanField(
+        _("Envío a cargo del cliente"), default=False,
+        help_text=_("Marcá si el cliente paga el envío aparte del pedido."),
+    )
+    direccion_envio = models.CharField(_("Dirección de envío"), max_length=250, blank=True)
+    seguimiento_envio = models.CharField(
+        _("Seguimiento / empresa"), max_length=120, blank=True,
+        help_text=_("Número de seguimiento o empresa de correo/cadete."),
+    )
+
     stock_provisioned = models.BooleanField(
         _("Inventario descontado"),
         default=False,
