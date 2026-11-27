@@ -211,8 +211,10 @@ class CompletarPresupuestoEscritura(_VistaEscritura):
 #   - INSUMO (filamento o agregado que ya existe en Inventario) → una Compra confirmada: suma el stock, actualiza el
 #     precio del artículo con lo pagado y registra el movimiento de stock (motivo Compra).
 #   - GASTO (todo lo demás: contador, envío, herramienta, publicidad…) → un Gasto en el panel de gastos.
-# En los dos, si se pagó con un medio de "caja inmediata" (efectivo, transferencia, Mercado Pago, Ualá) y hay una
-# sola cuenta de caja para ese medio, queda un BORRADOR de egreso en caja para que el dueño lo confirme.
+# En los dos, si se pagó con un medio de "caja inmediata" (efectivo, transferencia, Mercado Pago, Ualá), queda el
+# EGRESO en caja ya CONFIRMADO (27/11/2026): Lucas o Maxi ya lo aprobaron en dos pasos en Telegram, pedir una tercera
+# confirmación en el Panel de caja hacía que la plata nunca saliera de caja. La cuenta: la única con ese medio o, si
+# hay varias, la que se llama como el medio (CuentaCaja.para_medio).
 
 def _decimal(x):
     try:
@@ -226,11 +228,25 @@ def _cuenta_caja(medio_nombre):
     from caja.models import CuentaCaja
     from gastos.models import _NOMBRE_A_CODIGO_MEDIO_PAGO, _normalizar
 
-    codigo = _NOMBRE_A_CODIGO_MEDIO_PAGO.get(_normalizar(medio_nombre or ""))
-    if not codigo:
-        return None
-    cuentas = CuentaCaja.objects.filter(medio_pago_default=codigo, is_active=True)
-    return cuentas.first() if cuentas.count() == 1 else None
+    return CuentaCaja.para_medio(_NOMBRE_A_CODIGO_MEDIO_PAGO.get(_normalizar(medio_nombre or "")), medio_nombre)
+
+
+def _egreso_confirmado(cuenta, monto, fecha, concepto, **origen):
+    """Egreso de caja confirmado (afecta el saldo ya). Si el sistema ya había dejado un borrador para ese origen, se
+    confirma ese en vez de duplicarlo."""
+    from caja.models import MovimientoCaja
+
+    mov = MovimientoCaja.objects.filter(origen_automatico=True, **origen).first()
+    if mov:
+        if mov.estado != MovimientoCaja.Estado.CONFIRMADO:
+            mov.estado = MovimientoCaja.Estado.CONFIRMADO
+            mov.save(update_fields=["estado"])
+        return mov
+    mov = MovimientoCaja(cuenta=cuenta, tipo=MovimientoCaja.Tipo.EGRESO, monto=monto, fecha=fecha, concepto=concepto[:200],
+                         estado=MovimientoCaja.Estado.CONFIRMADO, origen_automatico=True, **origen)
+    mov.full_clean()
+    mov.save()
+    return mov
 
 
 class CrearCompraEscritura(_VistaEscritura):
@@ -333,15 +349,10 @@ class CrearCompraEscritura(_VistaEscritura):
             caja = None
             cuenta = _cuenta_caja(d.get("medio_pago"))
             if cuenta and compra.total > 0:
-                from caja.models import MovimientoCaja
-
-                MovimientoCaja.crear_borrador_automatico(
-                    cuenta=cuenta, tipo=MovimientoCaja.Tipo.EGRESO, monto=compra.total,
-                    fecha=fecha or timezone.localdate(), concepto=f"Compra #{compra.pk} — {compra.supplier or 'sin proveedor'}",
-                    compra=compra)
-                caja = cuenta.nombre
+                caja = _egreso_confirmado(cuenta, compra.total, fecha or timezone.localdate(),
+                                          f"Compra #{compra.pk} — {compra.supplier or 'sin proveedor'}", compra=compra).cuenta.nombre
             resultado = {"compra_id": compra.pk, "estado": compra.get_status_display(), "total": _dinero(compra.total),
-                         "lineas": detalle, "caja_borrador": caja, "altas": altas}
+                         "lineas": detalle, "caja": caja, "caja_borrador": caja, "altas": altas}
             self._registrar("compra", clave, aprobo, None, d, resultado)
         return Response(resultado, status=201)
 
@@ -404,10 +415,13 @@ class CrearGastoEscritura(_VistaEscritura):
                 es_recurrente=periodicidad != "UNICA", periodicidad=periodicidad, cuota_actual=cuota, cuotas_totales=cuotas,
                 tipo=Gasto.Tipo.EXTRAORDINARIO if d.get("extraordinario") else Gasto.Tipo.OPERATIVO,
                 notas=(str(d.get("notas") or "") + f"\n\nCargado por Roque · aprobó {aprobo}").strip())
-            caja = g.movimientos_caja.filter(origen_automatico=True).first() if hasattr(g, "movimientos_caja") else None
+            caja = None
+            cuenta = _cuenta_caja(medio.nombre) if medio else None
+            if cuenta or g.movimientos_caja.filter(origen_automatico=True).exists():
+                caja = _egreso_confirmado(cuenta, g.monto, g.fecha, f"Gasto #{g.pk} — {g.concepto}", gasto=g).cuenta.nombre
             resultado = {"gasto_id": g.pk, "concepto": g.concepto, "categoria": categoria.nombre,
                          "monto": _dinero(g.monto), "fecha": g.fecha.isoformat(),
-                         "medio_pago": medio.nombre if medio else "", "caja_borrador": caja.cuenta.nombre if caja else None}
+                         "medio_pago": medio.nombre if medio else "", "caja": caja, "caja_borrador": caja}
             self._registrar("gasto", clave, aprobo, None, d, resultado)
         return Response(resultado, status=201)
 

@@ -93,6 +93,25 @@ class CuentaCaja(models.Model):
     def __str__(self):
         return self.nombre
 
+    @classmethod
+    def para_medio(cls, codigo, nombre_medio=""):
+        """La cuenta que recibe los pagos de un medio. Si hay una sola cuenta activa con ese medio, esa. Si hay varias
+        (ej. «Mercado Pago», «Horas maquinas» y «Mano de obra» con medio Mercado Pago), la que se llama igual que el
+        medio. Si no se puede decidir, None (27/11/2026: con varias cuentas de MP no se registraba nada)."""
+        if not codigo:
+            return None
+        cuentas = list(cls.objects.filter(medio_pago_default=codigo, is_active=True))
+        if len(cuentas) == 1:
+            return cuentas[0]
+        from gastos.models import _normalizar
+
+        def clave(t):
+            return _normalizar(t or "").replace(" ", "")
+
+        nombres = {clave(codigo), clave(nombre_medio)} - {""}
+        iguales = [c for c in cuentas if clave(c.nombre) in nombres]
+        return iguales[0] if len(iguales) == 1 else None
+
     @property
     def saldo_actual(self) -> Decimal:
         """
