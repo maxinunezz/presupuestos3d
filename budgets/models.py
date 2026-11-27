@@ -1643,7 +1643,12 @@ class Presupuesto(models.Model):
     # ---- Cobro por pagos (27/11/2026) ----
     # Los pagos se cargan uno por uno (PagoPresupuesto: seña, saldo, devolución). Si el pedido tiene pagos, el estado
     # de cobro y la fecha de cobro salen de ellos; si no tiene (pedidos viejos), siguen manuales como antes.
-    SENA_MINIMA = Decimal("0.50")
+    @property
+    def SENA_MINIMA(self) -> Decimal:
+        """Seña mínima para confirmar (27/11/2026: 50 %). Configurable con SENA_MINIMA_PCT (0 = no se exige)."""
+        from django.conf import settings
+
+        return Decimal(str(getattr(settings, "SENA_MINIMA_PCT", 50))) / Decimal("100")
 
     @property
     def total_a_cobrar(self) -> Decimal:
@@ -1664,7 +1669,7 @@ class Presupuesto(models.Model):
     def sena_faltante(self) -> Decimal:
         """Cuánto falta cobrar para llegar a la seña mínima. 0 si no hace falta: pedidos para stock, o pedidos viejos
         sin pagos cargados pero marcados a mano como pago parcial o pagado."""
-        if self.para_stock or self.total <= 0:
+        if self.para_stock or self.total <= 0 or self.SENA_MINIMA <= 0:
             return Decimal("0")
         if not self.pagos.exists() and self.estado_venta in (self.EstadoVenta.PARCIAL, self.EstadoVenta.PAGADO):
             return Decimal("0")

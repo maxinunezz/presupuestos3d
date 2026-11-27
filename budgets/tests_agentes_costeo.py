@@ -13,7 +13,7 @@ from .tests import add_pieza, make_producto
 LECTURA, ESCRITURA = "token-lectura", "token-escritura"
 
 
-@override_settings(AGENTES_API_TOKEN=LECTURA, AGENTES_ESCRITURA_TOKEN=ESCRITURA)
+@override_settings(AGENTES_API_TOKEN=LECTURA, AGENTES_ESCRITURA_TOKEN=ESCRITURA, SENA_MINIMA_PCT=0)
 class CosteoVerificadoTests(TestCase):
     def setUp(self):
         self.w = APIClient()

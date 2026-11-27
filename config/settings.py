@@ -116,6 +116,8 @@ REST_FRAMEWORK = {
 AGENTES_API_TOKEN = os.environ.get('AGENTES_API_TOKEN', '')
 # Token APARTE para que Roque escriba (crear/aprobar/cancelar presupuestos). Vacío = escritura apagada.
 AGENTES_ESCRITURA_TOKEN = os.environ.get('AGENTES_ESCRITURA_TOKEN', '')
+# Seña mínima (%) para confirmar un pedido de cliente (27/11/2026). 0 = no se exige.
+SENA_MINIMA_PCT = os.environ.get('SENA_MINIMA_PCT', '50')
 # Quién puede marcar «Diseño listo» por Roque (27/11/2026: solo Lucas cierra diseño y cotización).
 DISENO_LISTO_APRUEBAN = [x.strip() for x in os.environ.get('DISENO_LISTO_APRUEBAN', 'Lucas').split(',') if x.strip()]
 

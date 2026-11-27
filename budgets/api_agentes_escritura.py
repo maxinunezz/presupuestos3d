@@ -190,6 +190,8 @@ class CompletarPresupuestoEscritura(_VistaEscritura):
         if not p:
             return Response({"error": "Ese presupuesto no existe."}, status=404)
         abiertos = p.jobs.exclude(status__in=["DONE", "CANCELLED"]).count()
+        if p.sync_status_from_jobs():  # trabajos marcados impresos sin que el pedido se haya actualizado todavía
+            p.refresh_from_db()
         # 27/11/2026: con todo impreso el pedido queda en Post-impresión; mientras Roque no maneje esa etapa,
         # marcar entregado desde ahí la da por terminada.
         if p.status == Presupuesto.Status.POST_PRINT and not p.para_stock:
