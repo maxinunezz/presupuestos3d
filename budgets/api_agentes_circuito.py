@@ -68,11 +68,18 @@ class PagoEscritura(_VistaEscritura):
         except ValueError:
             return Response({"error": "fecha inválida (YYYY-MM-DD)."}, status=400)
         with transaction.atomic():
-            PagoPresupuesto.objects.create(presupuesto=p, tipo=tipo, monto=monto, medio_pago=medio,
-                                           notas=str(d.get("notas") or "")[:200], cargado_por=f"Roque · {aprobo}"[:60],
-                                           **({"fecha": fecha} if fecha else {}))
+            pago = PagoPresupuesto.objects.create(presupuesto=p, tipo=tipo, monto=monto, medio_pago=medio,
+                                                  notas=str(d.get("notas") or "")[:200],
+                                                  cargado_por=f"Roque · {aprobo}"[:60],
+                                                  **({"fecha": fecha} if fecha else {}))
+            pago.refresh_from_db()
+            mov = pago.movimiento_caja
+            if mov and mov.estado == mov.Estado.BORRADOR:
+                # 27/11/2026: lo que carga Roque ya lo aprobó Lucas: entra a caja confirmado (igual que compras y gastos)
+                mov.estado = mov.Estado.CONFIRMADO
+                mov.save(update_fields=["estado"])
             p.refresh_from_db()
-            resultado = _cobro(p)
+            resultado = {**_cobro(p), "caja": mov.cuenta.nombre if mov else None, "_antes": {"pago_id": pago.id}}
             self._registrar("pago", clave, aprobo, p, d, resultado)
         return Response(resultado, status=201)
 
@@ -105,6 +112,9 @@ class EnvioEscritura(_VistaEscritura):
         forma = str(d.get("forma") or "").upper()
         if forma not in Presupuesto.FormaEntrega.values:
             return Response({"error": f"forma inválida ({', '.join(Presupuesto.FormaEntrega.values)})."}, status=400)
+        antes = {"forma_entrega": p.forma_entrega, "costo_envio": str(p.costo_envio),
+                 "envio_cobrado_al_cliente": p.envio_cobrado_al_cliente, "direccion_envio": p.direccion_envio,
+                 "seguimiento_envio": p.seguimiento_envio}
         p.forma_entrega = forma
         if d.get("costo") not in (None, ""):
             costo = _dec(d.get("costo"))
@@ -119,7 +129,7 @@ class EnvioEscritura(_VistaEscritura):
             p.seguimiento_envio = str(d["seguimiento"])[:120]
         p.save()
         p.recalcular_cobro()
-        resultado = _cobro(p)
+        resultado = {**_cobro(p), "_antes": antes}
         self._registrar("envio", clave, aprobo, p, d, resultado)
         return Response(resultado)
 
@@ -203,12 +213,13 @@ class EtapaDisenoEscritura(_VistaEscritura):
         habilitados = [x.lower() for x in getattr(settings, "DISENO_LISTO_APRUEBAN", ["Lucas"])]
         if toca_listo and aprobo.lower() not in habilitados:
             return Response({"error": "Diseño listo lo marca solo Lucas (cierra diseño y cotización)."}, status=403)
+        antes = {"etapa": prod.estado_diseno, "rondas_cliente": prod.rondas_cliente}
         prod.estado_diseno = etapa
         prod.save()
         prod.refresh_from_db()
         resultado = {"producto_id": prod.id, "nombre": prod.name, "etapa": prod.get_estado_diseno_display(),
                      "rondas_cliente": prod.rondas_cliente, "cobra_rediseno": prod.cobra_rediseno,
-                     "precio": _dinero(prod.sale_price)}
+                     "precio": _dinero(prod.sale_price), "_antes": antes}
         self._registrar("etapa_diseno", clave, aprobo, None, request.data, resultado)
         return Response(resultado)
 
@@ -226,9 +237,10 @@ class PrioridadClienteEscritura(_VistaEscritura):
         if not nombre or prioridad not in Producto.Priority.values:
             return Response({"error": "Faltan 'cliente' y 'prioridad' (1 Alta, 2 Media, 3 Baja, 9 Sin)."}, status=400)
         c = Cliente.para_nombre(nombre)
+        antes = {"prioridad": c.prioridad}
         c.prioridad = prioridad
         c.save()
-        resultado = {"cliente": c.nombre, "prioridad": c.get_prioridad_display()}
+        resultado = {"cliente": c.nombre, "prioridad": c.get_prioridad_display(), "_antes": antes}
         self._registrar("prioridad", clave, aprobo, None, request.data, resultado)
         return Response(resultado)
 

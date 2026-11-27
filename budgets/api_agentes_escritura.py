@@ -144,6 +144,7 @@ class AprobarPresupuestoEscritura(_VistaEscritura):
             return Response({"error": "Ese presupuesto no existe."}, status=404)
         # 27/11/2026: el costeo verificado ya no es requisito para aprobar (decisión del dueño). Los endpoints de
         # verificar/costeos-pendientes quedan hasta adaptar Roque y después se borran.
+        status_antes = p.status
         try:
             r = p.approve()
         except (DisenoNoListoError, PresupuestoNotApprovableError) as exc:
@@ -156,7 +157,8 @@ class AprobarPresupuestoEscritura(_VistaEscritura):
                      "trabajos": len(trabajos), "maquinas": sorted({j.machine.name for j in trabajos if j.machine}),
                      "esperando_diseno": sorted(set(r.get("esperando_diseno", []))),
                      "aviso_fecha": ("La fecha estimada no cuenta la espera de la compra del material que falta."
-                                     if r.get("shortages") else "")}
+                                     if r.get("shortages") else ""),
+                     "_antes": {"status": status_antes}}
         self._registrar("aprobar", clave, aprobo, p, request.data, resultado)
         return Response(resultado)
 

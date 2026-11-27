@@ -2503,6 +2503,34 @@ class Presupuesto(models.Model):
         recalcular_pedido() para devolver lo correcto."""
         return list(self.items.select_related("producto").all())
 
+    def desaprobar(self, status_antes=None):
+        """Deshacer una aprobación recién hecha (27/11/2026, «Deshacer» de Roque): devuelve todo lo que se descontó
+        y saca los trabajos de la cola; el pedido vuelve a Borrador o Enviado como estaba. Solo si no se empezó a
+        imprimir nada. Devuelve el resumen de lo devuelto o lanza ValueError con el motivo."""
+        from production.models import ProductionJob
+
+        Status = Presupuesto.Status
+        if self.status not in (Status.APPROVED, Status.IN_PRODUCTION):
+            raise ValueError(gettext("ya no está aprobado (está %(e)s)") % {"e": self.get_status_display().lower()})
+        if self.jobs.filter(status__in=[ProductionJob.Status.PRINTING, ProductionJob.Status.DONE]).exists():
+            raise ValueError(gettext("ya se empezó a imprimir: si no va, cancelalo"))
+        devuelto = {"filaments": [], "aggregates": [], "piezas": [], "finished": [], "jobs_cancelled": 0}
+        with transaction.atomic():
+            if self.stock_provisioned and not self.stock_reversed:
+                self._revertir_inventario(devuelto)
+            for job in self.jobs.exclude(status=ProductionJob.Status.CANCELLED):
+                job.status = ProductionJob.Status.CANCELLED
+                job.save(update_fields=["status"])
+            self.items.update(produccion_generada=False, from_finished_stock=0)
+            self.status = status_antes if status_antes in (Status.DRAFT, Status.SENT) else Status.SENT
+            self.approved_at = None
+            self.production_started_at = None
+            self.stock_provisioned = False
+            self.stock_reversed = False
+            self.save(update_fields=["status", "approved_at", "production_started_at", "stock_provisioned",
+                                     "stock_reversed", "updated_at"])
+        return devuelto
+
     def recalcular_pedido(self, items_antes):
         """Editar un pedido ya confirmado (27/11/2026): después de cambiar líneas (cantidad, producto, color) se
         recalcula todo sobre lo nuevo.

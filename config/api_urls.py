@@ -26,6 +26,7 @@ from budgets.api_agentes_ventas import (
     ProductosAgentes,
     SimularPedidoAgentes,
 )
+from budgets.api_agentes_deshacer import DeshacerEscritura
 from budgets.api_agentes_circuito import (
     EditarPresupuestoEscritura,
     EnvioEscritura,
@@ -117,6 +118,7 @@ urlpatterns = router.urls + [
     path("agentes/escritura/clientes/prioridad/", PrioridadClienteEscritura.as_view(),
          name="agentes-escritura-prioridad"),
     path("agentes/escritura/prototipos/", PrototipoEscritura.as_view(), name="agentes-escritura-prototipo"),
+    path("agentes/escritura/deshacer/", DeshacerEscritura.as_view(), name="agentes-escritura-deshacer"),
     path(
         "productos/costo/",
         ProductoCostoPorSkuView.as_view(),
