@@ -2229,6 +2229,13 @@ class PresupuestoAdmin(admin.ModelAdmin):
             )
         else:
             request._old_presupuesto_status = Presupuesto.Status.DRAFT
+        # Editar un pedido confirmado (27/11/2026): foto de las líneas ANTES de guardar la edición, para devolver lo
+        # correcto y recalcular en save_related.
+        request._items_antes = None
+        if change:
+            previo = type(obj).objects.filter(pk=obj.pk).first()
+            if previo and previo.status in Presupuesto.ESTADOS_EDITABLES and previo.stock_provisioned:
+                request._items_antes = previo.foto_items()
         super().save_model(request, obj, form, change)
 
     def save_formset(self, request, form, formset, change):
@@ -2263,6 +2270,26 @@ class PresupuestoAdmin(admin.ModelAdmin):
     def save_related(self, request, form, formsets, change):
         super().save_related(request, form, formsets, change)
         obj = form.instance
+
+        items_antes = getattr(request, "_items_antes", None)
+        if items_antes is not None and obj.status == getattr(request, "_old_presupuesto_status", None):
+            firma = lambda items: sorted((i.pk, i.producto_id, i.quantity) for i in items)  # noqa: E731
+            if firma(items_antes) != firma(obj.items.all()):
+                r = obj.recalcular_pedido(items_antes) or {}
+                cancelados = (r.get("devuelto") or {}).get("jobs_cancelled", 0)
+                nuevos = obj.jobs.exclude(status=ProductionJob.Status.CANCELLED).filter(
+                    status=ProductionJob.Status.PENDING).count()
+                self.message_user(
+                    request,
+                    gettext(
+                        "Pedido #%(pk)s editado y recalculado: se devolvió lo que no se había impreso "
+                        "(%(cancelados)s trabajo/s), se rearmó la cola (%(nuevos)s trabajo/s en cola) y se "
+                        "actualizaron stock, entrega y saldo. Lo ya impreso se conservó."
+                    )
+                    % {"pk": obj.pk, "cancelados": cancelados, "nuevos": nuevos},
+                )
+                if r.get("shortages"):
+                    self._message_approval(request, obj, {"shortages": r["shortages"]})
 
         # Si el estado cambió desde el dropdown, seteamos las fechas y
         # disparamos los efectos (al aprobar: genera la cola de producción).

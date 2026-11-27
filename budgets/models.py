@@ -1849,7 +1849,7 @@ class Presupuesto(models.Model):
         self.recalcular_cobro()
         return result
 
-    def _provision_production(self, solo_pendientes=False):
+    def _provision_production(self, solo_pendientes=False, credito_piezas=None):
         """
         Al APROBAR el pedido (= confirmarlo) hace de una sola vez todo el trabajo
         de inventario y cola, de forma idempotente (no descuenta dos veces):
@@ -1911,7 +1911,9 @@ class Presupuesto(models.Model):
                     )
             produce_qty[item.id] = qty
 
-        # 1) Planificamos qué imprimir, descontando primero el stock de piezas.
+        # 1) Planificamos qué imprimir, descontando primero lo ya impreso de este pedido (al editarlo) y después
+        #    el stock de piezas.
+        credito = dict(credito_piezas or {})
         plan = []  # (item, pieza, unidades_a_imprimir)
         for item in listos:
             item_qty = produce_qty[item.id]
@@ -1922,6 +1924,12 @@ class Presupuesto(models.Model):
                 units_required = pp.units_needed * item_qty
                 if units_required <= 0:
                     continue
+                ya_hecho = min(credito.get(pieza.pk, 0), units_required)
+                if ya_hecho:
+                    credito[pieza.pk] -= ya_hecho
+                    units_required -= ya_hecho
+                    if units_required <= 0:
+                        continue
                 from_stock = min(pieza.stock_quantity, units_required)
                 if from_stock > 0:
                     Pieza.objects.filter(pk=pieza.pk).update(
@@ -1937,6 +1945,12 @@ class Presupuesto(models.Model):
                 to_print = units_required - from_stock
                 if to_print > 0:
                     plan.append((item, pieza, to_print))
+
+        # Lo impreso de más (se bajó la cantidad al editar el pedido) va al stock de piezas.
+        for pieza_id, sobra in credito.items():
+            if sobra > 0:
+                Pieza.objects.filter(pk=pieza_id).update(stock_quantity=models.F("stock_quantity") + sobra)
+                result.setdefault("sobrante_a_stock", []).append({"pieza_id": pieza_id, "units": sobra})
 
         # 2) Creamos los trabajos (los más largos primero, para balancear las
         #    colas) y descontamos el filamento de cada uno.
@@ -2222,6 +2236,8 @@ class Presupuesto(models.Model):
 
         return result
 
+    ESTADOS_EDITABLES = ("APPROVED", "IN_PRODUCTION", "POST_PRINT", "READY")  # editar pedido confirmado
+
     DIAS_VENCIMIENTO = 10  # 27/11/2026: Enviado sin respuesta del cliente → se cancela solo y se avisa
 
     @classmethod
@@ -2321,116 +2337,7 @@ class Presupuesto(models.Model):
 
         with transaction.atomic():
             if do_reverse:
-                jobs = list(
-                    self.jobs.select_related("pieza", "producto").exclude(
-                        status=JobStatus.CANCELLED
-                    )
-                )
-                # Cuánto se había encolado de cada pieza (impreso o por imprimir).
-                queued_by_pieza = defaultdict(int)
-                for job in jobs:
-                    if job.pieza_id:
-                        queued_by_pieza[job.pieza_id] += job.quantity
-
-                for job in jobs:
-                    if job.status == JobStatus.DONE:
-                        # Ya impreso: las piezas del pedido pasan a stock. El
-                        # filamento ya se consumió de verdad (no se devuelve).
-                        if job.pieza_id and job.quantity:
-                            Pieza.objects.filter(pk=job.pieza_id).update(
-                                stock_quantity=models.F("stock_quantity")
-                                + job.quantity
-                            )
-                            summary["piezas"].append(
-                                {
-                                    "pieza": job.pieza.name,
-                                    "units": job.quantity,
-                                    "motivo": gettext("ya impresa"),
-                                }
-                            )
-                        continue
-
-                    # Trabajo en cola (no impreso): devolvemos su filamento.
-                    if job.stock_consumed:
-                        self._return_job_filament(
-                            job, summary, Filament, StockMovement
-                        )
-                    job.status = JobStatus.CANCELLED
-                    job.save(update_fields=["status"])
-                    job.register_history(estado=HistorialImpresion.Estado.CANCELADO)
-                    summary["jobs_cancelled"] += 1
-
-                # Piezas que se habían tomado del stock (no impresas): devolverlas.
-                # Se reconstruye sobre lo que se PRODUJO (cantidad − lo servido del
-                # stock de terminados), que es lo que generó piezas y agregados.
-                required_by_pieza = defaultdict(int)
-                pieza_obj = {}
-                for item in self.items.select_related("producto").all():
-                    produced = item.quantity - item.from_finished_stock
-                    if produced <= 0 or not item.produccion_generada:
-                        continue
-                    for pp in item.producto.producto_piezas.select_related("pieza").all():
-                        pieza = pp.pieza
-                        required_by_pieza[pieza.pk] += pp.units_needed * produced
-                        pieza_obj[pieza.pk] = pieza
-                for pid, required in required_by_pieza.items():
-                    from_stock = required - queued_by_pieza.get(pid, 0)
-                    if from_stock > 0:
-                        Pieza.objects.filter(pk=pid).update(
-                            stock_quantity=models.F("stock_quantity") + from_stock
-                        )
-                        summary["piezas"].append(
-                            {
-                                "pieza": pieza_obj[pid].name,
-                                "units": from_stock,
-                                "motivo": gettext("estaba en stock"),
-                            }
-                        )
-
-                # Agregados (a nivel producto): se devuelven por lo producido.
-                for item in self.items.select_related("producto").all():
-                    produced = item.quantity - item.from_finished_stock
-                    if produced <= 0 or not item.produccion_generada:
-                        continue
-                    producto = item.producto
-                    for line in producto.aggregate_lines.select_related(
-                        "aggregate"
-                    ).all():
-                        qty = producto.aggregate_qty_needed(line, produced)
-                        if qty <= 0:
-                            continue
-                        agg = line.aggregate
-                        Aggregate.objects.filter(pk=agg.pk).update(
-                            stock_quantity=models.F("stock_quantity") + qty
-                        )
-                        StockMovement.objects.create(
-                            aggregate=agg,
-                            quantity=qty,
-                            reason=StockMovement.Reason.BUDGET_CANCELLED,
-                            related_presupuesto=self,
-                            note=gettext(
-                                "Cancelación pedido #%(pk)s: %(producto)s ×%(qty)s"
-                            )
-                            % {"pk": self.pk, "producto": producto, "qty": produced},
-                        )
-                        summary["aggregates"].append({"item": str(agg), "units": qty})
-
-                # Stock de PRODUCTOS TERMINADOS que se había servido al aprobar:
-                # se devuelve (esas unidades nunca se entregaron).
-                for item in self.items.select_related("producto").all():
-                    if item.from_finished_stock > 0:
-                        Producto.objects.filter(pk=item.producto_id).update(
-                            stock_quantity=models.F("stock_quantity")
-                            + item.from_finished_stock
-                        )
-                        summary["finished"].append(
-                            {
-                                "producto": str(item.producto),
-                                "units": item.from_finished_stock,
-                            }
-                        )
-                        item.from_finished_stock = 0
-                        item.save(update_fields=["from_finished_stock"])
+                self._revertir_inventario(summary)
 
                 self.stock_reversed = True
             else:
@@ -2450,6 +2357,179 @@ class Presupuesto(models.Model):
             self._revert_movimientos_caja()
 
         return summary
+
+    def _revertir_inventario(self, summary, conservar_iniciados=False, items_antes=None):
+        """Devuelve lo que se descontó al generar la producción. Lo usan cancel() y recalcular_pedido().
+
+        Con conservar_iniciados=True (editar un pedido) los trabajos impresos o imprimiéndose NO se tocan: se
+        devuelven como crédito {pieza_id: unidades} para que la producción nueva no los vuelva a imprimir.
+        """
+        from collections import defaultdict
+
+        from production.models import HistorialImpresion, ProductionJob
+
+        from inventory.models import Aggregate, Filament, StockMovement
+
+        JobStatus = ProductionJob.Status
+        credito = defaultdict(int)
+        # Al editar, lo que se devuelve se calcula sobre las líneas COMO ESTABAN al generar la producción (la foto
+        # tomada antes de guardar la edición), no sobre las nuevas.
+        items = items_antes if items_antes is not None else list(self.items.select_related("producto").all())
+        jobs = list(
+            self.jobs.select_related("pieza", "producto").exclude(
+                status=JobStatus.CANCELLED
+            )
+        )
+        # Cuánto se había encolado de cada pieza (impreso o por imprimir).
+        queued_by_pieza = defaultdict(int)
+        for job in jobs:
+            if job.pieza_id:
+                queued_by_pieza[job.pieza_id] += job.quantity
+
+        for job in jobs:
+            if conservar_iniciados and job.status in (JobStatus.DONE, JobStatus.PRINTING):
+                # Al editar el pedido: lo impreso o imprimiéndose se queda y cuenta como ya hecho (crédito).
+                if job.pieza_id:
+                    credito[job.pieza_id] += job.quantity
+                continue
+            if job.status == JobStatus.DONE:
+                # Ya impreso: las piezas del pedido pasan a stock. El
+                # filamento ya se consumió de verdad (no se devuelve).
+                if job.pieza_id and job.quantity:
+                    Pieza.objects.filter(pk=job.pieza_id).update(
+                        stock_quantity=models.F("stock_quantity")
+                        + job.quantity
+                    )
+                    summary["piezas"].append(
+                        {
+                            "pieza": job.pieza.name,
+                            "units": job.quantity,
+                            "motivo": gettext("ya impresa"),
+                        }
+                    )
+                continue
+
+            # Trabajo en cola (no impreso): devolvemos su filamento.
+            if job.stock_consumed:
+                self._return_job_filament(
+                    job, summary, Filament, StockMovement
+                )
+            job.status = JobStatus.CANCELLED
+            job.save(update_fields=["status"])
+            job.register_history(estado=HistorialImpresion.Estado.CANCELADO)
+            summary["jobs_cancelled"] += 1
+
+        # Piezas que se habían tomado del stock (no impresas): devolverlas.
+        # Se reconstruye sobre lo que se PRODUJO (cantidad − lo servido del
+        # stock de terminados), que es lo que generó piezas y agregados.
+        required_by_pieza = defaultdict(int)
+        pieza_obj = {}
+        for item in items:
+            produced = item.quantity - item.from_finished_stock
+            if produced <= 0 or not item.produccion_generada:
+                continue
+            for pp in item.producto.producto_piezas.select_related("pieza").all():
+                pieza = pp.pieza
+                required_by_pieza[pieza.pk] += pp.units_needed * produced
+                pieza_obj[pieza.pk] = pieza
+        for pid, required in required_by_pieza.items():
+            from_stock = required - queued_by_pieza.get(pid, 0)
+            if from_stock > 0:
+                Pieza.objects.filter(pk=pid).update(
+                    stock_quantity=models.F("stock_quantity") + from_stock
+                )
+                summary["piezas"].append(
+                    {
+                        "pieza": pieza_obj[pid].name,
+                        "units": from_stock,
+                        "motivo": gettext("estaba en stock"),
+                    }
+                )
+
+        # Agregados (a nivel producto): se devuelven por lo producido.
+        for item in items:
+            produced = item.quantity - item.from_finished_stock
+            if produced <= 0 or not item.produccion_generada:
+                continue
+            producto = item.producto
+            for line in producto.aggregate_lines.select_related(
+                "aggregate"
+            ).all():
+                qty = producto.aggregate_qty_needed(line, produced)
+                if qty <= 0:
+                    continue
+                agg = line.aggregate
+                Aggregate.objects.filter(pk=agg.pk).update(
+                    stock_quantity=models.F("stock_quantity") + qty
+                )
+                StockMovement.objects.create(
+                    aggregate=agg,
+                    quantity=qty,
+                    reason=StockMovement.Reason.BUDGET_CANCELLED,
+                    related_presupuesto=self,
+                    note=gettext(
+                        "Cancelación pedido #%(pk)s: %(producto)s ×%(qty)s"
+                    )
+                    % {"pk": self.pk, "producto": producto, "qty": produced},
+                )
+                summary["aggregates"].append({"item": str(agg), "units": qty})
+
+        # Stock de PRODUCTOS TERMINADOS que se había servido al aprobar:
+        # se devuelve (esas unidades nunca se entregaron).
+        for item in items:
+            if item.from_finished_stock > 0:
+                Producto.objects.filter(pk=item.producto_id).update(
+                    stock_quantity=models.F("stock_quantity")
+                    + item.from_finished_stock
+                )
+                summary["finished"].append(
+                    {
+                        "producto": str(item.producto),
+                        "units": item.from_finished_stock,
+                    }
+                )
+                if items_antes is None:
+                    item.from_finished_stock = 0
+                    item.save(update_fields=["from_finished_stock"])
+        return credito
+
+    def foto_items(self):
+        """Las líneas como están ahora (objetos en memoria): se toma ANTES de editar un pedido confirmado y se pasa a
+        recalcular_pedido() para devolver lo correcto."""
+        return list(self.items.select_related("producto").all())
+
+    def recalcular_pedido(self, items_antes):
+        """Editar un pedido ya confirmado (27/11/2026): después de cambiar líneas (cantidad, producto, color) se
+        recalcula todo sobre lo nuevo.
+
+          1. Se devuelve lo que no arrancó: trabajos en cola (y su filamento), piezas y terminados tomados del stock,
+             agregados. Lo impreso o imprimiéndose se conserva.
+          2. Se vuelve a generar la producción de todas las líneas: lo ya impreso cuenta como hecho y, si sobra
+             (bajó la cantidad), va al stock de piezas.
+          3. Si quedó algo por imprimir, el pedido vuelve a producción; se recalculan entrega y saldo.
+
+        Devuelve el resumen de lo devuelto y lo generado, o None si el pedido no está en una etapa editable."""
+        from production.models import ProductionJob
+
+        Status = Presupuesto.Status
+        if self.status not in self.ESTADOS_EDITABLES or not self.stock_provisioned or self.stock_reversed:
+            return None
+        devuelto = {"filaments": [], "aggregates": [], "piezas": [], "finished": [], "jobs_cancelled": 0}
+        with transaction.atomic():
+            credito = self._revertir_inventario(devuelto, conservar_iniciados=True, items_antes=items_antes)
+            self.items.update(produccion_generada=False, from_finished_stock=0)
+            result = self._provision_production(solo_pendientes=True, credito_piezas=credito)
+            abiertos = self.jobs.exclude(status__in=[ProductionJob.Status.DONE, ProductionJob.Status.CANCELLED])
+            if self.status in (Status.POST_PRINT, Status.READY) and (abiertos.exists()
+                                                                    or self.tiene_items_esperando_diseno):
+                iniciado = self.jobs.filter(
+                    status__in=[ProductionJob.Status.PRINTING, ProductionJob.Status.DONE]).exists()
+                self.status = Status.IN_PRODUCTION if iniciado else Status.APPROVED
+                self.save(update_fields=["status", "updated_at"])
+        self.sync_status_from_jobs()
+        self.refresh_delivery()
+        self.recalcular_cobro()
+        return {"devuelto": devuelto, **result}
 
     def _revert_movimientos_caja(self):
         """
