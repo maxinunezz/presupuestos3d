@@ -345,8 +345,7 @@ class Producto(models.Model):
 
             notificar(
                 "diseno_listo",
-                f":white_check_mark: *{self.name}* (prioridad {self.get_priority_display()}) "
-                f"tiene el diseño listo — ya se puede poner a imprimir.",
+                f":white_check_mark: *{self.name}* tiene el diseño listo — ya se puede poner a imprimir.",
             )
 
         # Sincronización con 3darg-backend (ver `clean()`: con 'es_producto_ecommerce'
@@ -1246,6 +1245,53 @@ class StockProductos(Producto):
         verbose_name_plural = _("Stock de productos terminados")
 
 
+class Cliente(models.Model):
+    """Cliente con su prioridad en la cola (27/11/2026). La prioridad es del CLIENTE, no del producto: todo lo que se
+    imprime para un cliente entra a la cola con la prioridad que se le dio. Se crea solo con el nombre del presupuesto
+    (sin distinguir mayúsculas), así no hay que cargar nada aparte."""
+
+    nombre = models.CharField(_("Nombre"), max_length=150, unique=True)
+    prioridad = models.PositiveSmallIntegerField(
+        _("Prioridad en la cola"), choices=Producto.Priority.choices, default=Producto.Priority.SIN,
+        help_text=_("Lo de este cliente se imprime antes cuanto más alta la prioridad. Cambiarla reordena sus pedidos "
+                    "abiertos."),
+    )
+    notas = models.TextField(_("Notas"), blank=True)
+    created_at = models.DateTimeField(_("Creado"), auto_now_add=True)
+
+    class Meta:
+        verbose_name = _("Cliente")
+        verbose_name_plural = _("Clientes")
+        ordering = ["prioridad", "nombre"]
+
+    def __str__(self):
+        return self.nombre
+
+    @classmethod
+    def para_nombre(cls, nombre):
+        nombre = (nombre or "").strip()[:150]
+        if not nombre:
+            return None
+        return cls.objects.filter(nombre__iexact=nombre).first() or cls.objects.create(nombre=nombre)
+
+    def save(self, *args, **kwargs):
+        cambio = False
+        if self.pk:
+            antes = Cliente.objects.filter(pk=self.pk).values_list("prioridad", flat=True).first()
+            cambio = antes is not None and antes != self.prioridad
+        super().save(*args, **kwargs)
+        if cambio:
+            Presupuesto.objects.filter(client_name__iexact=self.nombre, para_stock=False).exclude(
+                status__in=[Presupuesto.Status.COMPLETED, Presupuesto.Status.CANCELLED]
+            ).update(prioridad=self.prioridad)
+            from production.scheduler import rebalance_idle_machines
+
+            try:
+                rebalance_idle_machines()
+            except Exception:  # reordenar es una mejora: si falla no puede frenar el guardado del cliente
+                pass
+
+
 class PresupuestoNotApprovableError(Exception):
     """
     Se intentó aprobar un presupuesto que no está en estado aprobable.
@@ -1309,6 +1355,10 @@ class Presupuesto(models.Model):
     }
 
     client_name = models.CharField(_("Cliente"), max_length=150)
+    prioridad = models.PositiveSmallIntegerField(
+        _("Prioridad en la cola"), choices=Producto.Priority.choices, default=Producto.Priority.SIN, editable=False,
+        help_text=_("Sale de la prioridad del cliente (Clientes). Los pedidos para stock van al final."),
+    )
     vendedor = models.CharField(
         _("Vendedor"), max_length=60, blank=True,
         help_text=_("Quién del equipo hizo la venta (lo completa Roque al registrar una venta)."),
@@ -1477,6 +1527,15 @@ class Presupuesto(models.Model):
             update_fields = kwargs.get("update_fields")
             if update_fields is not None:
                 kwargs["update_fields"] = set(update_fields) | {"fecha_cobro"}
+        # Prioridad del pedido = la del cliente (27/11/2026). Para stock va al final.
+        if self.para_stock:
+            self.prioridad = Producto.Priority.SIN
+        else:
+            cliente = Cliente.para_nombre(self.client_name)
+            self.prioridad = cliente.prioridad if cliente else Producto.Priority.SIN
+        update_fields = kwargs.get("update_fields")
+        if update_fields is not None:
+            kwargs["update_fields"] = set(update_fields) | {"prioridad"}
         old = None
         if self.pk:
             old = (
@@ -1887,7 +1946,7 @@ class Presupuesto(models.Model):
 
         # Prioridad manual del producto primero (1=Alta … 9=Sin prioridad va al
         # final); a igual prioridad, el trabajo más largo se asigna antes.
-        plan.sort(key=lambda t: (t[0].producto.priority, -_job_hours(t[1], t[2])))
+        plan.sort(key=lambda t: -_job_hours(t[1], t[2]))  # todo el pedido comparte la prioridad del cliente
 
         for item, pieza, to_print in plan:
             print_hours = _job_hours(pieza, to_print)

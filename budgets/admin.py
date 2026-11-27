@@ -25,6 +25,7 @@ from .metrics import PERIODS, build_metrics, export_xlsx, template_context
 from .models import (
     CanalCargoFijoTramo,
     CanalVenta,
+    Cliente,
     DisenoNoListoError,
     HistorialPedidoProducido,
     Metricas,
@@ -1477,12 +1478,27 @@ class VentasEcommerceAdmin(admin.ModelAdmin):
         return TemplateResponse(request, self.change_list_template, context)
 
 
+@admin.register(Cliente)
+class ClienteAdmin(admin.ModelAdmin):
+    """Prioridad por cliente (27/11/2026): define el orden en la cola de todo lo que se imprime para él."""
+
+    list_display = ("nombre", "prioridad", "pedidos_abiertos")
+    list_editable = ("prioridad",)
+    list_filter = ("prioridad",)
+    search_fields = ("nombre",)
+
+    @admin.display(description=_("Pedidos abiertos"))
+    def pedidos_abiertos(self, obj):
+        return Presupuesto.objects.filter(client_name__iexact=obj.nombre).exclude(
+            status__in=[Presupuesto.Status.COMPLETED, Presupuesto.Status.CANCELLED, Presupuesto.Status.DRAFT]
+        ).count()
+
+
 @admin.register(Producto)
 class ProductoAdmin(admin.ModelAdmin):
     list_display = (
         "name",
         "sku",
-        "priority",
         "estado_diseno",
         "unit_cost_display",
         "unit_price_display",
@@ -1493,8 +1509,8 @@ class ProductoAdmin(admin.ModelAdmin):
         "is_active",
         "updated_at",
     )
-    list_filter = ("is_active", "estado_diseno", "is_multicolor", "priority", "es_producto_ecommerce")
-    list_editable = ("priority", "estado_diseno")
+    list_filter = ("is_active", "estado_diseno", "is_multicolor", "es_producto_ecommerce")
+    list_editable = ("estado_diseno",)
     search_fields = ("name", "description", "sku")
     inlines = (ProductoPiezaInline, ProductoAggregateLineInline, ProductoCanalPrecioInline)
     readonly_fields = ("producto_id_display", "costs_summary", "price_info", "diseno_listo_at", "aviso_rediseno")
@@ -1523,7 +1539,6 @@ class ProductoAdmin(admin.ModelAdmin):
                     "name",
                     "sku",
                     "description",
-                    "priority",
                     "is_multicolor",
                     "is_active",
                 )
@@ -1956,7 +1971,14 @@ class PresupuestoAdmin(admin.ModelAdmin):
         "totals_summary",
         "production_summary",
         "pdf_link",
+        "prioridad_display",
     )
+
+    @admin.display(description=_("Prioridad en la cola"))
+    def prioridad_display(self, obj):
+        if not obj or not obj.pk:
+            return gettext("Sale del cliente (menú Clientes).")
+        return obj.get_prioridad_display()
     actions = ("approve_presupuestos", "terminar_post_impresion", "marcar_entregado", "cancelar_presupuestos")
 
     # ---- Borrar: solo lo que no dejó huella (ver Presupuesto.motivo_no_borrar). Una venta aprobada se CANCELA.
@@ -1989,7 +2011,7 @@ class PresupuestoAdmin(admin.ModelAdmin):
         super().delete_queryset(request, borrables)
 
     fieldsets = (
-        (None, {"fields": ("client_name", "vendedor", "para_stock", "description", "status")}),
+        (None, {"fields": ("client_name", "prioridad_display", "vendedor", "para_stock", "description", "status")}),
         (_("Precio del pedido"), {"fields": ("fixed_cost", "totals_summary")}),
         (
             _("Producción y entrega"),

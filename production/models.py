@@ -213,7 +213,7 @@ class ProductionJob(models.Model):
     class Meta:
         verbose_name = _("Trabajo de producción")
         verbose_name_plural = _("Trabajos de producción")
-        ordering = ["machine", "producto__priority", "order", "id"]
+        ordering = ["machine", "presupuesto__prioridad", "order", "id"]
 
     def __str__(self):
         nombre = self.pieza.name if self.pieza else str(self.producto)

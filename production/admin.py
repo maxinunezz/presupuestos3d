@@ -791,7 +791,7 @@ class ColaProduccionAdmin(admin.ModelAdmin):
                 ]
             )
             .select_related("producto", "pieza", "presupuesto", "machine")
-            .order_by("machine", "producto__priority", "order", "id")
+            .order_by("machine", "presupuesto__prioridad", "order", "id")
         )
 
         def row(job):
@@ -808,8 +808,8 @@ class ColaProduccionAdmin(admin.ModelAdmin):
             return {
                 "producto": str(job.producto),
                 "pieza": job.pieza.name if job.pieza_id else None,
-                "priority": job.producto.get_priority_display(),
-                "priority_high": job.producto.priority <= 2,
+                "priority": job.presupuesto.get_prioridad_display(),
+                "priority_high": job.presupuesto.prioridad <= 2,
                 "quantity": job.quantity,
                 "cliente": job.presupuesto.client_name,
                 "presupuesto_id": job.presupuesto_id,
@@ -985,7 +985,7 @@ class TableroAdmin(admin.ModelAdmin):
                 ]
             )
             .select_related("producto", "pieza", "presupuesto", "machine")
-            .order_by("machine", "producto__priority", "order", "id")
+            .order_by("machine", "presupuesto__prioridad", "order", "id")
         )
 
         # Separamos los trabajos por estado para que el tablero no llame "en cola"
