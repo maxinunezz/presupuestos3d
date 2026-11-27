@@ -237,9 +237,34 @@ class Producto(models.Model):
         _("Diseño marcado listo el"), null=True, blank=True
     )
 
+    # --- Etapa de diseño (27/11/2026) ---
+    # Un producto nuevo (incluida una personalización, que es un producto propio) se da de alta apenas se vende, con
+    # precio provisorio, y queda En diseño. Va y viene con el cliente (Esperando aprobación del cliente) y SOLO Lucas
+    # (permiso `marcar_diseno_listo`) lo pasa a Diseño listo: eso cierra diseño y cotización y recién ahí se imprime.
+    # `diseno_listo` (booleano) se mantiene como espejo de estado_diseno == LISTO porque lo usa todo el resto.
+    class EstadoDiseno(models.TextChoices):
+        EN_DISENO = "EN_DISENO", _("En diseño")
+        ESPERANDO_CLIENTE = "ESPERANDO_CLIENTE", _("Esperando aprobación del cliente")
+        LISTO = "LISTO", _("Diseño listo")
+
+    RONDAS_SIN_CARGO = 1  # desde la 2ª ida y vuelta con el cliente se cobra el rediseño
+
+    estado_diseno = models.CharField(
+        _("Etapa de diseño"), max_length=20, choices=EstadoDiseno.choices, default=EstadoDiseno.EN_DISENO,
+        help_text=_("En diseño → Esperando aprobación del cliente (se puede ir y volver) → Diseño listo. "
+                    "Diseño listo lo marca solo Lucas: cierra el diseño y el precio."),
+    )
+    rondas_cliente = models.PositiveSmallIntegerField(
+        _("Idas y vueltas con el cliente"), default=0,
+        help_text=_("Suma 1 cada vez que el diseño se manda al cliente. Desde la 2ª se cobra rediseño."),
+    )
+
     class Meta:
         verbose_name = _("Costeo de producto")
         verbose_name_plural = _("Costeo de productos")
+        permissions = [
+            ("marcar_diseno_listo", "Puede marcar Diseño listo (cierra diseño y cotización)"),
+        ]
         # Por última modificación (el más reciente primero), no alfabético:
         # así lo que se tocó hace poco queda arriba del listado.
         ordering = ["-updated_at"]
@@ -258,16 +283,31 @@ class Producto(models.Model):
                 )
             })
 
+    @property
+    def cobra_rediseno(self) -> bool:
+        return self.rondas_cliente > self.RONDAS_SIN_CARGO
+
     def save(self, *args, **kwargs):
         is_new = self.pk is None
         previous_ready = False
+        previous_estado = None
         if self.pk:
-            previous_ready = (
-                Producto.objects.filter(pk=self.pk)
-                .values_list("diseno_listo", flat=True)
-                .first()
-                or False
-            )
+            prev = Producto.objects.filter(pk=self.pk).values("diseno_listo", "estado_diseno").first() or {}
+            previous_ready = prev.get("diseno_listo") or False
+            previous_estado = prev.get("estado_diseno")
+
+        # Espejo entre la etapa y el booleano: manda lo que haya cambiado.
+        E = Producto.EstadoDiseno
+        if self.diseno_listo != previous_ready and self.estado_diseno == (previous_estado or self.estado_diseno):
+            self.estado_diseno = E.LISTO if self.diseno_listo else E.EN_DISENO
+        else:
+            self.diseno_listo = self.estado_diseno == E.LISTO
+        entra_a_cliente = self.estado_diseno == E.ESPERANDO_CLIENTE and previous_estado != E.ESPERANDO_CLIENTE
+        if entra_a_cliente:
+            self.rondas_cliente = (self.rondas_cliente or 0) + 1
+            update_fields = kwargs.get("update_fields")
+            if update_fields is not None:
+                kwargs["update_fields"] = set(update_fields) | {"rondas_cliente", "diseno_listo", "estado_diseno"}
 
         just_marked_ready = self.diseno_listo and not previous_ready
 
@@ -284,6 +324,15 @@ class Producto(models.Model):
             # tener que agregarlos a mano uno por uno — ver `CanalVenta`.
             for canal in CanalVenta.objects.filter(is_active=True):
                 ProductoCanalPrecio.objects.get_or_create(producto=self, canal=canal)
+
+        if entra_a_cliente and self.cobra_rediseno:
+            from config.slack import notificar
+
+            notificar(
+                "diseno_listo",
+                f":moneybag: *{self.name}*: va la ida y vuelta n.º {self.rondas_cliente} con el cliente — "
+                f"corresponde cobrar el rediseño.",
+            )
 
         if just_marked_ready:
             from config.slack import notificar

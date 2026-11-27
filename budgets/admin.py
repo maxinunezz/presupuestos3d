@@ -1483,7 +1483,7 @@ class ProductoAdmin(admin.ModelAdmin):
         "name",
         "sku",
         "priority",
-        "diseno_listo",
+        "estado_diseno",
         "unit_cost_display",
         "unit_price_display",
         "margin_on_price_display",
@@ -1493,11 +1493,11 @@ class ProductoAdmin(admin.ModelAdmin):
         "is_active",
         "updated_at",
     )
-    list_filter = ("is_active", "diseno_listo", "is_multicolor", "priority", "es_producto_ecommerce")
-    list_editable = ("priority", "diseno_listo")
+    list_filter = ("is_active", "estado_diseno", "is_multicolor", "priority", "es_producto_ecommerce")
+    list_editable = ("priority", "estado_diseno")
     search_fields = ("name", "description", "sku")
     inlines = (ProductoPiezaInline, ProductoAggregateLineInline, ProductoCanalPrecioInline)
-    readonly_fields = ("producto_id_display", "costs_summary", "price_info", "diseno_listo_at")
+    readonly_fields = ("producto_id_display", "costs_summary", "price_info", "diseno_listo_at", "aviso_rediseno")
     formfield_overrides = DECIMAL_LOCALIZE
 
     def get_queryset(self, request):
@@ -1551,8 +1551,8 @@ class ProductoAdmin(admin.ModelAdmin):
             },
         ),
         (
-            _("Handoff a producción"),
-            {"fields": ("diseno_listo", "diseno_listo_at")},
+            _("Diseño (handoff a producción)"),
+            {"fields": ("estado_diseno", "rondas_cliente", "aviso_rediseno", "diseno_listo_at")},
         ),
     )
 
@@ -1684,7 +1684,27 @@ class ProductoAdmin(admin.ModelAdmin):
             )
         )
 
+    @admin.display(description=_("Rediseño"))
+    def aviso_rediseno(self, obj):
+        if obj and obj.cobra_rediseno:
+            return gettext("Ya van %(n)s idas y vueltas: corresponde cobrar el rediseño.") % {"n": obj.rondas_cliente}
+        return "—"
+
     def save_model(self, request, obj, form, change):
+        # Diseño listo lo marca (o lo desmarca) solo quien tiene el permiso: Lucas (27/11/2026).
+        E = Producto.EstadoDiseno
+        antes = (Producto.objects.filter(pk=obj.pk).values_list("estado_diseno", flat=True).first()
+                 if obj.pk else E.EN_DISENO)
+        toca_listo = (antes == E.LISTO) != (obj.estado_diseno == E.LISTO)
+        if toca_listo and not request.user.has_perm("budgets.marcar_diseno_listo"):
+            obj.estado_diseno = antes or E.EN_DISENO
+            obj.diseno_listo = obj.estado_diseno == E.LISTO
+            self.message_user(
+                request,
+                gettext("«%(p)s»: Diseño listo lo marca solo Lucas (cierra diseño y cotización). No se cambió la etapa.")
+                % {"p": obj.name},
+                level=messages.ERROR,
+            )
         super().save_model(request, obj, form, change)
         # Feedback del sync con 3darg-backend (ver Producto.save() /
         # config/api_3darg.py::sync_costeo_ecommerce). sync_result queda en
