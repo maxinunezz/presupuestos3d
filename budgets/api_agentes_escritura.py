@@ -185,16 +185,15 @@ class CompletarPresupuestoEscritura(_VistaEscritura):
         if not p:
             return Response({"error": "Ese presupuesto no existe."}, status=404)
         abiertos = p.jobs.exclude(status__in=["DONE", "CANCELLED"]).count()
-        listo = p.is_ready_to_deliver or (p.status in (Presupuesto.Status.APPROVED, Presupuesto.Status.IN_PRODUCTION)
-                                          and p.stock_provisioned and not p.para_stock and abiertos == 0)
-        if not listo:
+        # 27/11/2026: con todo impreso el pedido queda en Post-impresión; mientras Roque no maneje esa etapa,
+        # marcar entregado desde ahí la da por terminada.
+        if p.status == Presupuesto.Status.POST_PRINT and not p.para_stock:
+            p.terminar_post_impresion()
+        if not p.is_ready_to_deliver:
             motivo = (f"tiene {abiertos} trabajo(s) de impresión sin terminar: marcalos impresos en presupuestos3d primero"
                       if abiertos else f"está {p.get_status_display().lower()}")
             return Response({"error": f"No se puede marcar entregado: {motivo}."}, status=409)
-        old = p.status
-        p.status = Presupuesto.Status.COMPLETED
-        p.apply_status_change(old)
-        p.save()
+        p.marcar_entregado(aprobo)
         resultado = _estado(p)
         self._registrar("completar", clave, aprobo, p, request.data, resultado)
         return Response(resultado)

@@ -1912,7 +1912,7 @@ class PresupuestoAdmin(admin.ModelAdmin):
         "production_summary",
         "pdf_link",
     )
-    actions = ("approve_presupuestos", "marcar_entregado", "cancelar_presupuestos")
+    actions = ("approve_presupuestos", "terminar_post_impresion", "marcar_entregado", "cancelar_presupuestos")
 
     # ---- Borrar: solo lo que no dejó huella (ver Presupuesto.motivo_no_borrar). Una venta aprobada se CANCELA.
     def has_delete_permission(self, request, obj=None):
@@ -1966,7 +1966,9 @@ class PresupuestoAdmin(admin.ModelAdmin):
                     "approved_at",
                     "production_started_at",
                     "production_finished_at",
+                    "ready_at",
                     "completed_at",
+                    "delivered_by",
                 ),
             },
         ),
@@ -2190,6 +2192,8 @@ class PresupuestoAdmin(admin.ModelAdmin):
                 in (
                     Presupuesto.Status.APPROVED,
                     Presupuesto.Status.IN_PRODUCTION,
+                    Presupuesto.Status.POST_PRINT,
+                    Presupuesto.Status.READY,
                     Presupuesto.Status.COMPLETED,
                 )
                 and not obj.stock_provisioned
@@ -2392,30 +2396,41 @@ class PresupuestoAdmin(admin.ModelAdmin):
                 continue
             self._message_approval(request, presupuesto, result)
 
-    @admin.action(description=_("Marcar como entregado (completar pedido listo de stock)"))
-    def marcar_entregado(self, request, queryset):
+    @admin.action(description=_("Terminar post-impresión (pasa a Listo para entregar)"))
+    def terminar_post_impresion(self, request, queryset):
         for presupuesto in queryset:
-            if not presupuesto.is_ready_to_deliver:
+            if presupuesto.terminar_post_impresion():
+                self.message_user(
+                    request,
+                    gettext("Presupuesto #%(pk)s: %(estado)s.")
+                    % {"pk": presupuesto.pk, "estado": presupuesto.get_status_display().lower()},
+                )
+            else:
+                self.message_user(
+                    request,
+                    gettext("Presupuesto #%(pk)s: no está en post-impresión (está %(estado)s).")
+                    % {"pk": presupuesto.pk, "estado": presupuesto.get_status_display().lower()},
+                    level=messages.WARNING,
+                )
+
+    @admin.action(description=_("Marcar como entregado"))
+    def marcar_entregado(self, request, queryset):
+        quien = request.user.get_full_name() or request.user.get_username()
+        for presupuesto in queryset:
+            if not presupuesto.marcar_entregado(quien):
                 self.message_user(
                     request,
                     gettext(
                         "Presupuesto #%(pk)s: no está listo para entregar "
-                        "(o tiene producción pendiente, o no está aprobado/servido "
-                        "de stock). No se completó."
+                        "(está %(estado)s). No se marcó entregado."
                     )
-                    % {"pk": presupuesto.pk},
+                    % {"pk": presupuesto.pk, "estado": presupuesto.get_status_display().lower()},
                     level=messages.WARNING,
                 )
                 continue
-            old_status = presupuesto.status
-            presupuesto.status = Presupuesto.Status.COMPLETED
-            presupuesto.apply_status_change(old_status)
-            presupuesto.save()
             self.message_user(
                 request,
-                gettext(
-                    "Presupuesto #%(pk)s marcado como entregado y completado."
-                )
+                gettext("Presupuesto #%(pk)s marcado como entregado.")
                 % {"pk": presupuesto.pk},
             )
 

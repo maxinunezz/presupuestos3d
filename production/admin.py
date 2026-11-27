@@ -1095,6 +1095,8 @@ class TableroAdmin(admin.ModelAdmin):
                 status__in=[
                     Presupuesto.Status.APPROVED,
                     Presupuesto.Status.IN_PRODUCTION,
+                    Presupuesto.Status.POST_PRINT,
+                    Presupuesto.Status.READY,
                 ],
                 due_date__isnull=False,
             )

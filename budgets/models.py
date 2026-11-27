@@ -1218,7 +1218,11 @@ class Presupuesto(models.Model):
         SENT = "SENT", _("Enviado")
         APPROVED = "APPROVED", _("Aprobado")
         IN_PRODUCTION = "IN_PRODUCTION", _("En producción")
-        COMPLETED = "COMPLETED", _("Completado")
+        # 27/11/2026: después de imprimir todo viene la post-impresión (limpieza, armado, pintura, embalaje) y
+        # recién ahí queda listo para entregar. COMPLETED conserva su clave pero ahora significa ENTREGADO.
+        POST_PRINT = "POST_PRINT", _("Post-impresión")
+        READY = "READY", _("Listo para entregar")
+        COMPLETED = "COMPLETED", _("Entregado")
         CANCELLED = "CANCELLED", _("Cancelado")
 
     class EstadoVenta(models.TextChoices):
@@ -1323,7 +1327,9 @@ class Presupuesto(models.Model):
     production_finished_at = models.DateTimeField(
         _("Producción terminada el"), null=True, blank=True
     )
-    completed_at = models.DateTimeField(_("Completado el"), null=True, blank=True)
+    ready_at = models.DateTimeField(_("Listo para entregar el"), null=True, blank=True)
+    completed_at = models.DateTimeField(_("Entregado el"), null=True, blank=True)
+    delivered_by = models.CharField(_("Entregado por"), max_length=60, blank=True)
 
     # --- Entrega ---
     due_date = models.DateTimeField(
@@ -1516,12 +1522,38 @@ class Presupuesto(models.Model):
         Completado. Los pedidos para_stock no aplican (no se entregan: su
         terminado va al stock interno al completarse).
         """
+        if self.para_stock:
+            return False
+        if self.status == Presupuesto.Status.READY:
+            return True
         return (
             self.status == Presupuesto.Status.APPROVED
             and self.stock_provisioned
-            and not self.para_stock
             and not self.jobs.exists()
         )
+
+    def terminar_post_impresion(self):
+        """Post-impresión → Listo para entregar. Un pedido para stock no se entrega: pasa directo a Entregado
+        (COMPLETED) y sus terminados se suman al stock. Devuelve False si no estaba en post-impresión."""
+        Status = Presupuesto.Status
+        if self.status != Status.POST_PRINT:
+            return False
+        old = self.status
+        self.status = Status.COMPLETED if self.para_stock else Status.READY
+        self.apply_status_change(old)
+        self.save()
+        return True
+
+    def marcar_entregado(self, quien=""):
+        """Listo para entregar (o servido entero de stock) → Entregado, con quién lo entregó."""
+        if not self.is_ready_to_deliver:
+            return False
+        old = self.status
+        self.status = Presupuesto.Status.COMPLETED
+        self.delivered_by = (quien or "")[:60]
+        self.apply_status_change(old)
+        self.save()
+        return True
 
     # ---- Producción / tiempos ----
 
@@ -1932,14 +1964,16 @@ class Presupuesto(models.Model):
                 result = self._provision_production()
             if not self.production_started_at:
                 self.production_started_at = now
-        elif self.status == Status.COMPLETED:
+        elif self.status in (Status.POST_PRINT, Status.READY, Status.COMPLETED):
             if not self.stock_provisioned:
                 if not self.approved_at:
                     self.approved_at = now
                 result = self._provision_production()
             if not self.production_finished_at:
                 self.production_finished_at = now
-            if not self.completed_at:
+            if self.status in (Status.READY, Status.COMPLETED) and not self.ready_at:
+                self.ready_at = now
+            if self.status == Status.COMPLETED and not self.completed_at:
                 self.completed_at = now
             # Pedido para stock: al completarlo, sus terminados van al stock.
             self.add_finished_to_stock()
@@ -1953,6 +1987,7 @@ class Presupuesto(models.Model):
                 "approved_at",
                 "production_started_at",
                 "production_finished_at",
+                "ready_at",
                 "completed_at",
                 "updated_at",
             ]
@@ -1973,7 +2008,7 @@ class Presupuesto(models.Model):
         from caja.models import MovimientoCaja
 
         Status = Presupuesto.Status
-        if self.status in (Status.APPROVED, Status.IN_PRODUCTION, Status.COMPLETED):
+        if self.status in (Status.APPROVED, Status.IN_PRODUCTION, Status.POST_PRINT, Status.READY, Status.COMPLETED):
             return gettext("está %(estado)s: primero cancelalo (Estado → Cancelado) para devolver el material y anular "
                            "el cobro") % {"estado": self.get_status_display().lower()}
         if self.stock_provisioned and not self.stock_reversed:
@@ -1996,7 +2031,7 @@ class Presupuesto(models.Model):
           - Agregados: se devuelven completos (se usan recién al armar el pedido,
             y un pedido cancelado nunca llegó a armarse).
 
-        No revierte si el pedido ya estaba COMPLETADO (ahí ya se entregó).
+        No revierte si el pedido ya estaba ENTREGADO (COMPLETED).
         Idempotente vía `stock_reversed`. Devuelve un resumen
         {"filaments": [...], "aggregates": [...], "piezas": [...], "jobs_cancelled": n}.
         """
@@ -2020,7 +2055,7 @@ class Presupuesto(models.Model):
         do_reverse = (
             self.stock_provisioned
             and not self.stock_reversed
-            and prev in (Status.APPROVED, Status.IN_PRODUCTION)
+            and prev in (Status.APPROVED, Status.IN_PRODUCTION, Status.POST_PRINT, Status.READY)
         )
 
         with transaction.atomic():
@@ -2266,7 +2301,7 @@ class Presupuesto(models.Model):
 
           - todos los trabajos En cola            -> Aprobado
           - alguno Imprimiendo / alguno Impreso   -> En producción
-          - todos los trabajos Impresos           -> Completado
+          - todos los trabajos Impresos           -> Post-impresión
 
         Solo AVANZA la etapa (nunca retrocede ni des-aprueba) y solo actúa si
         el presupuesto ya está Aprobado o más adelante. Setea las fechas de
@@ -2279,7 +2314,7 @@ class Presupuesto(models.Model):
         from production.models import ProductionJob
 
         Status = Presupuesto.Status
-        order = {Status.APPROVED: 1, Status.IN_PRODUCTION: 2, Status.COMPLETED: 3}
+        order = {Status.APPROVED: 1, Status.IN_PRODUCTION: 2, Status.POST_PRINT: 3, Status.READY: 4, Status.COMPLETED: 5}
         if self.status not in order:
             return False
 
@@ -2297,7 +2332,7 @@ class Presupuesto(models.Model):
             for j in jobs
         )
         if all_done:
-            target = Status.COMPLETED
+            target = Status.POST_PRINT
         elif any_started:
             target = Status.IN_PRODUCTION
         else:
@@ -2310,25 +2345,17 @@ class Presupuesto(models.Model):
         self.status = target
         if not self.production_started_at:
             self.production_started_at = now
-        if target == Status.COMPLETED:
-            if not self.production_finished_at:
-                self.production_finished_at = now
-            if not self.completed_at:
-                self.completed_at = now
+        if target == Status.POST_PRINT and not self.production_finished_at:
+            self.production_finished_at = now
         self.save(
             update_fields=[
                 "status",
                 "production_started_at",
                 "production_finished_at",
-                "completed_at",
                 "updated_at",
             ]
         )
-        # Si el pedido es para stock y quedó completado, sus terminados van al
-        # stock de productos terminados.
-        if target == Status.COMPLETED:
-            self.add_finished_to_stock()
-
+        if target == Status.POST_PRINT:
             # Avisa a Slack (canal "pedidos-listos") que ya se imprimieron
             # todas las piezas de este pedido.
             from config.slack import notificar
@@ -2337,7 +2364,7 @@ class Presupuesto(models.Model):
                 "pedido_completado",
                 gettext(
                     ":white_check_mark: Pedido #%(pedido)s — %(cliente)s: se "
-                    "terminaron de imprimir todas las piezas."
+                    "terminaron de imprimir todas las piezas. Pasa a post-impresión."
                 )
                 % {"pedido": self.pk, "cliente": self.client_name},
             )
