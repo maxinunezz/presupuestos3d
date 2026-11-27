@@ -33,7 +33,7 @@ class ComprasGastosAgentesTests(TestCase):
             "lineas": [{"filamento_id": self.negro.id, "cantidad": "2000", "precio_total": "32000"},
                        {"insumo_id": self.bolsa.id, "cantidad": "100", "precio_total": "2500"}], **extra}, format="json")
 
-    def test_compra_suma_stock_actualiza_precio_y_deja_borrador_en_caja(self):
+    def test_compra_suma_stock_actualiza_precio_y_descuenta_de_caja(self):
         r = self._compra()
         self.assertEqual(r.status_code, 201, r.content)
         self.negro.refresh_from_db()
@@ -43,7 +43,7 @@ class ComprasGastosAgentesTests(TestCase):
         self.assertEqual(Compra.objects.get().status, Compra.Status.CONFIRMED)
         self.assertEqual(StockMovement.objects.filter(reason=StockMovement.Reason.PURCHASE).count(), 2)
         mov = MovimientoCaja.objects.get()
-        self.assertEqual((mov.estado, mov.monto, mov.tipo), (MovimientoCaja.Estado.BORRADOR, Decimal("34500"),
+        self.assertEqual((mov.estado, mov.monto, mov.tipo), (MovimientoCaja.Estado.CONFIRMADO, Decimal("34500"),
                                                              MovimientoCaja.Tipo.EGRESO))
         d = r.json()
         self.assertEqual((d["lineas"][0]["stock_antes"], d["lineas"][0]["stock_despues"]), ("500.00", "2500.00"))
@@ -140,6 +140,38 @@ class ComprasGastosAgentesTests(TestCase):
         self.assertEqual(r.json()["caja_borrador"], "Banco")
         self.negro.refresh_from_db()
         self.assertEqual(self.negro.stock_grams, Decimal("500"))
+
+    def test_gasto_descuenta_de_caja_confirmado_y_sin_duplicar(self):
+        r = self.c.post("/api/agentes/escritura/gastos/", {"clave": "g20", "aprobo": "Lucas", "concepto": "Uber",
+                        "monto": "15000", "categoria": "Administración", "medio_pago": "Transferencia"}, format="json")
+        self.assertEqual(r.status_code, 201, r.content)
+        movs = MovimientoCaja.objects.filter(gasto__concepto="Uber")
+        self.assertEqual(movs.count(), 1)
+        self.assertEqual((movs[0].estado, movs[0].monto, movs[0].cuenta.nombre),
+                         (MovimientoCaja.Estado.CONFIRMADO, Decimal("15000.00"), "Banco"))
+        self.assertEqual(CuentaCaja.objects.get(nombre="Banco").saldo_actual, Decimal("-15000.00"))
+
+    def test_mercado_pago_con_varias_cuentas_usa_la_que_se_llama_asi(self):
+        """Caso real 27/11: «Mercado Pago», «Horas maquinas» y «Mano de obra» tenían medio Mercado Pago y no se
+        registraba nada en caja."""
+        for n in ("Mercado Pago", "Horas maquinas", "Mano de obra"):
+            CuentaCaja.objects.create(nombre=n, medio_pago_default="MERCADOPAGO", fecha_saldo_inicial=date(2026, 1, 1))
+        r = self.c.post("/api/agentes/escritura/gastos/", {"clave": "g21", "aprobo": "Lucas", "concepto": "Uber MP",
+                        "monto": "15000", "categoria": "Administración", "medio_pago": "Mercado Pago"}, format="json")
+        self.assertEqual(r.json()["caja"], "Mercado Pago")
+        r = self._compra(clave="c21", medio_pago="Mercado Pago")
+        self.assertEqual(r.json()["caja"], "Mercado Pago")
+        mp = CuentaCaja.objects.get(nombre="Mercado Pago")
+        self.assertEqual(mp.saldo_actual, Decimal("-49500.00"))
+        self.assertFalse(MovimientoCaja.objects.filter(cuenta__nombre__in=["Horas maquinas", "Mano de obra"]).exists())
+
+    def test_medio_sin_cuenta_clara_no_inventa_caja(self):
+        for n in ("Horas maquinas", "Mano de obra"):
+            CuentaCaja.objects.create(nombre=n, medio_pago_default="MERCADOPAGO", fecha_saldo_inicial=date(2026, 1, 1))
+        r = self.c.post("/api/agentes/escritura/gastos/", {"clave": "g22", "aprobo": "Lucas", "concepto": "X",
+                        "monto": "100", "categoria": "Administración", "medio_pago": "Mercado Pago"}, format="json")
+        self.assertIsNone(r.json()["caja"])
+        self.assertFalse(MovimientoCaja.objects.exists())
 
     def test_gasto_categoria_inexistente_devuelve_las_que_hay(self):
         r = self.c.post("/api/agentes/escritura/gastos/", {"clave": "g2", "aprobo": "Lucas", "concepto": "X",
