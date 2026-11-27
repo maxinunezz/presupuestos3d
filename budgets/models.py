@@ -1198,6 +1198,10 @@ class PresupuestoNotApprovableError(Exception):
     """
 
 
+class SenaFaltanteError(PresupuestoNotApprovableError):
+    """Se intentó confirmar un pedido de cliente sin la seña mínima (27/11/2026: 50 %)."""
+
+
 class DisenoNoListoError(Exception):
     """
     Se intentó aprobar (= mandar a la cola de producción) un presupuesto que
@@ -1471,6 +1475,8 @@ class Presupuesto(models.Model):
             return
         if self.medio_pago not in self.CAJA_INMEDIATA_MEDIOS_PAGO:
             return
+        if self.pk and self.pagos.exists():
+            return  # con pagos cargados, cada pago genera su propio movimiento (ver PagoPresupuesto)
 
         from caja.models import CuentaCaja, MovimientoCaja
 
@@ -1519,6 +1525,58 @@ class Presupuesto(models.Model):
             )
             total = (steps * self.round_to).quantize(Decimal("0.01"))
         return total
+
+    # ---- Cobro por pagos (27/11/2026) ----
+    # Los pagos se cargan uno por uno (PagoPresupuesto: seña, saldo, devolución). Si el pedido tiene pagos, el estado
+    # de cobro y la fecha de cobro salen de ellos; si no tiene (pedidos viejos), siguen manuales como antes.
+    SENA_MINIMA = Decimal("0.50")
+
+    @property
+    def total_a_cobrar(self) -> Decimal:
+        extra = self.costo_envio if self.envio_cobrado_al_cliente else Decimal("0")
+        return (self.total + (extra or Decimal("0"))).quantize(Decimal("0.01"))
+
+    @property
+    def total_cobrado(self) -> Decimal:
+        neto = Decimal("0")
+        for p in self.pagos.all():
+            neto += -p.monto if p.tipo == PagoPresupuesto.Tipo.DEVOLUCION else p.monto
+        return neto.quantize(Decimal("0.01"))
+
+    @property
+    def saldo(self) -> Decimal:
+        return (self.total_a_cobrar - self.total_cobrado).quantize(Decimal("0.01"))
+
+    def sena_faltante(self) -> Decimal:
+        """Cuánto falta cobrar para llegar a la seña mínima. 0 si no hace falta: pedidos para stock, o pedidos viejos
+        sin pagos cargados pero marcados a mano como pago parcial o pagado."""
+        if self.para_stock or self.total <= 0:
+            return Decimal("0")
+        if not self.pagos.exists() and self.estado_venta in (self.EstadoVenta.PARCIAL, self.EstadoVenta.PAGADO):
+            return Decimal("0")
+        minimo = (self.total * self.SENA_MINIMA).quantize(Decimal("0.01"))
+        return max(Decimal("0"), minimo - self.total_cobrado)
+
+    def recalcular_cobro(self):
+        """Estado de venta, medio y fecha de cobro a partir de los pagos cargados. No hace nada sin pagos."""
+        pagos = list(self.pagos.order_by("fecha", "id"))
+        if not pagos:
+            return
+        cobrado = self.total_cobrado
+        if cobrado <= 0:
+            estado = self.EstadoVenta.PENDIENTE
+        elif cobrado < self.total_a_cobrar:
+            estado = self.EstadoVenta.PARCIAL
+        else:
+            estado = self.EstadoVenta.PAGADO
+        self.estado_venta = estado
+        cobros = [p for p in pagos if p.tipo != PagoPresupuesto.Tipo.DEVOLUCION]
+        if cobros:
+            self.medio_pago = cobros[-1].medio_pago
+        self.fecha_cobro = cobros[-1].fecha if (estado == self.EstadoVenta.PAGADO and cobros) else None
+        Presupuesto.objects.filter(pk=self.pk).update(
+            estado_venta=self.estado_venta, medio_pago=self.medio_pago, fecha_cobro=self.fecha_cobro,
+            updated_at=timezone.now())
 
     @property
     def total_pieces(self) -> int:
@@ -1933,6 +1991,15 @@ class Presupuesto(models.Model):
                 )
                 % {"pk": self.pk, "status": self.get_status_display()}
             )
+        falta = self.sena_faltante()
+        if falta > 0:
+            raise SenaFaltanteError(
+                gettext(
+                    "No se puede confirmar el presupuesto #%(pk)s: falta cobrar la seña "
+                    "(mínimo 50%%). Faltan $%(falta)s. Cargá el pago en «Pagos»."
+                )
+                % {"pk": self.pk, "falta": f"{falta:,.2f}"}
+            )
 
         with transaction.atomic():
             self.status = Presupuesto.Status.APPROVED
@@ -2228,7 +2295,9 @@ class Presupuesto(models.Model):
         """
         from caja.models import MovimientoCaja
 
-        for mov in list(self.movimientos_caja.all()):
+        # Los cobros cargados como pagos (seña/saldo) NO se revierten solos: la devolución, si la hay, se carga a
+        # mano como un pago de tipo Devolución (decisión 27/11/2026).
+        for mov in list(self.movimientos_caja.filter(pago_presupuesto__isnull=True)):
             if mov.estado == MovimientoCaja.Estado.CONFIRMADO:
                 tipo_opuesto = (
                     MovimientoCaja.Tipo.EGRESO
@@ -2393,6 +2462,103 @@ class Presupuesto(models.Model):
                 % {"pedido": self.pk, "cliente": self.client_name},
             )
         return True
+
+
+class PagoPresupuesto(models.Model):
+    """Un pago de un pedido (27/11/2026): seña, saldo o devolución. Con medio de caja inmediata genera su borrador
+    de movimiento de caja (ingreso; egreso si es devolución). Al guardar o borrar, recalcula el cobro del pedido."""
+
+    class Tipo(models.TextChoices):
+        SENA = "SENA", _("Seña")
+        SALDO = "SALDO", _("Pago / saldo")
+        DEVOLUCION = "DEVOLUCION", _("Devolución al cliente")
+
+    presupuesto = models.ForeignKey(Presupuesto, on_delete=models.CASCADE, related_name="pagos",
+                                    verbose_name=_("Presupuesto"))
+    tipo = models.CharField(_("Tipo"), max_length=12, choices=Tipo.choices, default=Tipo.SENA)
+    monto = models.DecimalField(_("Monto"), max_digits=12, decimal_places=2)
+    fecha = models.DateField(_("Fecha"), default=timezone.localdate)
+    medio_pago = models.CharField(_("Medio de pago"), max_length=20, choices=Presupuesto.MedioPago.choices)
+    notas = models.CharField(_("Notas"), max_length=200, blank=True)
+    cargado_por = models.CharField(_("Cargado por"), max_length=60, blank=True)
+    movimiento_caja = models.OneToOneField(
+        "caja.MovimientoCaja", on_delete=models.SET_NULL, null=True, blank=True, editable=False,
+        related_name="pago_presupuesto", verbose_name=_("Movimiento de caja"))
+    created_at = models.DateTimeField(_("Creado"), auto_now_add=True)
+
+    class Meta:
+        verbose_name = _("Pago")
+        verbose_name_plural = _("Pagos")
+        ordering = ["fecha", "id"]
+
+    def __str__(self):
+        return f"{self.get_tipo_display()} ${self.monto} ({self.fecha})"
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+
+        if self.monto is not None and self.monto <= 0:
+            raise ValidationError({"monto": _("El monto tiene que ser mayor a 0 (la devolución se elige en «Tipo»).")})
+
+    def save(self, *args, **kwargs):
+        nuevo = self.pk is None
+        super().save(*args, **kwargs)
+        if nuevo:
+            self._crear_movimiento_caja()
+        elif self.movimiento_caja_id:
+            self._sincronizar_movimiento()
+        self.presupuesto.recalcular_cobro()
+
+    def delete(self, *args, **kwargs):
+        from caja.models import MovimientoCaja
+
+        mov = self.movimiento_caja
+        presupuesto = self.presupuesto
+        if mov is not None:
+            if mov.estado == MovimientoCaja.Estado.BORRADOR:
+                mov.estado = MovimientoCaja.Estado.DESCARTADO
+                mov.save(update_fields=["estado"])
+            elif mov.estado == MovimientoCaja.Estado.CONFIRMADO:
+                MovimientoCaja.crear_borrador_automatico(
+                    cuenta=mov.cuenta,
+                    tipo=MovimientoCaja.Tipo.EGRESO if mov.tipo == MovimientoCaja.Tipo.INGRESO
+                    else MovimientoCaja.Tipo.INGRESO,
+                    monto=mov.monto, fecha=timezone.localdate(),
+                    concepto=gettext("Reversa por pago borrado — %(concepto)s") % {"concepto": mov.concepto},
+                    presupuesto=presupuesto)
+        result = super().delete(*args, **kwargs)
+        presupuesto.recalcular_cobro()
+        return result
+
+    def _concepto(self):
+        p = self.presupuesto
+        return gettext("%(tipo)s presupuesto #%(pk)s — %(cliente)s") % {
+            "tipo": self.get_tipo_display(), "pk": p.pk, "cliente": p.client_name}
+
+    def _crear_movimiento_caja(self):
+        """Borrador en caja si el medio es de caja inmediata y hay UNA cuenta configurada para ese medio (si no, se
+        carga a mano, igual que el cobro automático de siempre)."""
+        from caja.models import CuentaCaja, MovimientoCaja
+
+        if self.medio_pago not in Presupuesto.CAJA_INMEDIATA_MEDIOS_PAGO:
+            return
+        cuentas = CuentaCaja.objects.filter(medio_pago_default=self.medio_pago, is_active=True)
+        if cuentas.count() != 1:
+            return
+        mov = MovimientoCaja.crear_borrador_automatico(
+            cuenta=cuentas.first(),
+            tipo=MovimientoCaja.Tipo.EGRESO if self.tipo == self.Tipo.DEVOLUCION else MovimientoCaja.Tipo.INGRESO,
+            monto=self.monto, fecha=self.fecha, concepto=self._concepto(), presupuesto=self.presupuesto)
+        PagoPresupuesto.objects.filter(pk=self.pk).update(movimiento_caja=mov)
+        self.movimiento_caja = mov
+
+    def _sincronizar_movimiento(self):
+        """Si se corrige el pago y su movimiento sigue en borrador, se corrige igual (uno confirmado no se toca)."""
+        from caja.models import MovimientoCaja
+
+        MovimientoCaja.objects.filter(pk=self.movimiento_caja_id, estado=MovimientoCaja.Estado.BORRADOR).update(
+            monto=self.monto, fecha=self.fecha, concepto=self._concepto(),
+            tipo=MovimientoCaja.Tipo.EGRESO if self.tipo == self.Tipo.DEVOLUCION else MovimientoCaja.Tipo.INGRESO)
 
 
 class Metricas(Presupuesto):

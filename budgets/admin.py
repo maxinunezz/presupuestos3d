@@ -29,6 +29,7 @@ from .models import (
     HistorialPedidoProducido,
     Metricas,
     MetricasVentas,
+    PagoPresupuesto,
     PanelCostos,
     PanelVentas,
     PedidoOnline,
@@ -1750,6 +1751,17 @@ class ProductoAdmin(admin.ModelAdmin):
 # ===========================================================================
 
 
+class PagoPresupuestoInline(admin.TabularInline):
+    """Pagos del pedido uno por uno (27/11/2026): seña, saldo o devolución. El estado de cobro sale de acá."""
+
+    model = PagoPresupuesto
+    extra = 0
+    fields = ("tipo", "monto", "fecha", "medio_pago", "notas", "cargado_por")
+    readonly_fields = ("cargado_por",)
+    formfield_overrides = DECIMAL_LOCALIZE
+    verbose_name_plural = _("Pagos (seña mínima 50 % para confirmar)")
+
+
 class PresupuestoItemInline(admin.TabularInline):
     """El precio unitario NO se carga a mano: se toma siempre del costeo del
     producto (Producto.sale_price) y queda congelado en PresupuestoItem al
@@ -1905,7 +1917,7 @@ class PresupuestoAdmin(admin.ModelAdmin):
     list_filter = ("status", "para_stock", "vendedor")
     search_fields = ("client_name", "description", "vendedor")
     list_editable = ("status",)
-    inlines = (PresupuestoItemInline, ProductionJobInline)
+    inlines = (PresupuestoItemInline, PagoPresupuestoInline, ProductionJobInline)
     formfield_overrides = DECIMAL_LOCALIZE
     readonly_fields = (
         "totals_summary",
@@ -2181,6 +2193,15 @@ class PresupuestoAdmin(admin.ModelAdmin):
                     job.started_at = timezone.now()
                 job.save()
             formset.save_m2m()
+        elif formset.model is PagoPresupuesto:
+            quien = request.user.get_full_name() or request.user.get_username()
+            instances = formset.save(commit=False)
+            for deleted in formset.deleted_objects:
+                deleted.delete()
+            for pago in instances:
+                if not pago.pk:
+                    pago.cargado_por = quien[:60]
+                pago.save()
         else:
             super().save_formset(request, form, formset, change)
 
@@ -2209,6 +2230,20 @@ class PresupuestoAdmin(admin.ModelAdmin):
                 )
                 and not obj.stock_provisioned
             )
+            falta_sena = obj.sena_faltante() if dispara_produccion else 0
+            if falta_sena > 0:
+                obj.status = old_status
+                obj.save(update_fields=["status", "updated_at"])
+                self.message_user(
+                    request,
+                    gettext(
+                        "No se confirmó el presupuesto #%(pk)s: falta cobrar la seña (mínimo 50%%). "
+                        "Faltan $%(falta)s: cargalo en «Pagos»."
+                    )
+                    % {"pk": obj.pk, "falta": f"{falta_sena:,.2f}"},
+                    level=messages.ERROR,
+                )
+                return
             if dispara_produccion:
                 sin_diseno = obj.productos_sin_diseno_listo()
                 if sin_diseno:
@@ -2325,7 +2360,24 @@ class PresupuestoAdmin(admin.ModelAdmin):
             "&nbsp;&nbsp;" + gettext("Subtotal:") + f" ${obj.subtotal}<br>"
             "&nbsp;&nbsp;<b>" + gettext("TOTAL:") + f" ${obj.total}</b> "
             f"({piezas})<br>"
-            "&nbsp;&nbsp;<b>" + gettext("Beneficio total del pedido:") + f" ${obj.profit_total}</b>"
+            "&nbsp;&nbsp;<b>" + gettext("Beneficio total del pedido:") + f" ${obj.profit_total}</b><br>"
+            + self._cobro_resumen(obj)
+        )
+
+    def _cobro_resumen(self, obj):
+        if not obj.pagos.exists():
+            falta = obj.sena_faltante()
+            if obj.para_stock or not falta:
+                return ""
+            return "&nbsp;&nbsp;" + gettext("Seña mínima para confirmar:") + f" ${falta:,.2f}"
+        envio = (
+            "&nbsp;&nbsp;" + gettext("Envío a cargo del cliente:") + f" ${obj.costo_envio}<br>"
+            if obj.envio_cobrado_al_cliente and obj.costo_envio else ""
+        )
+        return (
+            envio
+            + "&nbsp;&nbsp;" + gettext("Cobrado:") + f" ${obj.total_cobrado}<br>"
+            + "&nbsp;&nbsp;<b>" + gettext("Saldo:") + f" ${obj.saldo}</b>"
         )
 
     def _message_approval(self, request, obj, result):
