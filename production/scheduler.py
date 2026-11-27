@@ -68,7 +68,7 @@ def compute_schedule(now: datetime = None) -> dict:
                 ],
             )
             .select_related("producto")
-            .order_by("producto__priority", "order", "id")
+            .order_by("presupuesto__prioridad", "order", "id")
         )
         for job in jobs:
             if job.status == ProductionJob.Status.PRINTING and job.started_at:
@@ -177,7 +177,7 @@ def rebalance_idle_machines(now: datetime = None) -> list:
                 ],
             )
             .select_related("producto", "pieza")
-            .order_by("producto__priority", "order", "id")
+            .order_by("presupuesto__prioridad", "order", "id")
         )
 
     for idle_machine in active_machines:

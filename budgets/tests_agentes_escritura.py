@@ -13,7 +13,7 @@ from .tests import add_pieza, make_producto
 LECTURA, ESCRITURA = "token-lectura", "token-escritura"
 
 
-@override_settings(AGENTES_API_TOKEN=LECTURA, AGENTES_ESCRITURA_TOKEN=ESCRITURA)
+@override_settings(AGENTES_API_TOKEN=LECTURA, AGENTES_ESCRITURA_TOKEN=ESCRITURA, SENA_MINIMA_PCT=0)
 class EscrituraAgentesTests(TestCase):
     def setUp(self):
         self.c = APIClient()
@@ -106,11 +106,14 @@ class EscrituraAgentesTests(TestCase):
         self.assertEqual(self.c.post(f"/api/agentes/escritura/presupuestos/{pid}/cancelar/", {"clave": "c2", "aprobo": "Lucas"},
                                      format="json").status_code, 409)
 
-    def test_sin_diseno_no_aprueba(self):
+    def test_sin_diseno_se_confirma_y_la_linea_espera(self):
+        # 27/11/2026: se confirma igual; la línea sin Diseño listo no descuenta ni se encola hasta que Lucas lo marque.
         pid = self._crear(producto=self.sin_diseno).json()["id"]
         r = self.c.post(f"/api/agentes/escritura/presupuestos/{pid}/aprobar/", {"clave": "a2", "aprobo": "Lucas"}, format="json")
-        self.assertEqual((r.status_code, r.json()["motivo"]), (409, "DisenoNoListoError"))
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(r.json()["esperando_diseno"], ["Vaso"])
         self.assertEqual(Filament.objects.get(pk=self.rojo.pk).stock_grams, Decimal("2000"))
+        self.assertFalse(ProductionJob.objects.filter(presupuesto_id=pid).exists())
 
     def test_presupuestos_cargados_a_mano_tambien(self):
         from .models import PresupuestoItem

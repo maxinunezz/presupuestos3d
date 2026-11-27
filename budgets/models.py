@@ -237,9 +237,34 @@ class Producto(models.Model):
         _("Diseño marcado listo el"), null=True, blank=True
     )
 
+    # --- Etapa de diseño (27/11/2026) ---
+    # Un producto nuevo (incluida una personalización, que es un producto propio) se da de alta apenas se vende, con
+    # precio provisorio, y queda En diseño. Va y viene con el cliente (Esperando aprobación del cliente) y SOLO Lucas
+    # (permiso `marcar_diseno_listo`) lo pasa a Diseño listo: eso cierra diseño y cotización y recién ahí se imprime.
+    # `diseno_listo` (booleano) se mantiene como espejo de estado_diseno == LISTO porque lo usa todo el resto.
+    class EstadoDiseno(models.TextChoices):
+        EN_DISENO = "EN_DISENO", _("En diseño")
+        ESPERANDO_CLIENTE = "ESPERANDO_CLIENTE", _("Esperando aprobación del cliente")
+        LISTO = "LISTO", _("Diseño listo")
+
+    RONDAS_SIN_CARGO = 1  # desde la 2ª ida y vuelta con el cliente se cobra el rediseño
+
+    estado_diseno = models.CharField(
+        _("Etapa de diseño"), max_length=20, choices=EstadoDiseno.choices, default=EstadoDiseno.EN_DISENO,
+        help_text=_("En diseño → Esperando aprobación del cliente (se puede ir y volver) → Diseño listo. "
+                    "Diseño listo lo marca solo Lucas: cierra el diseño y el precio."),
+    )
+    rondas_cliente = models.PositiveSmallIntegerField(
+        _("Idas y vueltas con el cliente"), default=0,
+        help_text=_("Suma 1 cada vez que el diseño se manda al cliente. Desde la 2ª se cobra rediseño."),
+    )
+
     class Meta:
         verbose_name = _("Costeo de producto")
         verbose_name_plural = _("Costeo de productos")
+        permissions = [
+            ("marcar_diseno_listo", "Puede marcar Diseño listo (cierra diseño y cotización)"),
+        ]
         # Por última modificación (el más reciente primero), no alfabético:
         # así lo que se tocó hace poco queda arriba del listado.
         ordering = ["-updated_at"]
@@ -258,16 +283,31 @@ class Producto(models.Model):
                 )
             })
 
+    @property
+    def cobra_rediseno(self) -> bool:
+        return self.rondas_cliente > self.RONDAS_SIN_CARGO
+
     def save(self, *args, **kwargs):
         is_new = self.pk is None
         previous_ready = False
+        previous_estado = None
         if self.pk:
-            previous_ready = (
-                Producto.objects.filter(pk=self.pk)
-                .values_list("diseno_listo", flat=True)
-                .first()
-                or False
-            )
+            prev = Producto.objects.filter(pk=self.pk).values("diseno_listo", "estado_diseno").first() or {}
+            previous_ready = prev.get("diseno_listo") or False
+            previous_estado = prev.get("estado_diseno")
+
+        # Espejo entre la etapa y el booleano: manda lo que haya cambiado.
+        E = Producto.EstadoDiseno
+        if self.diseno_listo != previous_ready and self.estado_diseno == (previous_estado or self.estado_diseno):
+            self.estado_diseno = E.LISTO if self.diseno_listo else E.EN_DISENO
+        else:
+            self.diseno_listo = self.estado_diseno == E.LISTO
+        entra_a_cliente = self.estado_diseno == E.ESPERANDO_CLIENTE and previous_estado != E.ESPERANDO_CLIENTE
+        if entra_a_cliente:
+            self.rondas_cliente = (self.rondas_cliente or 0) + 1
+            update_fields = kwargs.get("update_fields")
+            if update_fields is not None:
+                kwargs["update_fields"] = set(update_fields) | {"rondas_cliente", "diseno_listo", "estado_diseno"}
 
         just_marked_ready = self.diseno_listo and not previous_ready
 
@@ -285,13 +325,27 @@ class Producto(models.Model):
             for canal in CanalVenta.objects.filter(is_active=True):
                 ProductoCanalPrecio.objects.get_or_create(producto=self, canal=canal)
 
-        if just_marked_ready:
+        if entra_a_cliente and self.cobra_rediseno:
             from config.slack import notificar
 
             notificar(
                 "diseno_listo",
-                f":white_check_mark: *{self.name}* (prioridad {self.get_priority_display()}) "
-                f"tiene el diseño listo — ya se puede poner a imprimir.",
+                f":moneybag: *{self.name}*: va la ida y vuelta n.º {self.rondas_cliente} con el cliente — "
+                f"corresponde cobrar el rediseño.",
+            )
+
+        if just_marked_ready:
+            for presupuesto in Presupuesto.objects.filter(
+                items__producto=self, items__produccion_generada=False, stock_provisioned=True,
+                status__in=[Presupuesto.Status.APPROVED, Presupuesto.Status.IN_PRODUCTION],
+            ).distinct():
+                presupuesto.provisionar_items_listos()
+
+            from config.slack import notificar
+
+            notificar(
+                "diseno_listo",
+                f":white_check_mark: *{self.name}* tiene el diseño listo — ya se puede poner a imprimir.",
             )
 
         # Sincronización con 3darg-backend (ver `clean()`: con 'es_producto_ecommerce'
@@ -1191,11 +1245,62 @@ class StockProductos(Producto):
         verbose_name_plural = _("Stock de productos terminados")
 
 
+class Cliente(models.Model):
+    """Cliente con su prioridad en la cola (27/11/2026). La prioridad es del CLIENTE, no del producto: todo lo que se
+    imprime para un cliente entra a la cola con la prioridad que se le dio. Se crea solo con el nombre del presupuesto
+    (sin distinguir mayúsculas), así no hay que cargar nada aparte."""
+
+    nombre = models.CharField(_("Nombre"), max_length=150, unique=True)
+    prioridad = models.PositiveSmallIntegerField(
+        _("Prioridad en la cola"), choices=Producto.Priority.choices, default=Producto.Priority.SIN,
+        help_text=_("Lo de este cliente se imprime antes cuanto más alta la prioridad. Cambiarla reordena sus pedidos "
+                    "abiertos."),
+    )
+    notas = models.TextField(_("Notas"), blank=True)
+    created_at = models.DateTimeField(_("Creado"), auto_now_add=True)
+
+    class Meta:
+        verbose_name = _("Cliente")
+        verbose_name_plural = _("Clientes")
+        ordering = ["prioridad", "nombre"]
+
+    def __str__(self):
+        return self.nombre
+
+    @classmethod
+    def para_nombre(cls, nombre):
+        nombre = (nombre or "").strip()[:150]
+        if not nombre:
+            return None
+        return cls.objects.filter(nombre__iexact=nombre).first() or cls.objects.create(nombre=nombre)
+
+    def save(self, *args, **kwargs):
+        cambio = False
+        if self.pk:
+            antes = Cliente.objects.filter(pk=self.pk).values_list("prioridad", flat=True).first()
+            cambio = antes is not None and antes != self.prioridad
+        super().save(*args, **kwargs)
+        if cambio:
+            Presupuesto.objects.filter(client_name__iexact=self.nombre, para_stock=False).exclude(
+                status__in=[Presupuesto.Status.COMPLETED, Presupuesto.Status.CANCELLED]
+            ).update(prioridad=self.prioridad)
+            from production.scheduler import rebalance_idle_machines
+
+            try:
+                rebalance_idle_machines()
+            except Exception:  # reordenar es una mejora: si falla no puede frenar el guardado del cliente
+                pass
+
+
 class PresupuestoNotApprovableError(Exception):
     """
     Se intentó aprobar un presupuesto que no está en estado aprobable.
     Evita descontar stock dos veces sobre el mismo presupuesto.
     """
+
+
+class SenaFaltanteError(PresupuestoNotApprovableError):
+    """Se intentó confirmar un pedido de cliente sin la seña mínima (27/11/2026: 50 %)."""
 
 
 class DisenoNoListoError(Exception):
@@ -1218,7 +1323,11 @@ class Presupuesto(models.Model):
         SENT = "SENT", _("Enviado")
         APPROVED = "APPROVED", _("Aprobado")
         IN_PRODUCTION = "IN_PRODUCTION", _("En producción")
-        COMPLETED = "COMPLETED", _("Completado")
+        # 27/11/2026: después de imprimir todo viene la post-impresión (limpieza, armado, pintura, embalaje) y
+        # recién ahí queda listo para entregar. COMPLETED conserva su clave pero ahora significa ENTREGADO.
+        POST_PRINT = "POST_PRINT", _("Post-impresión")
+        READY = "READY", _("Listo para entregar")
+        COMPLETED = "COMPLETED", _("Entregado")
         CANCELLED = "CANCELLED", _("Cancelado")
 
     class EstadoVenta(models.TextChoices):
@@ -1246,6 +1355,10 @@ class Presupuesto(models.Model):
     }
 
     client_name = models.CharField(_("Cliente"), max_length=150)
+    prioridad = models.PositiveSmallIntegerField(
+        _("Prioridad en la cola"), choices=Producto.Priority.choices, default=Producto.Priority.SIN, editable=False,
+        help_text=_("Sale de la prioridad del cliente (Clientes). Los pedidos para stock van al final."),
+    )
     vendedor = models.CharField(
         _("Vendedor"), max_length=60, blank=True,
         help_text=_("Quién del equipo hizo la venta (lo completa Roque al registrar una venta)."),
@@ -1323,7 +1436,9 @@ class Presupuesto(models.Model):
     production_finished_at = models.DateTimeField(
         _("Producción terminada el"), null=True, blank=True
     )
-    completed_at = models.DateTimeField(_("Completado el"), null=True, blank=True)
+    ready_at = models.DateTimeField(_("Listo para entregar el"), null=True, blank=True)
+    completed_at = models.DateTimeField(_("Entregado el"), null=True, blank=True)
+    delivered_by = models.CharField(_("Entregado por"), max_length=60, blank=True)
 
     # --- Entrega ---
     due_date = models.DateTimeField(
@@ -1337,6 +1452,30 @@ class Presupuesto(models.Model):
     )
     due_date_is_manual = models.BooleanField(
         _("Entrega fijada a mano"), default=False
+    )
+
+    # --- Envío (27/11/2026): cómo se entrega y cuánto cuesta ---
+    class FormaEntrega(models.TextChoices):
+        RETIRA = "RETIRA", _("Retira el cliente")
+        MOTO = "MOTO", _("Moto / cadete")
+        CORREO = "CORREO", _("Correo / transporte")
+        OTRO = "OTRO", _("Otro")
+
+    forma_entrega = models.CharField(
+        _("Forma de entrega"), max_length=10, choices=FormaEntrega.choices, blank=True, default=""
+    )
+    costo_envio = models.DecimalField(
+        _("Costo del envío"), max_digits=12, decimal_places=2, default=Decimal("0"),
+        help_text=_("Lo que cuesta mandarlo (moto, correo). 0 si retira."),
+    )
+    envio_cobrado_al_cliente = models.BooleanField(
+        _("Envío a cargo del cliente"), default=False,
+        help_text=_("Marcá si el cliente paga el envío aparte del pedido."),
+    )
+    direccion_envio = models.CharField(_("Dirección de envío"), max_length=250, blank=True)
+    seguimiento_envio = models.CharField(
+        _("Seguimiento / empresa"), max_length=120, blank=True,
+        help_text=_("Número de seguimiento o empresa de correo/cadete."),
     )
 
     stock_provisioned = models.BooleanField(
@@ -1388,6 +1527,15 @@ class Presupuesto(models.Model):
             update_fields = kwargs.get("update_fields")
             if update_fields is not None:
                 kwargs["update_fields"] = set(update_fields) | {"fecha_cobro"}
+        # Prioridad del pedido = la del cliente (27/11/2026). Para stock va al final.
+        if self.para_stock:
+            self.prioridad = Producto.Priority.SIN
+        else:
+            cliente = Cliente.para_nombre(self.client_name)
+            self.prioridad = cliente.prioridad if cliente else Producto.Priority.SIN
+        update_fields = kwargs.get("update_fields")
+        if update_fields is not None:
+            kwargs["update_fields"] = set(update_fields) | {"prioridad"}
         old = None
         if self.pk:
             old = (
@@ -1441,6 +1589,8 @@ class Presupuesto(models.Model):
             return
         if self.medio_pago not in self.CAJA_INMEDIATA_MEDIOS_PAGO:
             return
+        if self.pk and self.pagos.exists():
+            return  # con pagos cargados, cada pago genera su propio movimiento (ver PagoPresupuesto)
 
         from caja.models import CuentaCaja, MovimientoCaja
 
@@ -1490,6 +1640,63 @@ class Presupuesto(models.Model):
             total = (steps * self.round_to).quantize(Decimal("0.01"))
         return total
 
+    # ---- Cobro por pagos (27/11/2026) ----
+    # Los pagos se cargan uno por uno (PagoPresupuesto: seña, saldo, devolución). Si el pedido tiene pagos, el estado
+    # de cobro y la fecha de cobro salen de ellos; si no tiene (pedidos viejos), siguen manuales como antes.
+    @property
+    def SENA_MINIMA(self) -> Decimal:
+        """Seña mínima para confirmar (27/11/2026: 50 %). Configurable con SENA_MINIMA_PCT (0 = no se exige)."""
+        from django.conf import settings
+
+        return Decimal(str(getattr(settings, "SENA_MINIMA_PCT", 50))) / Decimal("100")
+
+    @property
+    def total_a_cobrar(self) -> Decimal:
+        extra = self.costo_envio if self.envio_cobrado_al_cliente else Decimal("0")
+        return (self.total + (extra or Decimal("0"))).quantize(Decimal("0.01"))
+
+    @property
+    def total_cobrado(self) -> Decimal:
+        neto = Decimal("0")
+        for p in self.pagos.all():
+            neto += -p.monto if p.tipo == PagoPresupuesto.Tipo.DEVOLUCION else p.monto
+        return neto.quantize(Decimal("0.01"))
+
+    @property
+    def saldo(self) -> Decimal:
+        return (self.total_a_cobrar - self.total_cobrado).quantize(Decimal("0.01"))
+
+    def sena_faltante(self) -> Decimal:
+        """Cuánto falta cobrar para llegar a la seña mínima. 0 si no hace falta: pedidos para stock, o pedidos viejos
+        sin pagos cargados pero marcados a mano como pago parcial o pagado."""
+        if self.para_stock or self.total <= 0 or self.SENA_MINIMA <= 0:
+            return Decimal("0")
+        if not self.pagos.exists() and self.estado_venta in (self.EstadoVenta.PARCIAL, self.EstadoVenta.PAGADO):
+            return Decimal("0")
+        minimo = (self.total * self.SENA_MINIMA).quantize(Decimal("0.01"))
+        return max(Decimal("0"), minimo - self.total_cobrado)
+
+    def recalcular_cobro(self):
+        """Estado de venta, medio y fecha de cobro a partir de los pagos cargados. No hace nada sin pagos."""
+        pagos = list(self.pagos.order_by("fecha", "id"))
+        if not pagos:
+            return
+        cobrado = self.total_cobrado
+        if cobrado <= 0:
+            estado = self.EstadoVenta.PENDIENTE
+        elif cobrado < self.total_a_cobrar:
+            estado = self.EstadoVenta.PARCIAL
+        else:
+            estado = self.EstadoVenta.PAGADO
+        self.estado_venta = estado
+        cobros = [p for p in pagos if p.tipo != PagoPresupuesto.Tipo.DEVOLUCION]
+        if cobros:
+            self.medio_pago = cobros[-1].medio_pago
+        self.fecha_cobro = cobros[-1].fecha if (estado == self.EstadoVenta.PAGADO and cobros) else None
+        Presupuesto.objects.filter(pk=self.pk).update(
+            estado_venta=self.estado_venta, medio_pago=self.medio_pago, fecha_cobro=self.fecha_cobro,
+            updated_at=timezone.now())
+
     @property
     def total_pieces(self) -> int:
         return sum(item.quantity for item in self.items.all())
@@ -1516,12 +1723,39 @@ class Presupuesto(models.Model):
         Completado. Los pedidos para_stock no aplican (no se entregan: su
         terminado va al stock interno al completarse).
         """
+        if self.para_stock:
+            return False
+        if self.status == Presupuesto.Status.READY:
+            return True
         return (
             self.status == Presupuesto.Status.APPROVED
             and self.stock_provisioned
-            and not self.para_stock
             and not self.jobs.exists()
+            and not self.tiene_items_esperando_diseno
         )
+
+    def terminar_post_impresion(self):
+        """Post-impresión → Listo para entregar. Un pedido para stock no se entrega: pasa directo a Entregado
+        (COMPLETED) y sus terminados se suman al stock. Devuelve False si no estaba en post-impresión."""
+        Status = Presupuesto.Status
+        if self.status != Status.POST_PRINT:
+            return False
+        old = self.status
+        self.status = Status.COMPLETED if self.para_stock else Status.READY
+        self.apply_status_change(old)
+        self.save()
+        return True
+
+    def marcar_entregado(self, quien=""):
+        """Listo para entregar (o servido entero de stock) → Entregado, con quién lo entregó."""
+        if not self.is_ready_to_deliver:
+            return False
+        old = self.status
+        self.status = Presupuesto.Status.COMPLETED
+        self.delivered_by = (quien or "")[:60]
+        self.apply_status_change(old)
+        self.save()
+        return True
 
     # ---- Producción / tiempos ----
 
@@ -1581,29 +1815,46 @@ class Presupuesto(models.Model):
         listo' en su costeo. Devuelve una lista de nombres (ordenada), vacía si
         no hay ninguno. Se usa para avisar/bloquear ANTES de aprobar.
         """
-        sin_diseno = set()
-        for item in self.items.select_related("producto").all():
-            qty = item.quantity
-            if qty <= 0:
-                continue
-            if not self.para_stock:
-                qty = max(qty - item.producto.stock_quantity, 0)
-            if qty <= 0:
-                continue
-            producto = item.producto
-            if producto.diseno_listo:
-                continue
-            for pp in producto.producto_piezas.select_related("pieza").all():
-                units_required = pp.units_needed * qty
-                if units_required <= 0:
-                    continue
-                to_print = units_required - min(pp.pieza.stock_quantity, units_required)
-                if to_print > 0:
-                    sin_diseno.add(producto.name)
-                    break
-        return sorted(sin_diseno)
+        return sorted({item.producto.name for item in self.items.select_related("producto").all()
+                       if not item.produccion_generada and self._item_espera_diseno(item)})
 
-    def _provision_production(self):
+    def _item_espera_diseno(self, item) -> bool:
+        """La línea necesita imprimirse (no se cubre con stock de terminados ni de piezas) y su producto todavía no
+        tiene Diseño listo: no se descuenta ni se encola hasta que lo tenga."""
+        producto = item.producto
+        if producto.diseno_listo or item.quantity <= 0:
+            return False
+        qty = item.quantity if self.para_stock else max(item.quantity - producto.stock_quantity, 0)
+        if qty <= 0:
+            return False
+        for pp in producto.producto_piezas.select_related("pieza").all():
+            units_required = pp.units_needed * qty
+            if units_required > 0 and units_required - min(pp.pieza.stock_quantity, units_required) > 0:
+                return True
+        return False
+
+    @property
+    def tiene_items_esperando_diseno(self) -> bool:
+        return self.stock_provisioned and self.items.filter(produccion_generada=False, quantity__gt=0).exists()
+
+    def provisionar_items_listos(self):
+        """Lucas marcó Diseño listo en algún producto: las líneas de este pedido que esperaban ese diseño pasan al
+        precio final (si era provisorio), descuentan su stock/material y entran a la cola. Idempotente."""
+        Status = Presupuesto.Status
+        if self.status not in (Status.APPROVED, Status.IN_PRODUCTION) or not self.stock_provisioned:
+            return None
+        for item in self.items.select_related("producto").filter(produccion_generada=False):
+            if item.precio_provisorio and item.producto.diseno_listo:
+                item.unit_price = item.producto.unit_price
+                item.precio_provisorio = False
+                item.save(update_fields=["unit_price", "precio_provisorio"])
+        with transaction.atomic():
+            result = self._provision_production(solo_pendientes=True)
+        self.refresh_delivery()
+        self.recalcular_cobro()
+        return result
+
+    def _provision_production(self, solo_pendientes=False, credito_piezas=None):
         """
         Al APROBAR el pedido (= confirmarlo) hace de una sola vez todo el trabajo
         de inventario y cola, de forma idempotente (no descuenta dos veces):
@@ -1628,23 +1879,19 @@ class Presupuesto(models.Model):
 
         from inventory.models import StockMovement
 
-        result = {"from_stock": [], "from_finished": [], "shortages": []}
-        if self.stock_provisioned:
+        result = {"from_stock": [], "from_finished": [], "shortages": [], "esperando_diseno": []}
+        primera_vez = not self.stock_provisioned
+        if not primera_vez and not solo_pendientes:
             return result
 
-        # Antes de tocar el inventario: si algún producto necesita imprimirse
-        # y no tiene el diseño marcado como listo, no se aprueba (no se puede
-        # mandar a la cola de producción sin diseño listo).
-        sin_diseno = self.productos_sin_diseno_listo()
-        if sin_diseno:
-            raise DisenoNoListoError(
-                gettext(
-                    "No se puede aprobar: falta marcar 'Diseño listo' en el "
-                    "costeo de estos productos antes de mandarlos a la cola de "
-                    "producción: %(productos)s."
-                )
-                % {"productos": ", ".join(sin_diseno)}
-            )
+        # 27/11/2026: las líneas cuyo producto todavía no tiene Diseño listo NO se descuentan ni se encolan (antes
+        # bloqueaban la aprobación entera). Quedan esperando y se generan solas cuando Lucas marca Diseño listo.
+        listos = []
+        for item in self.items.select_related("producto").filter(produccion_generada=False):
+            if self._item_espera_diseno(item):
+                result["esperando_diseno"].append(item.producto.name)
+            else:
+                listos.append(item)
 
         free = machine_free_times()
 
@@ -1653,7 +1900,7 @@ class Presupuesto(models.Model):
         #    material o agregados (esos ya se gastaron cuando se fabricó el stock).
         #    Los pedidos 'para stock' nunca consumen su propio stock: producen.
         produce_qty = {}  # item.id -> unidades que sí hay que producir
-        for item in self.items.select_related("producto").all():
+        for item in listos:
             qty = item.quantity
             if not self.para_stock and qty > 0:
                 from_finished = min(item.producto.stock_quantity, qty)
@@ -1669,9 +1916,11 @@ class Presupuesto(models.Model):
                     )
             produce_qty[item.id] = qty
 
-        # 1) Planificamos qué imprimir, descontando primero el stock de piezas.
+        # 1) Planificamos qué imprimir, descontando primero lo ya impreso de este pedido (al editarlo) y después
+        #    el stock de piezas.
+        credito = dict(credito_piezas or {})
         plan = []  # (item, pieza, unidades_a_imprimir)
-        for item in self.items.select_related("producto").all():
+        for item in listos:
             item_qty = produce_qty[item.id]
             if item_qty <= 0:
                 continue
@@ -1680,6 +1929,12 @@ class Presupuesto(models.Model):
                 units_required = pp.units_needed * item_qty
                 if units_required <= 0:
                     continue
+                ya_hecho = min(credito.get(pieza.pk, 0), units_required)
+                if ya_hecho:
+                    credito[pieza.pk] -= ya_hecho
+                    units_required -= ya_hecho
+                    if units_required <= 0:
+                        continue
                 from_stock = min(pieza.stock_quantity, units_required)
                 if from_stock > 0:
                     Pieza.objects.filter(pk=pieza.pk).update(
@@ -1696,6 +1951,12 @@ class Presupuesto(models.Model):
                 if to_print > 0:
                     plan.append((item, pieza, to_print))
 
+        # Lo impreso de más (se bajó la cantidad al editar el pedido) va al stock de piezas.
+        for pieza_id, sobra in credito.items():
+            if sobra > 0:
+                Pieza.objects.filter(pk=pieza_id).update(stock_quantity=models.F("stock_quantity") + sobra)
+                result.setdefault("sobrante_a_stock", []).append({"pieza_id": pieza_id, "units": sobra})
+
         # 2) Creamos los trabajos (los más largos primero, para balancear las
         #    colas) y descontamos el filamento de cada uno.
         def _job_hours(pieza, to_print):
@@ -1704,7 +1965,7 @@ class Presupuesto(models.Model):
 
         # Prioridad manual del producto primero (1=Alta … 9=Sin prioridad va al
         # final); a igual prioridad, el trabajo más largo se asigna antes.
-        plan.sort(key=lambda t: (t[0].producto.priority, -_job_hours(t[1], t[2])))
+        plan.sort(key=lambda t: -_job_hours(t[1], t[2]))  # todo el pedido comparte la prioridad del cliente
 
         for item, pieza, to_print in plan:
             print_hours = _job_hours(pieza, to_print)
@@ -1738,7 +1999,7 @@ class Presupuesto(models.Model):
 
         # 3) Agregados a nivel producto (× lo que se PRODUCE, no lo servido del
         #    stock de terminados, que ya traía sus agregados).
-        for item in self.items.select_related("producto").all():
+        for item in listos:
             item_qty = produce_qty[item.id]
             if item_qty <= 0:
                 continue
@@ -1767,8 +2028,13 @@ class Presupuesto(models.Model):
                     note=note,
                 )
 
+        for item in listos:
+            item.produccion_generada = True
+            item.save(update_fields=["produccion_generada"])
         self.stock_provisioned = True
         self.save(update_fields=["stock_provisioned", "updated_at"])
+        if not primera_vez:
+            return result
 
         from config.zapier import notificar
 
@@ -1877,6 +2143,15 @@ class Presupuesto(models.Model):
                 )
                 % {"pk": self.pk, "status": self.get_status_display()}
             )
+        falta = self.sena_faltante()
+        if falta > 0:
+            raise SenaFaltanteError(
+                gettext(
+                    "No se puede confirmar el presupuesto #%(pk)s: falta cobrar la seña "
+                    "(mínimo 50%%). Faltan $%(falta)s. Cargá el pago en «Pagos»."
+                )
+                % {"pk": self.pk, "falta": f"{falta:,.2f}"}
+            )
 
         with transaction.atomic():
             self.status = Presupuesto.Status.APPROVED
@@ -1932,14 +2207,16 @@ class Presupuesto(models.Model):
                 result = self._provision_production()
             if not self.production_started_at:
                 self.production_started_at = now
-        elif self.status == Status.COMPLETED:
+        elif self.status in (Status.POST_PRINT, Status.READY, Status.COMPLETED):
             if not self.stock_provisioned:
                 if not self.approved_at:
                     self.approved_at = now
                 result = self._provision_production()
             if not self.production_finished_at:
                 self.production_finished_at = now
-            if not self.completed_at:
+            if self.status in (Status.READY, Status.COMPLETED) and not self.ready_at:
+                self.ready_at = now
+            if self.status == Status.COMPLETED and not self.completed_at:
                 self.completed_at = now
             # Pedido para stock: al completarlo, sus terminados van al stock.
             self.add_finished_to_stock()
@@ -1953,6 +2230,7 @@ class Presupuesto(models.Model):
                 "approved_at",
                 "production_started_at",
                 "production_finished_at",
+                "ready_at",
                 "completed_at",
                 "updated_at",
             ]
@@ -1962,6 +2240,45 @@ class Presupuesto(models.Model):
             self.refresh_delivery()
 
         return result
+
+    ESTADOS_EDITABLES = ("APPROVED", "IN_PRODUCTION", "POST_PRINT", "READY")  # editar pedido confirmado
+
+    DIAS_VENCIMIENTO = 10  # 27/11/2026: Enviado sin respuesta del cliente → se cancela solo y se avisa
+
+    @classmethod
+    def vencer_sin_respuesta(cls, dias=None, simular=False):
+        """Cancela los presupuestos Enviados hace más de `dias` días (por defecto 10) y avisa a Slack para que le
+        llegue a quien vendió y a Lucas. Devuelve la lista de lo vencido. Con simular=True no toca nada."""
+        from datetime import timedelta
+
+        from django.db.models import Q
+        from django.db.models.functions import Coalesce
+
+        dias = cls.DIAS_VENCIMIENTO if dias is None else dias
+        limite = timezone.now() - timedelta(days=dias)
+        qs = (cls.objects.filter(status=cls.Status.SENT)
+              .annotate(_enviado=Coalesce("sent_at", "created_at"))
+              .filter(Q(_enviado__lt=limite)).order_by("_enviado"))
+        vencidos = []
+        for p in qs:
+            vencidos.append({"id": p.pk, "cliente": p.client_name, "vendedor": p.vendedor,
+                             "enviado": timezone.localtime(p._enviado).date().isoformat()})
+            if simular:
+                continue
+            nota = gettext("Cancelado solo: %(dias)s días sin respuesta del cliente (%(fecha)s).") % {
+                "dias": dias, "fecha": timezone.localdate().isoformat()}
+            p.description = (f"{p.description}\n\n{nota}" if p.description else nota)
+            p.save(update_fields=["description", "updated_at"])
+            p.cancel(old_status=cls.Status.SENT)
+        if vencidos and not simular:
+            from config.slack import notificar
+
+            lineas = "\n".join(f"• #{v['id']} {v['cliente']} — vendió {v['vendedor'] or 'sin vendedor'}"
+                                for v in vencidos)
+            notificar("presupuesto_vencido", gettext(
+                ":hourglass: Presupuestos cancelados por %(dias)s días sin respuesta:\n%(lineas)s")
+                % {"dias": dias, "lineas": lineas})
+        return vencidos
 
     def motivo_no_borrar(self) -> str:
         """Por qué este presupuesto NO se puede borrar ("" si se puede).
@@ -1973,7 +2290,7 @@ class Presupuesto(models.Model):
         from caja.models import MovimientoCaja
 
         Status = Presupuesto.Status
-        if self.status in (Status.APPROVED, Status.IN_PRODUCTION, Status.COMPLETED):
+        if self.status in (Status.APPROVED, Status.IN_PRODUCTION, Status.POST_PRINT, Status.READY, Status.COMPLETED):
             return gettext("está %(estado)s: primero cancelalo (Estado → Cancelado) para devolver el material y anular "
                            "el cobro") % {"estado": self.get_status_display().lower()}
         if self.stock_provisioned and not self.stock_reversed:
@@ -1996,7 +2313,7 @@ class Presupuesto(models.Model):
           - Agregados: se devuelven completos (se usan recién al armar el pedido,
             y un pedido cancelado nunca llegó a armarse).
 
-        No revierte si el pedido ya estaba COMPLETADO (ahí ya se entregó).
+        No revierte si el pedido ya estaba ENTREGADO (COMPLETED).
         Idempotente vía `stock_reversed`. Devuelve un resumen
         {"filaments": [...], "aggregates": [...], "piezas": [...], "jobs_cancelled": n}.
         """
@@ -2020,121 +2337,12 @@ class Presupuesto(models.Model):
         do_reverse = (
             self.stock_provisioned
             and not self.stock_reversed
-            and prev in (Status.APPROVED, Status.IN_PRODUCTION)
+            and prev in (Status.APPROVED, Status.IN_PRODUCTION, Status.POST_PRINT, Status.READY)
         )
 
         with transaction.atomic():
             if do_reverse:
-                jobs = list(
-                    self.jobs.select_related("pieza", "producto").exclude(
-                        status=JobStatus.CANCELLED
-                    )
-                )
-                # Cuánto se había encolado de cada pieza (impreso o por imprimir).
-                queued_by_pieza = defaultdict(int)
-                for job in jobs:
-                    if job.pieza_id:
-                        queued_by_pieza[job.pieza_id] += job.quantity
-
-                for job in jobs:
-                    if job.status == JobStatus.DONE:
-                        # Ya impreso: las piezas del pedido pasan a stock. El
-                        # filamento ya se consumió de verdad (no se devuelve).
-                        if job.pieza_id and job.quantity:
-                            Pieza.objects.filter(pk=job.pieza_id).update(
-                                stock_quantity=models.F("stock_quantity")
-                                + job.quantity
-                            )
-                            summary["piezas"].append(
-                                {
-                                    "pieza": job.pieza.name,
-                                    "units": job.quantity,
-                                    "motivo": gettext("ya impresa"),
-                                }
-                            )
-                        continue
-
-                    # Trabajo en cola (no impreso): devolvemos su filamento.
-                    if job.stock_consumed:
-                        self._return_job_filament(
-                            job, summary, Filament, StockMovement
-                        )
-                    job.status = JobStatus.CANCELLED
-                    job.save(update_fields=["status"])
-                    job.register_history(estado=HistorialImpresion.Estado.CANCELADO)
-                    summary["jobs_cancelled"] += 1
-
-                # Piezas que se habían tomado del stock (no impresas): devolverlas.
-                # Se reconstruye sobre lo que se PRODUJO (cantidad − lo servido del
-                # stock de terminados), que es lo que generó piezas y agregados.
-                required_by_pieza = defaultdict(int)
-                pieza_obj = {}
-                for item in self.items.select_related("producto").all():
-                    produced = item.quantity - item.from_finished_stock
-                    if produced <= 0:
-                        continue
-                    for pp in item.producto.producto_piezas.select_related("pieza").all():
-                        pieza = pp.pieza
-                        required_by_pieza[pieza.pk] += pp.units_needed * produced
-                        pieza_obj[pieza.pk] = pieza
-                for pid, required in required_by_pieza.items():
-                    from_stock = required - queued_by_pieza.get(pid, 0)
-                    if from_stock > 0:
-                        Pieza.objects.filter(pk=pid).update(
-                            stock_quantity=models.F("stock_quantity") + from_stock
-                        )
-                        summary["piezas"].append(
-                            {
-                                "pieza": pieza_obj[pid].name,
-                                "units": from_stock,
-                                "motivo": gettext("estaba en stock"),
-                            }
-                        )
-
-                # Agregados (a nivel producto): se devuelven por lo producido.
-                for item in self.items.select_related("producto").all():
-                    produced = item.quantity - item.from_finished_stock
-                    if produced <= 0:
-                        continue
-                    producto = item.producto
-                    for line in producto.aggregate_lines.select_related(
-                        "aggregate"
-                    ).all():
-                        qty = producto.aggregate_qty_needed(line, produced)
-                        if qty <= 0:
-                            continue
-                        agg = line.aggregate
-                        Aggregate.objects.filter(pk=agg.pk).update(
-                            stock_quantity=models.F("stock_quantity") + qty
-                        )
-                        StockMovement.objects.create(
-                            aggregate=agg,
-                            quantity=qty,
-                            reason=StockMovement.Reason.BUDGET_CANCELLED,
-                            related_presupuesto=self,
-                            note=gettext(
-                                "Cancelación pedido #%(pk)s: %(producto)s ×%(qty)s"
-                            )
-                            % {"pk": self.pk, "producto": producto, "qty": produced},
-                        )
-                        summary["aggregates"].append({"item": str(agg), "units": qty})
-
-                # Stock de PRODUCTOS TERMINADOS que se había servido al aprobar:
-                # se devuelve (esas unidades nunca se entregaron).
-                for item in self.items.select_related("producto").all():
-                    if item.from_finished_stock > 0:
-                        Producto.objects.filter(pk=item.producto_id).update(
-                            stock_quantity=models.F("stock_quantity")
-                            + item.from_finished_stock
-                        )
-                        summary["finished"].append(
-                            {
-                                "producto": str(item.producto),
-                                "units": item.from_finished_stock,
-                            }
-                        )
-                        item.from_finished_stock = 0
-                        item.save(update_fields=["from_finished_stock"])
+                self._revertir_inventario(summary)
 
                 self.stock_reversed = True
             else:
@@ -2155,6 +2363,179 @@ class Presupuesto(models.Model):
 
         return summary
 
+    def _revertir_inventario(self, summary, conservar_iniciados=False, items_antes=None):
+        """Devuelve lo que se descontó al generar la producción. Lo usan cancel() y recalcular_pedido().
+
+        Con conservar_iniciados=True (editar un pedido) los trabajos impresos o imprimiéndose NO se tocan: se
+        devuelven como crédito {pieza_id: unidades} para que la producción nueva no los vuelva a imprimir.
+        """
+        from collections import defaultdict
+
+        from production.models import HistorialImpresion, ProductionJob
+
+        from inventory.models import Aggregate, Filament, StockMovement
+
+        JobStatus = ProductionJob.Status
+        credito = defaultdict(int)
+        # Al editar, lo que se devuelve se calcula sobre las líneas COMO ESTABAN al generar la producción (la foto
+        # tomada antes de guardar la edición), no sobre las nuevas.
+        items = items_antes if items_antes is not None else list(self.items.select_related("producto").all())
+        jobs = list(
+            self.jobs.select_related("pieza", "producto").exclude(
+                status=JobStatus.CANCELLED
+            )
+        )
+        # Cuánto se había encolado de cada pieza (impreso o por imprimir).
+        queued_by_pieza = defaultdict(int)
+        for job in jobs:
+            if job.pieza_id:
+                queued_by_pieza[job.pieza_id] += job.quantity
+
+        for job in jobs:
+            if conservar_iniciados and job.status in (JobStatus.DONE, JobStatus.PRINTING):
+                # Al editar el pedido: lo impreso o imprimiéndose se queda y cuenta como ya hecho (crédito).
+                if job.pieza_id:
+                    credito[job.pieza_id] += job.quantity
+                continue
+            if job.status == JobStatus.DONE:
+                # Ya impreso: las piezas del pedido pasan a stock. El
+                # filamento ya se consumió de verdad (no se devuelve).
+                if job.pieza_id and job.quantity:
+                    Pieza.objects.filter(pk=job.pieza_id).update(
+                        stock_quantity=models.F("stock_quantity")
+                        + job.quantity
+                    )
+                    summary["piezas"].append(
+                        {
+                            "pieza": job.pieza.name,
+                            "units": job.quantity,
+                            "motivo": gettext("ya impresa"),
+                        }
+                    )
+                continue
+
+            # Trabajo en cola (no impreso): devolvemos su filamento.
+            if job.stock_consumed:
+                self._return_job_filament(
+                    job, summary, Filament, StockMovement
+                )
+            job.status = JobStatus.CANCELLED
+            job.save(update_fields=["status"])
+            job.register_history(estado=HistorialImpresion.Estado.CANCELADO)
+            summary["jobs_cancelled"] += 1
+
+        # Piezas que se habían tomado del stock (no impresas): devolverlas.
+        # Se reconstruye sobre lo que se PRODUJO (cantidad − lo servido del
+        # stock de terminados), que es lo que generó piezas y agregados.
+        required_by_pieza = defaultdict(int)
+        pieza_obj = {}
+        for item in items:
+            produced = item.quantity - item.from_finished_stock
+            if produced <= 0 or not item.produccion_generada:
+                continue
+            for pp in item.producto.producto_piezas.select_related("pieza").all():
+                pieza = pp.pieza
+                required_by_pieza[pieza.pk] += pp.units_needed * produced
+                pieza_obj[pieza.pk] = pieza
+        for pid, required in required_by_pieza.items():
+            from_stock = required - queued_by_pieza.get(pid, 0)
+            if from_stock > 0:
+                Pieza.objects.filter(pk=pid).update(
+                    stock_quantity=models.F("stock_quantity") + from_stock
+                )
+                summary["piezas"].append(
+                    {
+                        "pieza": pieza_obj[pid].name,
+                        "units": from_stock,
+                        "motivo": gettext("estaba en stock"),
+                    }
+                )
+
+        # Agregados (a nivel producto): se devuelven por lo producido.
+        for item in items:
+            produced = item.quantity - item.from_finished_stock
+            if produced <= 0 or not item.produccion_generada:
+                continue
+            producto = item.producto
+            for line in producto.aggregate_lines.select_related(
+                "aggregate"
+            ).all():
+                qty = producto.aggregate_qty_needed(line, produced)
+                if qty <= 0:
+                    continue
+                agg = line.aggregate
+                Aggregate.objects.filter(pk=agg.pk).update(
+                    stock_quantity=models.F("stock_quantity") + qty
+                )
+                StockMovement.objects.create(
+                    aggregate=agg,
+                    quantity=qty,
+                    reason=StockMovement.Reason.BUDGET_CANCELLED,
+                    related_presupuesto=self,
+                    note=gettext(
+                        "Cancelación pedido #%(pk)s: %(producto)s ×%(qty)s"
+                    )
+                    % {"pk": self.pk, "producto": producto, "qty": produced},
+                )
+                summary["aggregates"].append({"item": str(agg), "units": qty})
+
+        # Stock de PRODUCTOS TERMINADOS que se había servido al aprobar:
+        # se devuelve (esas unidades nunca se entregaron).
+        for item in items:
+            if item.from_finished_stock > 0:
+                Producto.objects.filter(pk=item.producto_id).update(
+                    stock_quantity=models.F("stock_quantity")
+                    + item.from_finished_stock
+                )
+                summary["finished"].append(
+                    {
+                        "producto": str(item.producto),
+                        "units": item.from_finished_stock,
+                    }
+                )
+                if items_antes is None:
+                    item.from_finished_stock = 0
+                    item.save(update_fields=["from_finished_stock"])
+        return credito
+
+    def foto_items(self):
+        """Las líneas como están ahora (objetos en memoria): se toma ANTES de editar un pedido confirmado y se pasa a
+        recalcular_pedido() para devolver lo correcto."""
+        return list(self.items.select_related("producto").all())
+
+    def recalcular_pedido(self, items_antes):
+        """Editar un pedido ya confirmado (27/11/2026): después de cambiar líneas (cantidad, producto, color) se
+        recalcula todo sobre lo nuevo.
+
+          1. Se devuelve lo que no arrancó: trabajos en cola (y su filamento), piezas y terminados tomados del stock,
+             agregados. Lo impreso o imprimiéndose se conserva.
+          2. Se vuelve a generar la producción de todas las líneas: lo ya impreso cuenta como hecho y, si sobra
+             (bajó la cantidad), va al stock de piezas.
+          3. Si quedó algo por imprimir, el pedido vuelve a producción; se recalculan entrega y saldo.
+
+        Devuelve el resumen de lo devuelto y lo generado, o None si el pedido no está en una etapa editable."""
+        from production.models import ProductionJob
+
+        Status = Presupuesto.Status
+        if self.status not in self.ESTADOS_EDITABLES or not self.stock_provisioned or self.stock_reversed:
+            return None
+        devuelto = {"filaments": [], "aggregates": [], "piezas": [], "finished": [], "jobs_cancelled": 0}
+        with transaction.atomic():
+            credito = self._revertir_inventario(devuelto, conservar_iniciados=True, items_antes=items_antes)
+            self.items.update(produccion_generada=False, from_finished_stock=0)
+            result = self._provision_production(solo_pendientes=True, credito_piezas=credito)
+            abiertos = self.jobs.exclude(status__in=[ProductionJob.Status.DONE, ProductionJob.Status.CANCELLED])
+            if self.status in (Status.POST_PRINT, Status.READY) and (abiertos.exists()
+                                                                    or self.tiene_items_esperando_diseno):
+                iniciado = self.jobs.filter(
+                    status__in=[ProductionJob.Status.PRINTING, ProductionJob.Status.DONE]).exists()
+                self.status = Status.IN_PRODUCTION if iniciado else Status.APPROVED
+                self.save(update_fields=["status", "updated_at"])
+        self.sync_status_from_jobs()
+        self.refresh_delivery()
+        self.recalcular_cobro()
+        return {"devuelto": devuelto, **result}
+
     def _revert_movimientos_caja(self):
         """
         Al cancelar, por cada `MovimientoCaja` vinculado a este presupuesto:
@@ -2169,7 +2550,9 @@ class Presupuesto(models.Model):
         """
         from caja.models import MovimientoCaja
 
-        for mov in list(self.movimientos_caja.all()):
+        # Los cobros cargados como pagos (seña/saldo) NO se revierten solos: la devolución, si la hay, se carga a
+        # mano como un pago de tipo Devolución (decisión 27/11/2026).
+        for mov in list(self.movimientos_caja.filter(pago_presupuesto__isnull=True)):
             if mov.estado == MovimientoCaja.Estado.CONFIRMADO:
                 tipo_opuesto = (
                     MovimientoCaja.Tipo.EGRESO
@@ -2266,7 +2649,7 @@ class Presupuesto(models.Model):
 
           - todos los trabajos En cola            -> Aprobado
           - alguno Imprimiendo / alguno Impreso   -> En producción
-          - todos los trabajos Impresos           -> Completado
+          - todos los trabajos Impresos           -> Post-impresión
 
         Solo AVANZA la etapa (nunca retrocede ni des-aprueba) y solo actúa si
         el presupuesto ya está Aprobado o más adelante. Setea las fechas de
@@ -2279,7 +2662,7 @@ class Presupuesto(models.Model):
         from production.models import ProductionJob
 
         Status = Presupuesto.Status
-        order = {Status.APPROVED: 1, Status.IN_PRODUCTION: 2, Status.COMPLETED: 3}
+        order = {Status.APPROVED: 1, Status.IN_PRODUCTION: 2, Status.POST_PRINT: 3, Status.READY: 4, Status.COMPLETED: 5}
         if self.status not in order:
             return False
 
@@ -2296,8 +2679,10 @@ class Presupuesto(models.Model):
             j.status in (ProductionJob.Status.PRINTING, ProductionJob.Status.DONE)
             for j in jobs
         )
-        if all_done:
-            target = Status.COMPLETED
+        if all_done and not self.tiene_items_esperando_diseno:
+            target = Status.POST_PRINT
+        elif all_done:
+            target = Status.IN_PRODUCTION
         elif any_started:
             target = Status.IN_PRODUCTION
         else:
@@ -2310,25 +2695,17 @@ class Presupuesto(models.Model):
         self.status = target
         if not self.production_started_at:
             self.production_started_at = now
-        if target == Status.COMPLETED:
-            if not self.production_finished_at:
-                self.production_finished_at = now
-            if not self.completed_at:
-                self.completed_at = now
+        if target == Status.POST_PRINT and not self.production_finished_at:
+            self.production_finished_at = now
         self.save(
             update_fields=[
                 "status",
                 "production_started_at",
                 "production_finished_at",
-                "completed_at",
                 "updated_at",
             ]
         )
-        # Si el pedido es para stock y quedó completado, sus terminados van al
-        # stock de productos terminados.
-        if target == Status.COMPLETED:
-            self.add_finished_to_stock()
-
+        if target == Status.POST_PRINT:
             # Avisa a Slack (canal "pedidos-listos") que ya se imprimieron
             # todas las piezas de este pedido.
             from config.slack import notificar
@@ -2337,11 +2714,108 @@ class Presupuesto(models.Model):
                 "pedido_completado",
                 gettext(
                     ":white_check_mark: Pedido #%(pedido)s — %(cliente)s: se "
-                    "terminaron de imprimir todas las piezas."
+                    "terminaron de imprimir todas las piezas. Pasa a post-impresión."
                 )
                 % {"pedido": self.pk, "cliente": self.client_name},
             )
         return True
+
+
+class PagoPresupuesto(models.Model):
+    """Un pago de un pedido (27/11/2026): seña, saldo o devolución. Con medio de caja inmediata genera su borrador
+    de movimiento de caja (ingreso; egreso si es devolución). Al guardar o borrar, recalcula el cobro del pedido."""
+
+    class Tipo(models.TextChoices):
+        SENA = "SENA", _("Seña")
+        SALDO = "SALDO", _("Pago / saldo")
+        DEVOLUCION = "DEVOLUCION", _("Devolución al cliente")
+
+    presupuesto = models.ForeignKey(Presupuesto, on_delete=models.CASCADE, related_name="pagos",
+                                    verbose_name=_("Presupuesto"))
+    tipo = models.CharField(_("Tipo"), max_length=12, choices=Tipo.choices, default=Tipo.SENA)
+    monto = models.DecimalField(_("Monto"), max_digits=12, decimal_places=2)
+    fecha = models.DateField(_("Fecha"), default=timezone.localdate)
+    medio_pago = models.CharField(_("Medio de pago"), max_length=20, choices=Presupuesto.MedioPago.choices)
+    notas = models.CharField(_("Notas"), max_length=200, blank=True)
+    cargado_por = models.CharField(_("Cargado por"), max_length=60, blank=True)
+    movimiento_caja = models.OneToOneField(
+        "caja.MovimientoCaja", on_delete=models.SET_NULL, null=True, blank=True, editable=False,
+        related_name="pago_presupuesto", verbose_name=_("Movimiento de caja"))
+    created_at = models.DateTimeField(_("Creado"), auto_now_add=True)
+
+    class Meta:
+        verbose_name = _("Pago")
+        verbose_name_plural = _("Pagos")
+        ordering = ["fecha", "id"]
+
+    def __str__(self):
+        return f"{self.get_tipo_display()} ${self.monto} ({self.fecha})"
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+
+        if self.monto is not None and self.monto <= 0:
+            raise ValidationError({"monto": _("El monto tiene que ser mayor a 0 (la devolución se elige en «Tipo»).")})
+
+    def save(self, *args, **kwargs):
+        nuevo = self.pk is None
+        super().save(*args, **kwargs)
+        if nuevo:
+            self._crear_movimiento_caja()
+        elif self.movimiento_caja_id:
+            self._sincronizar_movimiento()
+        self.presupuesto.recalcular_cobro()
+
+    def delete(self, *args, **kwargs):
+        from caja.models import MovimientoCaja
+
+        mov = self.movimiento_caja
+        presupuesto = self.presupuesto
+        if mov is not None:
+            if mov.estado == MovimientoCaja.Estado.BORRADOR:
+                mov.estado = MovimientoCaja.Estado.DESCARTADO
+                mov.save(update_fields=["estado"])
+            elif mov.estado == MovimientoCaja.Estado.CONFIRMADO:
+                MovimientoCaja.crear_borrador_automatico(
+                    cuenta=mov.cuenta,
+                    tipo=MovimientoCaja.Tipo.EGRESO if mov.tipo == MovimientoCaja.Tipo.INGRESO
+                    else MovimientoCaja.Tipo.INGRESO,
+                    monto=mov.monto, fecha=timezone.localdate(),
+                    concepto=gettext("Reversa por pago borrado — %(concepto)s") % {"concepto": mov.concepto},
+                    presupuesto=presupuesto)
+        result = super().delete(*args, **kwargs)
+        presupuesto.recalcular_cobro()
+        return result
+
+    def _concepto(self):
+        p = self.presupuesto
+        return gettext("%(tipo)s presupuesto #%(pk)s — %(cliente)s") % {
+            "tipo": self.get_tipo_display(), "pk": p.pk, "cliente": p.client_name}
+
+    def _crear_movimiento_caja(self):
+        """Borrador en caja si el medio es de caja inmediata y hay UNA cuenta configurada para ese medio (si no, se
+        carga a mano, igual que el cobro automático de siempre)."""
+        from caja.models import CuentaCaja, MovimientoCaja
+
+        if self.medio_pago not in Presupuesto.CAJA_INMEDIATA_MEDIOS_PAGO:
+            return
+        cuentas = CuentaCaja.objects.filter(medio_pago_default=self.medio_pago, is_active=True)
+        if cuentas.count() != 1:
+            return
+        mov = MovimientoCaja.crear_borrador_automatico(
+            cuenta=cuentas.first(),
+            tipo=MovimientoCaja.Tipo.EGRESO if self.tipo == self.Tipo.DEVOLUCION else MovimientoCaja.Tipo.INGRESO,
+            monto=self.monto, fecha=self.fecha, concepto=self._concepto(), presupuesto=self.presupuesto)
+        PagoPresupuesto.objects.filter(pk=self.pk).update(movimiento_caja=mov)
+        self.movimiento_caja = mov
+
+    def _sincronizar_movimiento(self):
+        """Si se corrige el pago y su movimiento sigue en borrador, se corrige igual (uno confirmado no se toca)."""
+        from caja.models import MovimientoCaja
+
+        MovimientoCaja.objects.filter(pk=self.movimiento_caja_id, estado=MovimientoCaja.Estado.BORRADOR).update(
+            monto=self.monto, fecha=self.fecha, concepto=self._concepto(),
+            tipo=MovimientoCaja.Tipo.EGRESO if self.tipo == self.Tipo.DEVOLUCION else MovimientoCaja.Tipo.INGRESO)
 
 
 class Metricas(Presupuesto):
@@ -2444,6 +2918,17 @@ class PresupuestoItem(models.Model):
             "stock si el pedido se cancela."
         ),
     )
+    # 27/11/2026: un pedido se confirma aunque algún producto tenga el diseño pendiente. Esa línea no descuenta
+    # nada ni entra a la cola hasta que Lucas marca Diseño listo; ahí se genera sola (ver provisionar_items_listos).
+    produccion_generada = models.BooleanField(
+        _("Producción generada"), default=False,
+        help_text=_("Ya se descontó el stock/material de esta línea y se mandó a la cola."),
+    )
+    precio_provisorio = models.BooleanField(
+        _("Precio provisorio"), default=False,
+        help_text=_("El precio se tomó del producto cuando todavía estaba en diseño: se actualiza solo al precio "
+                    "final cuando Lucas marca Diseño listo."),
+    )
 
     class Meta:
         verbose_name = _("Producto del presupuesto")
@@ -2455,6 +2940,7 @@ class PresupuestoItem(models.Model):
     def save(self, *args, **kwargs):
         if self.unit_price is None and self.producto_id:
             self.unit_price = self.producto.unit_price
+            self.precio_provisorio = not self.producto.diseno_listo
         super().save(*args, **kwargs)
 
     @property

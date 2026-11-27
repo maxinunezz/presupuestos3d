@@ -25,10 +25,12 @@ from .metrics import PERIODS, build_metrics, export_xlsx, template_context
 from .models import (
     CanalCargoFijoTramo,
     CanalVenta,
+    Cliente,
     DisenoNoListoError,
     HistorialPedidoProducido,
     Metricas,
     MetricasVentas,
+    PagoPresupuesto,
     PanelCostos,
     PanelVentas,
     PedidoOnline,
@@ -1476,13 +1478,28 @@ class VentasEcommerceAdmin(admin.ModelAdmin):
         return TemplateResponse(request, self.change_list_template, context)
 
 
+@admin.register(Cliente)
+class ClienteAdmin(admin.ModelAdmin):
+    """Prioridad por cliente (27/11/2026): define el orden en la cola de todo lo que se imprime para él."""
+
+    list_display = ("nombre", "prioridad", "pedidos_abiertos")
+    list_editable = ("prioridad",)
+    list_filter = ("prioridad",)
+    search_fields = ("nombre",)
+
+    @admin.display(description=_("Pedidos abiertos"))
+    def pedidos_abiertos(self, obj):
+        return Presupuesto.objects.filter(client_name__iexact=obj.nombre).exclude(
+            status__in=[Presupuesto.Status.COMPLETED, Presupuesto.Status.CANCELLED, Presupuesto.Status.DRAFT]
+        ).count()
+
+
 @admin.register(Producto)
 class ProductoAdmin(admin.ModelAdmin):
     list_display = (
         "name",
         "sku",
-        "priority",
-        "diseno_listo",
+        "estado_diseno",
         "unit_cost_display",
         "unit_price_display",
         "margin_on_price_display",
@@ -1492,11 +1509,11 @@ class ProductoAdmin(admin.ModelAdmin):
         "is_active",
         "updated_at",
     )
-    list_filter = ("is_active", "diseno_listo", "is_multicolor", "priority", "es_producto_ecommerce")
-    list_editable = ("priority", "diseno_listo")
+    list_filter = ("is_active", "estado_diseno", "is_multicolor", "es_producto_ecommerce")
+    list_editable = ("estado_diseno",)
     search_fields = ("name", "description", "sku")
     inlines = (ProductoPiezaInline, ProductoAggregateLineInline, ProductoCanalPrecioInline)
-    readonly_fields = ("producto_id_display", "costs_summary", "price_info", "diseno_listo_at")
+    readonly_fields = ("producto_id_display", "costs_summary", "price_info", "diseno_listo_at", "aviso_rediseno")
     formfield_overrides = DECIMAL_LOCALIZE
 
     def get_queryset(self, request):
@@ -1522,7 +1539,6 @@ class ProductoAdmin(admin.ModelAdmin):
                     "name",
                     "sku",
                     "description",
-                    "priority",
                     "is_multicolor",
                     "is_active",
                 )
@@ -1550,8 +1566,8 @@ class ProductoAdmin(admin.ModelAdmin):
             },
         ),
         (
-            _("Handoff a producción"),
-            {"fields": ("diseno_listo", "diseno_listo_at")},
+            _("Diseño (handoff a producción)"),
+            {"fields": ("estado_diseno", "rondas_cliente", "aviso_rediseno", "diseno_listo_at")},
         ),
     )
 
@@ -1683,7 +1699,27 @@ class ProductoAdmin(admin.ModelAdmin):
             )
         )
 
+    @admin.display(description=_("Rediseño"))
+    def aviso_rediseno(self, obj):
+        if obj and obj.cobra_rediseno:
+            return gettext("Ya van %(n)s idas y vueltas: corresponde cobrar el rediseño.") % {"n": obj.rondas_cliente}
+        return "—"
+
     def save_model(self, request, obj, form, change):
+        # Diseño listo lo marca (o lo desmarca) solo quien tiene el permiso: Lucas (27/11/2026).
+        E = Producto.EstadoDiseno
+        antes = (Producto.objects.filter(pk=obj.pk).values_list("estado_diseno", flat=True).first()
+                 if obj.pk else E.EN_DISENO)
+        toca_listo = (antes == E.LISTO) != (obj.estado_diseno == E.LISTO)
+        if toca_listo and not request.user.has_perm("budgets.marcar_diseno_listo"):
+            obj.estado_diseno = antes or E.EN_DISENO
+            obj.diseno_listo = obj.estado_diseno == E.LISTO
+            self.message_user(
+                request,
+                gettext("«%(p)s»: Diseño listo lo marca solo Lucas (cierra diseño y cotización). No se cambió la etapa.")
+                % {"p": obj.name},
+                level=messages.ERROR,
+            )
         super().save_model(request, obj, form, change)
         # Feedback del sync con 3darg-backend (ver Producto.save() /
         # config/api_3darg.py::sync_costeo_ecommerce). sync_result queda en
@@ -1750,6 +1786,17 @@ class ProductoAdmin(admin.ModelAdmin):
 # ===========================================================================
 
 
+class PagoPresupuestoInline(admin.TabularInline):
+    """Pagos del pedido uno por uno (27/11/2026): seña, saldo o devolución. El estado de cobro sale de acá."""
+
+    model = PagoPresupuesto
+    extra = 0
+    fields = ("tipo", "monto", "fecha", "medio_pago", "notas", "cargado_por")
+    readonly_fields = ("cargado_por",)
+    formfield_overrides = DECIMAL_LOCALIZE
+    verbose_name_plural = _("Pagos (seña mínima 50 % para confirmar)")
+
+
 class PresupuestoItemInline(admin.TabularInline):
     """El precio unitario NO se carga a mano: se toma siempre del costeo del
     producto (Producto.sale_price) y queda congelado en PresupuestoItem al
@@ -1765,6 +1812,7 @@ class PresupuestoItemInline(admin.TabularInline):
         "precio_costeo_display",
         "precio_unitario_display",
         "line_total_display",
+        "etapa_linea_display",
     )
     fields = (
         "producto",
@@ -1772,7 +1820,19 @@ class PresupuestoItemInline(admin.TabularInline):
         "precio_costeo_display",
         "precio_unitario_display",
         "line_total_display",
+        "etapa_linea_display",
     )
+
+    @admin.display(description=_("Producción"))
+    def etapa_linea_display(self, obj):
+        if not obj or not obj.pk:
+            return "-"
+        if obj.produccion_generada:
+            return gettext("Generada")
+        if obj.presupuesto.stock_provisioned:
+            texto = gettext("Esperando Diseño listo")
+            return texto + (gettext(" · precio provisorio") if obj.precio_provisorio else "")
+        return gettext("Precio provisorio") if obj.precio_provisorio else "-"
 
     @admin.display(description=_("Precio de costeo (actual)"))
     def precio_costeo_display(self, obj):
@@ -1905,14 +1965,21 @@ class PresupuestoAdmin(admin.ModelAdmin):
     list_filter = ("status", "para_stock", "vendedor")
     search_fields = ("client_name", "description", "vendedor")
     list_editable = ("status",)
-    inlines = (PresupuestoItemInline, ProductionJobInline)
+    inlines = (PresupuestoItemInline, PagoPresupuestoInline, ProductionJobInline)
     formfield_overrides = DECIMAL_LOCALIZE
     readonly_fields = (
         "totals_summary",
         "production_summary",
         "pdf_link",
+        "prioridad_display",
     )
-    actions = ("approve_presupuestos", "marcar_entregado", "cancelar_presupuestos")
+
+    @admin.display(description=_("Prioridad en la cola"))
+    def prioridad_display(self, obj):
+        if not obj or not obj.pk:
+            return gettext("Sale del cliente (menú Clientes).")
+        return obj.get_prioridad_display()
+    actions = ("approve_presupuestos", "terminar_post_impresion", "marcar_entregado", "cancelar_presupuestos")
 
     # ---- Borrar: solo lo que no dejó huella (ver Presupuesto.motivo_no_borrar). Una venta aprobada se CANCELA.
     def has_delete_permission(self, request, obj=None):
@@ -1944,7 +2011,7 @@ class PresupuestoAdmin(admin.ModelAdmin):
         super().delete_queryset(request, borrables)
 
     fieldsets = (
-        (None, {"fields": ("client_name", "vendedor", "para_stock", "description", "status")}),
+        (None, {"fields": ("client_name", "prioridad_display", "vendedor", "para_stock", "description", "status")}),
         (_("Precio del pedido"), {"fields": ("fixed_cost", "totals_summary")}),
         (
             _("Producción y entrega"),
@@ -1953,6 +2020,17 @@ class PresupuestoAdmin(admin.ModelAdmin):
                     "production_summary",
                     "due_date",
                     "due_date_is_manual",
+                )
+            },
+        ),
+        (
+            _("Envío"),
+            {
+                "fields": (
+                    "forma_entrega",
+                    ("costo_envio", "envio_cobrado_al_cliente"),
+                    "direccion_envio",
+                    "seguimiento_envio",
                 )
             },
         ),
@@ -1966,7 +2044,9 @@ class PresupuestoAdmin(admin.ModelAdmin):
                     "approved_at",
                     "production_started_at",
                     "production_finished_at",
+                    "ready_at",
                     "completed_at",
+                    "delivered_by",
                 ),
             },
         ),
@@ -2149,6 +2229,13 @@ class PresupuestoAdmin(admin.ModelAdmin):
             )
         else:
             request._old_presupuesto_status = Presupuesto.Status.DRAFT
+        # Editar un pedido confirmado (27/11/2026): foto de las líneas ANTES de guardar la edición, para devolver lo
+        # correcto y recalcular en save_related.
+        request._items_antes = None
+        if change:
+            previo = type(obj).objects.filter(pk=obj.pk).first()
+            if previo and previo.status in Presupuesto.ESTADOS_EDITABLES and previo.stock_provisioned:
+                request._items_antes = previo.foto_items()
         super().save_model(request, obj, form, change)
 
     def save_formset(self, request, form, formset, change):
@@ -2168,12 +2255,41 @@ class PresupuestoAdmin(admin.ModelAdmin):
                     job.started_at = timezone.now()
                 job.save()
             formset.save_m2m()
+        elif formset.model is PagoPresupuesto:
+            quien = request.user.get_full_name() or request.user.get_username()
+            instances = formset.save(commit=False)
+            for deleted in formset.deleted_objects:
+                deleted.delete()
+            for pago in instances:
+                if not pago.pk:
+                    pago.cargado_por = quien[:60]
+                pago.save()
         else:
             super().save_formset(request, form, formset, change)
 
     def save_related(self, request, form, formsets, change):
         super().save_related(request, form, formsets, change)
         obj = form.instance
+
+        items_antes = getattr(request, "_items_antes", None)
+        if items_antes is not None and obj.status == getattr(request, "_old_presupuesto_status", None):
+            firma = lambda items: sorted((i.pk, i.producto_id, i.quantity) for i in items)  # noqa: E731
+            if firma(items_antes) != firma(obj.items.all()):
+                r = obj.recalcular_pedido(items_antes) or {}
+                cancelados = (r.get("devuelto") or {}).get("jobs_cancelled", 0)
+                nuevos = obj.jobs.exclude(status=ProductionJob.Status.CANCELLED).filter(
+                    status=ProductionJob.Status.PENDING).count()
+                self.message_user(
+                    request,
+                    gettext(
+                        "Pedido #%(pk)s editado y recalculado: se devolvió lo que no se había impreso "
+                        "(%(cancelados)s trabajo/s), se rearmó la cola (%(nuevos)s trabajo/s en cola) y se "
+                        "actualizaron stock, entrega y saldo. Lo ya impreso se conservó."
+                    )
+                    % {"pk": obj.pk, "cancelados": cancelados, "nuevos": nuevos},
+                )
+                if r.get("shortages"):
+                    self._message_approval(request, obj, {"shortages": r["shortages"]})
 
         # Si el estado cambió desde el dropdown, seteamos las fechas y
         # disparamos los efectos (al aprobar: genera la cola de producción).
@@ -2190,28 +2306,26 @@ class PresupuestoAdmin(admin.ModelAdmin):
                 in (
                     Presupuesto.Status.APPROVED,
                     Presupuesto.Status.IN_PRODUCTION,
+                    Presupuesto.Status.POST_PRINT,
+                    Presupuesto.Status.READY,
                     Presupuesto.Status.COMPLETED,
                 )
                 and not obj.stock_provisioned
             )
-            if dispara_produccion:
-                sin_diseno = obj.productos_sin_diseno_listo()
-                if sin_diseno:
-                    # No se aprueba: revertimos el estado (ya había quedado
-                    # guardado por save_model) y avisamos qué falta marcar.
-                    obj.status = old_status
-                    obj.save(update_fields=["status", "updated_at"])
-                    self.message_user(
-                        request,
-                        gettext(
-                            "No se aprobó el presupuesto #%(pk)s: falta marcar "
-                            "'Diseño listo' en el costeo de estos productos antes "
-                            "de mandarlos a la cola de producción: %(productos)s."
-                        )
-                        % {"pk": obj.pk, "productos": ", ".join(sin_diseno)},
-                        level=messages.ERROR,
+            falta_sena = obj.sena_faltante() if dispara_produccion else 0
+            if falta_sena > 0:
+                obj.status = old_status
+                obj.save(update_fields=["status", "updated_at"])
+                self.message_user(
+                    request,
+                    gettext(
+                        "No se confirmó el presupuesto #%(pk)s: falta cobrar la seña (mínimo 50%%). "
+                        "Faltan $%(falta)s: cargalo en «Pagos»."
                     )
-                    return
+                    % {"pk": obj.pk, "falta": f"{falta_sena:,.2f}"},
+                    level=messages.ERROR,
+                )
+                return
             result = obj.apply_status_change(old_status)
             if obj.status == Presupuesto.Status.APPROVED:
                 self._message_approval(request, obj, result)
@@ -2310,7 +2424,24 @@ class PresupuestoAdmin(admin.ModelAdmin):
             "&nbsp;&nbsp;" + gettext("Subtotal:") + f" ${obj.subtotal}<br>"
             "&nbsp;&nbsp;<b>" + gettext("TOTAL:") + f" ${obj.total}</b> "
             f"({piezas})<br>"
-            "&nbsp;&nbsp;<b>" + gettext("Beneficio total del pedido:") + f" ${obj.profit_total}</b>"
+            "&nbsp;&nbsp;<b>" + gettext("Beneficio total del pedido:") + f" ${obj.profit_total}</b><br>"
+            + self._cobro_resumen(obj)
+        )
+
+    def _cobro_resumen(self, obj):
+        if not obj.pagos.exists():
+            falta = obj.sena_faltante()
+            if obj.para_stock or not falta:
+                return ""
+            return "&nbsp;&nbsp;" + gettext("Seña mínima para confirmar:") + f" ${falta:,.2f}"
+        envio = (
+            "&nbsp;&nbsp;" + gettext("Envío a cargo del cliente:") + f" ${obj.costo_envio}<br>"
+            if obj.envio_cobrado_al_cliente and obj.costo_envio else ""
+        )
+        return (
+            envio
+            + "&nbsp;&nbsp;" + gettext("Cobrado:") + f" ${obj.total_cobrado}<br>"
+            + "&nbsp;&nbsp;<b>" + gettext("Saldo:") + f" ${obj.saldo}</b>"
         )
 
     def _message_approval(self, request, obj, result):
@@ -2319,6 +2450,18 @@ class PresupuestoAdmin(admin.ModelAdmin):
         from_stock = result.get("from_stock") or []
         from_finished = result.get("from_finished") or []
         shortages = result.get("shortages") or []
+        esperando = result.get("esperando_diseno") or []
+
+        if esperando:
+            self.message_user(
+                request,
+                gettext(
+                    "Presupuesto #%(pk)s confirmado. Estos productos esperan Diseño listo y no se imprimen "
+                    "hasta que Lucas lo marque (ahí entran solos a la cola, con el precio final): %(productos)s."
+                )
+                % {"pk": obj.pk, "productos": ", ".join(sorted(set(esperando)))},
+                level=messages.WARNING,
+            )
 
         if from_finished:
             detalle = ", ".join(
@@ -2354,8 +2497,9 @@ class PresupuestoAdmin(admin.ModelAdmin):
                 request,
                 gettext(
                     "Presupuesto #%(pk)s aprobado y en cola. Ojo: el stock no "
-                    "alcanzó al descontar: %(items)s. Quedó en cero y conviene "
-                    "reponer."
+                    "alcanzó al descontar: %(items)s. Quedó en negativo: hay que "
+                    "comprar. La fecha de entrega estimada NO cuenta la espera de "
+                    "esa compra."
                 )
                 % {"pk": obj.pk, "items": items},
                 level=messages.WARNING,
@@ -2392,30 +2536,41 @@ class PresupuestoAdmin(admin.ModelAdmin):
                 continue
             self._message_approval(request, presupuesto, result)
 
-    @admin.action(description=_("Marcar como entregado (completar pedido listo de stock)"))
-    def marcar_entregado(self, request, queryset):
+    @admin.action(description=_("Terminar post-impresión (pasa a Listo para entregar)"))
+    def terminar_post_impresion(self, request, queryset):
         for presupuesto in queryset:
-            if not presupuesto.is_ready_to_deliver:
+            if presupuesto.terminar_post_impresion():
+                self.message_user(
+                    request,
+                    gettext("Presupuesto #%(pk)s: %(estado)s.")
+                    % {"pk": presupuesto.pk, "estado": presupuesto.get_status_display().lower()},
+                )
+            else:
+                self.message_user(
+                    request,
+                    gettext("Presupuesto #%(pk)s: no está en post-impresión (está %(estado)s).")
+                    % {"pk": presupuesto.pk, "estado": presupuesto.get_status_display().lower()},
+                    level=messages.WARNING,
+                )
+
+    @admin.action(description=_("Marcar como entregado"))
+    def marcar_entregado(self, request, queryset):
+        quien = request.user.get_full_name() or request.user.get_username()
+        for presupuesto in queryset:
+            if not presupuesto.marcar_entregado(quien):
                 self.message_user(
                     request,
                     gettext(
                         "Presupuesto #%(pk)s: no está listo para entregar "
-                        "(o tiene producción pendiente, o no está aprobado/servido "
-                        "de stock). No se completó."
+                        "(está %(estado)s). No se marcó entregado."
                     )
-                    % {"pk": presupuesto.pk},
+                    % {"pk": presupuesto.pk, "estado": presupuesto.get_status_display().lower()},
                     level=messages.WARNING,
                 )
                 continue
-            old_status = presupuesto.status
-            presupuesto.status = Presupuesto.Status.COMPLETED
-            presupuesto.apply_status_change(old_status)
-            presupuesto.save()
             self.message_user(
                 request,
-                gettext(
-                    "Presupuesto #%(pk)s marcado como entregado y completado."
-                )
+                gettext("Presupuesto #%(pk)s marcado como entregado.")
                 % {"pk": presupuesto.pk},
             )
 

@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -630,15 +630,16 @@ class StatusRollupFromJobsTests(TestCase):
         self.assertEqual(self.pres.status, Presupuesto.Status.IN_PRODUCTION)
         self.assertIsNotNone(self.pres.production_started_at)
 
-    def test_todos_impresos_pasa_a_completado(self):
+    def test_todos_impresos_pasa_a_post_impresion(self):
+        # 27/11/2026: con todo impreso pasa a Post-impresión (Entregado = COMPLETED es otro paso).
         for j in self.jobs:
             j.status = self.PJ.Status.DONE
             j.save()
         self.assertTrue(self.pres.sync_status_from_jobs())
         self.pres.refresh_from_db()
-        self.assertEqual(self.pres.status, Presupuesto.Status.COMPLETED)
+        self.assertEqual(self.pres.status, Presupuesto.Status.POST_PRINT)
         self.assertIsNotNone(self.pres.production_finished_at)
-        self.assertIsNotNone(self.pres.completed_at)
+        self.assertIsNone(self.pres.completed_at)
 
     def test_no_retrocede(self):
         # Forzamos COMPLETED y luego "revertimos" un job: no debe retroceder.
@@ -647,13 +648,13 @@ class StatusRollupFromJobsTests(TestCase):
             j.save()
         self.pres.sync_status_from_jobs()
         self.pres.refresh_from_db()
-        self.assertEqual(self.pres.status, Presupuesto.Status.COMPLETED)
+        self.assertEqual(self.pres.status, Presupuesto.Status.POST_PRINT)
         self.jobs[0].status = self.PJ.Status.PENDING
         self.jobs[0].save()
         changed = self.pres.sync_status_from_jobs()
         self.pres.refresh_from_db()
         self.assertFalse(changed)
-        self.assertEqual(self.pres.status, Presupuesto.Status.COMPLETED)
+        self.assertEqual(self.pres.status, Presupuesto.Status.POST_PRINT)
 
     def test_cancelados_no_bloquean_completado(self):
         self.jobs[0].status = self.PJ.Status.DONE
@@ -662,7 +663,7 @@ class StatusRollupFromJobsTests(TestCase):
         self.jobs[1].save()
         self.assertTrue(self.pres.sync_status_from_jobs())
         self.pres.refresh_from_db()
-        self.assertEqual(self.pres.status, Presupuesto.Status.COMPLETED)
+        self.assertEqual(self.pres.status, Presupuesto.Status.POST_PRINT)
 
 
 class StockProductosTerminadosTests(TestCase):
@@ -699,6 +700,9 @@ class StockProductosTerminadosTests(TestCase):
             job.save()
         pres.sync_status_from_jobs()
         pres.refresh_from_db()
+        self.assertEqual(pres.status, Presupuesto.Status.POST_PRINT)  # impreso: todavía no suma
+        self.assertTrue(pres.terminar_post_impresion())  # para stock: va directo a Entregado y suma
+        pres.refresh_from_db()
         self.producto.refresh_from_db()
         self.assertEqual(pres.status, Presupuesto.Status.COMPLETED)
         self.assertEqual(self.producto.stock_quantity, 3)
@@ -710,6 +714,8 @@ class StockProductosTerminadosTests(TestCase):
             job.status = self.PJ.Status.DONE
             job.save()
         pres.sync_status_from_jobs()
+        pres.refresh_from_db()
+        pres.terminar_post_impresion()
         # Volver a llamar no debe duplicar el alta.
         pres.add_finished_to_stock()
         pres.add_finished_to_stock()
@@ -1672,6 +1678,7 @@ class MetricasVentasPaginaTests(TestCase):
         self.assertEqual(resp.context["top_clientes_qty"][0]["name"], "Cliente")
 
 
+@override_settings(SENA_MINIMA_PCT=0)  # esta prueba no es de la seña (ver tests_circuito.py)
 class PanelCostosPaginaTests(TestCase):
     """Panel de costos: composición del costo de producción por período
     (material, mano de obra, máquina, agregados). Antes una sección del
@@ -1716,6 +1723,7 @@ class PanelCostosPaginaTests(TestCase):
         self.assertNotContains(resp, "Beneficio neto")
 
 
+@override_settings(SENA_MINIMA_PCT=0)  # esta prueba no es de la seña (ver tests_circuito.py)
 class MetricsPanelsExportTests(TestCase):
     """Cada panel de Métricas (Panel de métricas, Panel de ventas, Panel de
     costos) se puede descargar en Excel (?export=xlsx, ya existía) y en PDF

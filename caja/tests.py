@@ -2,7 +2,7 @@ from datetime import timedelta
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -81,6 +81,7 @@ class CuentaCajaSaldoActualTests(TestCase):
         self.assertEqual(self.cuenta.saldo_actual, Decimal("1000"))
 
 
+@override_settings(SENA_MINIMA_PCT=0)  # esta prueba no es de la seña (ver tests_circuito.py)
 class PresupuestoAutogeneraMovimientoCajaTests(TestCase):
     def setUp(self):
         self.fil = Filament.objects.create(
@@ -147,6 +148,7 @@ class PresupuestoAutogeneraMovimientoCajaTests(TestCase):
         )
 
 
+@override_settings(SENA_MINIMA_PCT=0)  # esta prueba no es de la seña (ver tests_circuito.py)
 class PresupuestoCancelRevierteMovimientoCajaTests(TestCase):
     def setUp(self):
         self.fil = Filament.objects.create(

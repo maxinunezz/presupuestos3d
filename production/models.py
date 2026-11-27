@@ -1,6 +1,8 @@
 from decimal import Decimal
 
 from django.db import models
+from django.db.models.signals import pre_delete
+from django.dispatch import receiver
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
@@ -213,7 +215,7 @@ class ProductionJob(models.Model):
     class Meta:
         verbose_name = _("Trabajo de producción")
         verbose_name_plural = _("Trabajos de producción")
-        ordering = ["machine", "producto__priority", "order", "id"]
+        ordering = ["machine", "presupuesto__prioridad", "order", "id"]
 
     def __str__(self):
         nombre = self.pieza.name if self.pieza else str(self.producto)
@@ -1185,3 +1187,97 @@ class MantenimientoHerramienta(models.Model):
 
     def __str__(self):
         return f"{self.fecha} — {self.descripcion}"
+
+
+class Prototipo(models.Model):
+    """Prototipo o prueba de impresión (27/11/2026): no es un pedido ni va a la cola. Se carga qué se probó y con
+    cuánto filamento, y ese filamento se descuenta del stock en el momento (ver PrototipoFilamento)."""
+
+    descripcion = models.CharField(_("Qué se imprimió"), max_length=200)
+    producto = models.ForeignKey(
+        "budgets.Producto", verbose_name=_("Producto"), null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="prototipos", help_text=_("Si es la prueba de un producto, cuál."))
+    presupuesto = models.ForeignKey(
+        "budgets.Presupuesto", verbose_name=_("Pedido"), null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="prototipos", help_text=_("Si es para un pedido puntual, cuál."))
+    maquina = models.ForeignKey(Maquina, verbose_name=_("Máquina"), null=True, blank=True, on_delete=models.SET_NULL,
+                                related_name="prototipos")
+    fecha = models.DateField(_("Fecha"), default=timezone.localdate)
+    hecho_por = models.CharField(_("Hecho por"), max_length=60, blank=True)
+    notas = models.TextField(_("Notas"), blank=True)
+    created_at = models.DateTimeField(_("Creado"), auto_now_add=True)
+
+    class Meta:
+        verbose_name = _("Prototipo")
+        verbose_name_plural = _("Prototipos")
+        ordering = ["-fecha", "-id"]
+
+    def __str__(self):
+        return f"{self.descripcion} ({self.fecha})"
+
+    @property
+    def gramos_total(self) -> Decimal:
+        return sum((l.gramos for l in self.lineas.all()), Decimal("0"))
+
+
+class PrototipoFilamento(models.Model):
+    """Filamento que llevó un prototipo. Al guardar descuenta del stock (o ajusta la diferencia si se corrige) y al
+    borrar lo devuelve, dejando cada movimiento en el historial de stock."""
+
+    prototipo = models.ForeignKey(Prototipo, on_delete=models.CASCADE, related_name="lineas")
+    filament = models.ForeignKey("inventory.Filament", verbose_name=_("Filamento"), on_delete=models.PROTECT,
+                                 related_name="prototipo_lineas")
+    gramos = models.DecimalField(_("Gramos"), max_digits=10, decimal_places=2)
+    gramos_descontados = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0"), editable=False)
+
+    class Meta:
+        verbose_name = _("Filamento del prototipo")
+        verbose_name_plural = _("Filamento del prototipo")
+
+    def __str__(self):
+        return f"{self.filament} {self.gramos} g"
+
+    def _mover(self, filament, delta):
+        """delta > 0 descuenta, delta < 0 devuelve."""
+        from inventory.models import Filament, StockMovement
+
+        if not delta:
+            return
+        nota = gettext_nota(self.prototipo)
+        if delta > 0:
+            filament.deduct_stock(delta, allow_negative=True)
+        else:
+            Filament.objects.filter(pk=filament.pk).update(stock_grams=models.F("stock_grams") - delta)
+        StockMovement.objects.create(filament=filament, quantity=-delta, reason=StockMovement.Reason.PROTOTYPE,
+                                     related_presupuesto=self.prototipo.presupuesto, note=nota)
+
+    def save(self, *args, **kwargs):
+        from django.db import transaction
+
+        with transaction.atomic():
+            antes = None
+            if self.pk:
+                antes = PrototipoFilamento.objects.filter(pk=self.pk).values("filament_id", "gramos_descontados").first()
+            if antes and antes["filament_id"] != self.filament_id:
+                from inventory.models import Filament
+
+                self._mover(Filament.objects.get(pk=antes["filament_id"]), -antes["gramos_descontados"])
+                ya = Decimal("0")
+            else:
+                ya = antes["gramos_descontados"] if antes else Decimal("0")
+            self._mover(self.filament, self.gramos - ya)
+            self.gramos_descontados = self.gramos
+            super().save(*args, **kwargs)
+
+
+
+@receiver(pre_delete, sender=PrototipoFilamento)
+def _devolver_filamento_prototipo(sender, instance, **kwargs):
+    """Borrar la línea (o el prototipo entero, en cascada) devuelve el filamento que se había descontado."""
+    instance._mover(instance.filament, -instance.gramos_descontados)
+
+
+def gettext_nota(prototipo):
+    from django.utils.translation import gettext
+
+    return gettext("Prototipo: %(d)s") % {"d": prototipo.descripcion}

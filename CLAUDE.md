@@ -195,9 +195,9 @@ media/           # uploads locales (.3mf/gcode) — efímero en prod
   las piezas para sus totales). El producto define máquina ($/h), merma, mano de
   obra (post-proceso, por producto), agregados (por producto) y margen.
   `is_multicolor` / `needs_ams` (alguna pieza con AMS) → solo máquinas con AMS.
-  `priority` (Alta=1/Media=2/Baja=3/Sin prioridad=9, default Sin): ordena la cola
-  de producción; prioridad más alta entra antes, "Sin prioridad" va al final. Es
-  la clave primaria de orden en el scheduler, la cola y el tablero.
+  `priority`: **ya no ordena la cola** (desde 27/11/2026 la prioridad es del
+  CLIENTE, ver `Cliente` y "Circuito venta → diseño → producción" abajo). El campo
+  sigue en la tabla pero salió del admin.
   Props: `total_filament_grams`, `total_machine_hours`, `material_cost`,
   `aggregate_cost`, `machine_cost`, `labor_cost`, `unit_cost`, `unit_price`,
   `aggregated_filament()`.
@@ -234,7 +234,8 @@ media/           # uploads locales (.3mf/gcode) — efímero en prod
 - Proxy de admin: **StockPiezas** (página "Stock de piezas") y **StockProductos**
   (página "Stock de productos terminados": stock de armados vs. mínimo).
 - **Presupuesto**: cotización a un cliente. `status` (DRAFT/SENT/APPROVED/
-  IN_PRODUCTION/COMPLETED/CANCELLED), `fixed_cost`, fechas por estado
+  IN_PRODUCTION/POST_PRINT/READY/COMPLETED/CANCELLED — COMPLETED se muestra como
+  «Entregado»), `fixed_cost`, fechas por estado
   (`sent_at`, `approved_at`, `production_started_at`, `production_finished_at`,
   `completed_at`), `due_date`. Props: `items_total`, `subtotal`, `total`,
   `total_pieces`, `total_print_hours`, `estimated_delivery`.
@@ -473,6 +474,49 @@ compras de insumos, que van por inventory). Sirve para el resultado operativo.
   los tipos: es la salida de caja real.
 
 ## Conceptos clave / reglas de negocio
+
+- **Circuito venta → diseño → producción → entrega (decidido el 27/11/2026).**
+  - *Etapas del pedido:* Borrador → Enviado → Aprobado (= confirmado) → En
+    producción → **Post-impresión** (todo impreso; `sync_status_from_jobs` ya no
+    salta a Completado) → **Listo para entregar** (acción «Terminar
+    post-impresión»; los para stock van directo a Entregado y suman stock) →
+    **Entregado** (= `COMPLETED`, acción «Marcar como entregado», guarda
+    `completed_at` y `delivered_by`). Los COMPLETED viejos quedan como Entregado.
+  - *Seña:* confirmar un pedido de cliente exige 50 % cobrado
+    (`SenaFaltanteError`, subclase de `PresupuestoNotApprovableError`). Los pagos
+    se cargan uno por uno en **PagoPresupuesto** (seña/saldo/devolución); cada
+    uno con medio de caja inmediata crea su borrador en caja y
+    `recalcular_cobro()` deja `estado_venta`/`medio_pago`/`fecha_cobro` solos.
+    Sin pagos cargados (pedidos viejos) el cobro sigue manual. Al cancelar, los
+    pagos NO se revierten: la devolución se carga a mano.
+  - *Diseño:* un producto nuevo (una personalización es un producto propio) se
+    da de alta apenas se vende, con precio provisorio, en `estado_diseno`
+    En diseño ⇄ Esperando aprobación del cliente (`rondas_cliente` suma 1 por
+    ida; desde la 2ª se avisa que se cobra rediseño) → Diseño listo. **Solo quien
+    tiene el permiso `budgets.marcar_diseno_listo` (Lucas)** entra o sale de
+    Diseño listo: cierra diseño y cotización. `diseno_listo` es espejo.
+  - *Confirmar con diseño pendiente:* se puede. Las líneas cuyo producto no
+    tiene Diseño listo no descuentan ni se encolan (`PresupuestoItem.
+    produccion_generada=False`); al marcar Diseño listo,
+    `provisionar_items_listos()` las genera y pasa el precio provisorio al final.
+    El pedido no avanza a post-impresión mientras tenga líneas esperando.
+  - *Faltante de material:* se aprueba igual (stock negativo) y se avisa que la
+    fecha estimada no cuenta la espera de la compra.
+  - *Prioridad por cliente:* **Cliente** (nombre + prioridad) se crea solo con
+    el nombre del presupuesto; `Presupuesto.prioridad` la copia y la cola se
+    ordena por `presupuesto__prioridad`. Para stock = Sin prioridad.
+  - *Editar un pedido confirmado:* desde el admin se editan las líneas y
+    `recalcular_pedido(items_antes)` devuelve lo no arrancado (sobre la foto de
+    las líneas previas), conserva lo impreso/imprimiéndose como crédito y
+    regenera la producción. Lo impreso de más va al stock de piezas.
+  - *Vencimiento:* `manage.py vencer_presupuestos` cancela los Enviados con más
+    de 10 días y avisa por Slack (`SLACK_WEBHOOK_PRESUPUESTO_VENCIDO`).
+  - *Envío:* `forma_entrega`, `costo_envio`, `envio_cobrado_al_cliente`
+    (suma al total a cobrar), `direccion_envio`, `seguimiento_envio`.
+  - *Prototipos:* `production.Prototipo` + `PrototipoFilamento`: el filamento se
+    descuenta al guardar (motivo «Prototipo») y se devuelve al borrar.
+  - *Costeo verificado:* ya no se exige para aprobar. Los endpoints de verificar
+    quedan hasta adaptar Roque.
 
 - **El dinero es @property, no columna.** `Presupuesto.total`,
   `PresupuestoItem.line_total`, `Producto.unit_cost/unit_price` se calculan en

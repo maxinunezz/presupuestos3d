@@ -121,8 +121,10 @@ class CrearPresupuestoEscritura(_VistaEscritura):
                 status=Presupuesto.Status.DRAFT, **extra,
             )
             for pid, cantidad, precio in lineas:
+                # Sin precio: lo toma del producto y, si el producto sigue en diseño, queda como precio provisorio
+                # (se actualiza solo cuando Lucas marca Diseño listo).
                 PresupuestoItem.objects.create(presupuesto=p, producto=productos[pid], quantity=cantidad,
-                                               unit_price=precio if precio is not None else productos[pid].sale_price)
+                                               unit_price=precio)
             resultado = _estado(p)
             self._registrar("crear", clave, aprobo, p, d, resultado)
         return Response(resultado, status=201)
@@ -140,13 +142,8 @@ class AprobarPresupuestoEscritura(_VistaEscritura):
         p = _presupuesto(pk)
         if not p:
             return Response({"error": "Ese presupuesto no existe."}, status=404)
-        productos = [i.producto for i in p.items.select_related("producto") if i.producto]
-        # si falta el diseño, manda ese error (es lo primero que hay que resolver)
-        sin_verificar = [] if any(not x.diseno_listo for x in productos) else sorted(
-            {x.name for x in productos if not x.costeo_verificado})
-        if sin_verificar:  # Roque no descuenta stock con datos de producción que nadie revisó (26/11/2026)
-            return Response({"error": "Costeo sin verificar: " + ", ".join(sin_verificar) + ".",
-                             "motivo": "CosteoSinVerificar", "productos": sin_verificar}, status=409)
+        # 27/11/2026: el costeo verificado ya no es requisito para aprobar (decisión del dueño). Los endpoints de
+        # verificar/costeos-pendientes quedan hasta adaptar Roque y después se borran.
         try:
             r = p.approve()
         except (DisenoNoListoError, PresupuestoNotApprovableError) as exc:
@@ -156,7 +153,10 @@ class AprobarPresupuestoEscritura(_VistaEscritura):
         resultado = {**_estado(p), "faltantes": [{"item": str(x.get("item")), "falta": str(x.get("missing"))}
                                                  for x in r.get("shortages", [])],
                      "desde_stock": len(r.get("from_stock", [])) + len(r.get("from_finished", [])),
-                     "trabajos": len(trabajos), "maquinas": sorted({j.machine.name for j in trabajos if j.machine})}
+                     "trabajos": len(trabajos), "maquinas": sorted({j.machine.name for j in trabajos if j.machine}),
+                     "esperando_diseno": sorted(set(r.get("esperando_diseno", []))),
+                     "aviso_fecha": ("La fecha estimada no cuenta la espera de la compra del material que falta."
+                                     if r.get("shortages") else "")}
         self._registrar("aprobar", clave, aprobo, p, request.data, resultado)
         return Response(resultado)
 
@@ -190,16 +190,17 @@ class CompletarPresupuestoEscritura(_VistaEscritura):
         if not p:
             return Response({"error": "Ese presupuesto no existe."}, status=404)
         abiertos = p.jobs.exclude(status__in=["DONE", "CANCELLED"]).count()
-        listo = p.is_ready_to_deliver or (p.status in (Presupuesto.Status.APPROVED, Presupuesto.Status.IN_PRODUCTION)
-                                          and p.stock_provisioned and not p.para_stock and abiertos == 0)
-        if not listo:
+        if p.sync_status_from_jobs():  # trabajos marcados impresos sin que el pedido se haya actualizado todavía
+            p.refresh_from_db()
+        # 27/11/2026: con todo impreso el pedido queda en Post-impresión; mientras Roque no maneje esa etapa,
+        # marcar entregado desde ahí la da por terminada.
+        if p.status == Presupuesto.Status.POST_PRINT and not p.para_stock:
+            p.terminar_post_impresion()
+        if not p.is_ready_to_deliver:
             motivo = (f"tiene {abiertos} trabajo(s) de impresión sin terminar: marcalos impresos en presupuestos3d primero"
                       if abiertos else f"está {p.get_status_display().lower()}")
             return Response({"error": f"No se puede marcar entregado: {motivo}."}, status=409)
-        old = p.status
-        p.status = Presupuesto.Status.COMPLETED
-        p.apply_status_change(old)
-        p.save()
+        p.marcar_entregado(aprobo)
         resultado = _estado(p)
         self._registrar("completar", clave, aprobo, p, request.data, resultado)
         return Response(resultado)

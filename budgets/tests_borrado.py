@@ -5,7 +5,7 @@ from datetime import timedelta
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -15,6 +15,7 @@ from caja.tests import add_pieza, make_producto
 from inventory.models import Filament
 
 
+@override_settings(SENA_MINIMA_PCT=0)  # esta prueba no es de la seña (ver tests_circuito.py)
 class BorrarPresupuestosTests(TestCase):
     def setUp(self):
         self.fil = Filament.objects.create(brand="M", material_type="PLA", color="C", cost_per_kg=Decimal("10000"),
