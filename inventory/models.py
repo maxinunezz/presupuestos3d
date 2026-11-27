@@ -309,6 +309,7 @@ class StockMovement(models.Model):
         BUDGET_CANCELLED = "BUDGET_CANCELLED", _("Cancelación de presupuesto")
         MANUAL_ADJUSTMENT = "MANUAL_ADJUSTMENT", _("Ajuste manual")
         REPRINT_FAILURE = "REPRINT_FAILURE", _("Reimpresión por falla")
+        PROTOTYPE = "PROTOTYPE", _("Prototipo")
 
     filament = models.ForeignKey(
         Filament,

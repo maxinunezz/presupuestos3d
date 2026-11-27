@@ -21,6 +21,8 @@ from .models import (
     MantenimientoHerramienta,
     Maquina,
     ProductionJob,
+    Prototipo,
+    PrototipoFilamento,
     Tablero,
 )
 from .scheduler import compute_schedule, material_forecast, persist_schedule
@@ -1271,3 +1273,31 @@ class HerramientaAdmin(admin.ModelAdmin):
     @admin.display(description=_("Valor contable neto"))
     def valor_contable_neto_display(self, obj):
         return f"$ {obj.valor_contable_neto:,.2f}"
+
+
+class PrototipoFilamentoInline(admin.TabularInline):
+    model = PrototipoFilamento
+    extra = 1
+    fields = ("filament", "gramos")
+    autocomplete_fields = ("filament",)
+
+
+@admin.register(Prototipo)
+class PrototipoAdmin(admin.ModelAdmin):
+    """Prototipos y pruebas de impresión (27/11/2026): el filamento cargado se descuenta del stock al guardar."""
+
+    list_display = ("descripcion", "fecha", "producto", "presupuesto", "maquina", "gramos_display", "hecho_por")
+    list_filter = ("fecha", "maquina")
+    search_fields = ("descripcion", "producto__name", "notas")
+    autocomplete_fields = ("producto", "presupuesto")
+    inlines = (PrototipoFilamentoInline,)
+    fields = ("descripcion", "producto", "presupuesto", "maquina", "fecha", "hecho_por", "notas")
+
+    @admin.display(description=_("Filamento (g)"))
+    def gramos_display(self, obj):
+        return obj.gramos_total
+
+    def save_model(self, request, obj, form, change):
+        if not obj.hecho_por:
+            obj.hecho_por = (request.user.get_full_name() or request.user.get_username())[:60]
+        super().save_model(request, obj, form, change)
