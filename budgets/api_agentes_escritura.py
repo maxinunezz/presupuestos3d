@@ -151,7 +151,10 @@ class AprobarPresupuestoEscritura(_VistaEscritura):
         resultado = {**_estado(p), "faltantes": [{"item": str(x.get("item")), "falta": str(x.get("missing"))}
                                                  for x in r.get("shortages", [])],
                      "desde_stock": len(r.get("from_stock", [])) + len(r.get("from_finished", [])),
-                     "trabajos": len(trabajos), "maquinas": sorted({j.machine.name for j in trabajos if j.machine})}
+                     "trabajos": len(trabajos), "maquinas": sorted({j.machine.name for j in trabajos if j.machine}),
+                     "esperando_diseno": sorted(set(r.get("esperando_diseno", []))),
+                     "aviso_fecha": ("La fecha estimada no cuenta la espera de la compra del material que falta."
+                                     if r.get("shortages") else "")}
         self._registrar("aprobar", clave, aprobo, p, request.data, resultado)
         return Response(resultado)
 

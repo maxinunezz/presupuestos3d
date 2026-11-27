@@ -1797,6 +1797,7 @@ class PresupuestoItemInline(admin.TabularInline):
         "precio_costeo_display",
         "precio_unitario_display",
         "line_total_display",
+        "etapa_linea_display",
     )
     fields = (
         "producto",
@@ -1804,7 +1805,19 @@ class PresupuestoItemInline(admin.TabularInline):
         "precio_costeo_display",
         "precio_unitario_display",
         "line_total_display",
+        "etapa_linea_display",
     )
+
+    @admin.display(description=_("Producción"))
+    def etapa_linea_display(self, obj):
+        if not obj or not obj.pk:
+            return "-"
+        if obj.produccion_generada:
+            return gettext("Generada")
+        if obj.presupuesto.stock_provisioned:
+            texto = gettext("Esperando Diseño listo")
+            return texto + (gettext(" · precio provisorio") if obj.precio_provisorio else "")
+        return gettext("Precio provisorio") if obj.precio_provisorio else "-"
 
     @admin.display(description=_("Precio de costeo (actual)"))
     def precio_costeo_display(self, obj):
@@ -2264,24 +2277,6 @@ class PresupuestoAdmin(admin.ModelAdmin):
                     level=messages.ERROR,
                 )
                 return
-            if dispara_produccion:
-                sin_diseno = obj.productos_sin_diseno_listo()
-                if sin_diseno:
-                    # No se aprueba: revertimos el estado (ya había quedado
-                    # guardado por save_model) y avisamos qué falta marcar.
-                    obj.status = old_status
-                    obj.save(update_fields=["status", "updated_at"])
-                    self.message_user(
-                        request,
-                        gettext(
-                            "No se aprobó el presupuesto #%(pk)s: falta marcar "
-                            "'Diseño listo' en el costeo de estos productos antes "
-                            "de mandarlos a la cola de producción: %(productos)s."
-                        )
-                        % {"pk": obj.pk, "productos": ", ".join(sin_diseno)},
-                        level=messages.ERROR,
-                    )
-                    return
             result = obj.apply_status_change(old_status)
             if obj.status == Presupuesto.Status.APPROVED:
                 self._message_approval(request, obj, result)
@@ -2406,6 +2401,18 @@ class PresupuestoAdmin(admin.ModelAdmin):
         from_stock = result.get("from_stock") or []
         from_finished = result.get("from_finished") or []
         shortages = result.get("shortages") or []
+        esperando = result.get("esperando_diseno") or []
+
+        if esperando:
+            self.message_user(
+                request,
+                gettext(
+                    "Presupuesto #%(pk)s confirmado. Estos productos esperan Diseño listo y no se imprimen "
+                    "hasta que Lucas lo marque (ahí entran solos a la cola, con el precio final): %(productos)s."
+                )
+                % {"pk": obj.pk, "productos": ", ".join(sorted(set(esperando)))},
+                level=messages.WARNING,
+            )
 
         if from_finished:
             detalle = ", ".join(
@@ -2441,8 +2448,9 @@ class PresupuestoAdmin(admin.ModelAdmin):
                 request,
                 gettext(
                     "Presupuesto #%(pk)s aprobado y en cola. Ojo: el stock no "
-                    "alcanzó al descontar: %(items)s. Quedó en cero y conviene "
-                    "reponer."
+                    "alcanzó al descontar: %(items)s. Quedó en negativo: hay que "
+                    "comprar. La fecha de entrega estimada NO cuenta la espera de "
+                    "esa compra."
                 )
                 % {"pk": obj.pk, "items": items},
                 level=messages.WARNING,

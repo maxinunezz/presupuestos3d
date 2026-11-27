@@ -335,6 +335,12 @@ class Producto(models.Model):
             )
 
         if just_marked_ready:
+            for presupuesto in Presupuesto.objects.filter(
+                items__producto=self, items__produccion_generada=False, stock_provisioned=True,
+                status__in=[Presupuesto.Status.APPROVED, Presupuesto.Status.IN_PRODUCTION],
+            ).distinct():
+                presupuesto.provisionar_items_listos()
+
             from config.slack import notificar
 
             notificar(
@@ -1661,6 +1667,7 @@ class Presupuesto(models.Model):
             self.status == Presupuesto.Status.APPROVED
             and self.stock_provisioned
             and not self.jobs.exists()
+            and not self.tiene_items_esperando_diseno
         )
 
     def terminar_post_impresion(self):
@@ -1744,29 +1751,46 @@ class Presupuesto(models.Model):
         listo' en su costeo. Devuelve una lista de nombres (ordenada), vacía si
         no hay ninguno. Se usa para avisar/bloquear ANTES de aprobar.
         """
-        sin_diseno = set()
-        for item in self.items.select_related("producto").all():
-            qty = item.quantity
-            if qty <= 0:
-                continue
-            if not self.para_stock:
-                qty = max(qty - item.producto.stock_quantity, 0)
-            if qty <= 0:
-                continue
-            producto = item.producto
-            if producto.diseno_listo:
-                continue
-            for pp in producto.producto_piezas.select_related("pieza").all():
-                units_required = pp.units_needed * qty
-                if units_required <= 0:
-                    continue
-                to_print = units_required - min(pp.pieza.stock_quantity, units_required)
-                if to_print > 0:
-                    sin_diseno.add(producto.name)
-                    break
-        return sorted(sin_diseno)
+        return sorted({item.producto.name for item in self.items.select_related("producto").all()
+                       if not item.produccion_generada and self._item_espera_diseno(item)})
 
-    def _provision_production(self):
+    def _item_espera_diseno(self, item) -> bool:
+        """La línea necesita imprimirse (no se cubre con stock de terminados ni de piezas) y su producto todavía no
+        tiene Diseño listo: no se descuenta ni se encola hasta que lo tenga."""
+        producto = item.producto
+        if producto.diseno_listo or item.quantity <= 0:
+            return False
+        qty = item.quantity if self.para_stock else max(item.quantity - producto.stock_quantity, 0)
+        if qty <= 0:
+            return False
+        for pp in producto.producto_piezas.select_related("pieza").all():
+            units_required = pp.units_needed * qty
+            if units_required > 0 and units_required - min(pp.pieza.stock_quantity, units_required) > 0:
+                return True
+        return False
+
+    @property
+    def tiene_items_esperando_diseno(self) -> bool:
+        return self.stock_provisioned and self.items.filter(produccion_generada=False, quantity__gt=0).exists()
+
+    def provisionar_items_listos(self):
+        """Lucas marcó Diseño listo en algún producto: las líneas de este pedido que esperaban ese diseño pasan al
+        precio final (si era provisorio), descuentan su stock/material y entran a la cola. Idempotente."""
+        Status = Presupuesto.Status
+        if self.status not in (Status.APPROVED, Status.IN_PRODUCTION) or not self.stock_provisioned:
+            return None
+        for item in self.items.select_related("producto").filter(produccion_generada=False):
+            if item.precio_provisorio and item.producto.diseno_listo:
+                item.unit_price = item.producto.unit_price
+                item.precio_provisorio = False
+                item.save(update_fields=["unit_price", "precio_provisorio"])
+        with transaction.atomic():
+            result = self._provision_production(solo_pendientes=True)
+        self.refresh_delivery()
+        self.recalcular_cobro()
+        return result
+
+    def _provision_production(self, solo_pendientes=False):
         """
         Al APROBAR el pedido (= confirmarlo) hace de una sola vez todo el trabajo
         de inventario y cola, de forma idempotente (no descuenta dos veces):
@@ -1791,23 +1815,19 @@ class Presupuesto(models.Model):
 
         from inventory.models import StockMovement
 
-        result = {"from_stock": [], "from_finished": [], "shortages": []}
-        if self.stock_provisioned:
+        result = {"from_stock": [], "from_finished": [], "shortages": [], "esperando_diseno": []}
+        primera_vez = not self.stock_provisioned
+        if not primera_vez and not solo_pendientes:
             return result
 
-        # Antes de tocar el inventario: si algún producto necesita imprimirse
-        # y no tiene el diseño marcado como listo, no se aprueba (no se puede
-        # mandar a la cola de producción sin diseño listo).
-        sin_diseno = self.productos_sin_diseno_listo()
-        if sin_diseno:
-            raise DisenoNoListoError(
-                gettext(
-                    "No se puede aprobar: falta marcar 'Diseño listo' en el "
-                    "costeo de estos productos antes de mandarlos a la cola de "
-                    "producción: %(productos)s."
-                )
-                % {"productos": ", ".join(sin_diseno)}
-            )
+        # 27/11/2026: las líneas cuyo producto todavía no tiene Diseño listo NO se descuentan ni se encolan (antes
+        # bloqueaban la aprobación entera). Quedan esperando y se generan solas cuando Lucas marca Diseño listo.
+        listos = []
+        for item in self.items.select_related("producto").filter(produccion_generada=False):
+            if self._item_espera_diseno(item):
+                result["esperando_diseno"].append(item.producto.name)
+            else:
+                listos.append(item)
 
         free = machine_free_times()
 
@@ -1816,7 +1836,7 @@ class Presupuesto(models.Model):
         #    material o agregados (esos ya se gastaron cuando se fabricó el stock).
         #    Los pedidos 'para stock' nunca consumen su propio stock: producen.
         produce_qty = {}  # item.id -> unidades que sí hay que producir
-        for item in self.items.select_related("producto").all():
+        for item in listos:
             qty = item.quantity
             if not self.para_stock and qty > 0:
                 from_finished = min(item.producto.stock_quantity, qty)
@@ -1834,7 +1854,7 @@ class Presupuesto(models.Model):
 
         # 1) Planificamos qué imprimir, descontando primero el stock de piezas.
         plan = []  # (item, pieza, unidades_a_imprimir)
-        for item in self.items.select_related("producto").all():
+        for item in listos:
             item_qty = produce_qty[item.id]
             if item_qty <= 0:
                 continue
@@ -1901,7 +1921,7 @@ class Presupuesto(models.Model):
 
         # 3) Agregados a nivel producto (× lo que se PRODUCE, no lo servido del
         #    stock de terminados, que ya traía sus agregados).
-        for item in self.items.select_related("producto").all():
+        for item in listos:
             item_qty = produce_qty[item.id]
             if item_qty <= 0:
                 continue
@@ -1930,8 +1950,13 @@ class Presupuesto(models.Model):
                     note=note,
                 )
 
+        for item in listos:
+            item.produccion_generada = True
+            item.save(update_fields=["produccion_generada"])
         self.stock_provisioned = True
         self.save(update_fields=["stock_provisioned", "updated_at"])
+        if not primera_vez:
+            return result
 
         from config.zapier import notificar
 
@@ -2246,7 +2271,7 @@ class Presupuesto(models.Model):
                 pieza_obj = {}
                 for item in self.items.select_related("producto").all():
                     produced = item.quantity - item.from_finished_stock
-                    if produced <= 0:
+                    if produced <= 0 or not item.produccion_generada:
                         continue
                     for pp in item.producto.producto_piezas.select_related("pieza").all():
                         pieza = pp.pieza
@@ -2269,7 +2294,7 @@ class Presupuesto(models.Model):
                 # Agregados (a nivel producto): se devuelven por lo producido.
                 for item in self.items.select_related("producto").all():
                     produced = item.quantity - item.from_finished_stock
-                    if produced <= 0:
+                    if produced <= 0 or not item.produccion_generada:
                         continue
                     producto = item.producto
                     for line in producto.aggregate_lines.select_related(
@@ -2473,8 +2498,10 @@ class Presupuesto(models.Model):
             j.status in (ProductionJob.Status.PRINTING, ProductionJob.Status.DONE)
             for j in jobs
         )
-        if all_done:
+        if all_done and not self.tiene_items_esperando_diseno:
             target = Status.POST_PRINT
+        elif all_done:
+            target = Status.IN_PRODUCTION
         elif any_started:
             target = Status.IN_PRODUCTION
         else:
@@ -2710,6 +2737,17 @@ class PresupuestoItem(models.Model):
             "stock si el pedido se cancela."
         ),
     )
+    # 27/11/2026: un pedido se confirma aunque algún producto tenga el diseño pendiente. Esa línea no descuenta
+    # nada ni entra a la cola hasta que Lucas marca Diseño listo; ahí se genera sola (ver provisionar_items_listos).
+    produccion_generada = models.BooleanField(
+        _("Producción generada"), default=False,
+        help_text=_("Ya se descontó el stock/material de esta línea y se mandó a la cola."),
+    )
+    precio_provisorio = models.BooleanField(
+        _("Precio provisorio"), default=False,
+        help_text=_("El precio se tomó del producto cuando todavía estaba en diseño: se actualiza solo al precio "
+                    "final cuando Lucas marca Diseño listo."),
+    )
 
     class Meta:
         verbose_name = _("Producto del presupuesto")
@@ -2721,6 +2759,7 @@ class PresupuestoItem(models.Model):
     def save(self, *args, **kwargs):
         if self.unit_price is None and self.producto_id:
             self.unit_price = self.producto.unit_price
+            self.precio_provisorio = not self.producto.diseno_listo
         super().save(*args, **kwargs)
 
     @property
