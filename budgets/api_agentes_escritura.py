@@ -140,13 +140,8 @@ class AprobarPresupuestoEscritura(_VistaEscritura):
         p = _presupuesto(pk)
         if not p:
             return Response({"error": "Ese presupuesto no existe."}, status=404)
-        productos = [i.producto for i in p.items.select_related("producto") if i.producto]
-        # si falta el diseño, manda ese error (es lo primero que hay que resolver)
-        sin_verificar = [] if any(not x.diseno_listo for x in productos) else sorted(
-            {x.name for x in productos if not x.costeo_verificado})
-        if sin_verificar:  # Roque no descuenta stock con datos de producción que nadie revisó (26/11/2026)
-            return Response({"error": "Costeo sin verificar: " + ", ".join(sin_verificar) + ".",
-                             "motivo": "CosteoSinVerificar", "productos": sin_verificar}, status=409)
+        # 27/11/2026: el costeo verificado ya no es requisito para aprobar (decisión del dueño). Los endpoints de
+        # verificar/costeos-pendientes quedan hasta adaptar Roque y después se borran.
         try:
             r = p.approve()
         except (DisenoNoListoError, PresupuestoNotApprovableError) as exc:

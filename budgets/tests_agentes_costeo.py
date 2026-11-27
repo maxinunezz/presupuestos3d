@@ -37,19 +37,12 @@ class CosteoVerificadoTests(TestCase):
         self.assertEqual(pz["filamentos"][0]["gramos_por_impresion"], "75.00")
         self.assertIn("piezas_por_impresion", pz)
 
-    def test_sin_verificar_no_se_aprueba_por_roque(self):
+    def test_sin_verificar_se_aprueba_igual(self):
+        # 27/11/2026: el costeo verificado dejó de ser requisito para aprobar.
         pid = self.w.post("/api/agentes/escritura/presupuestos/", {
             "clave": "c1", "aprobo": "Lucas", "cliente": "Sol",
             "items": [{"producto_id": self.cortante.id, "cantidad": 2, "precio": "2000"}]}, format="json").json()["id"]
         r = self.w.post(f"/api/agentes/escritura/presupuestos/{pid}/aprobar/", {"clave": "a1", "aprobo": "Lucas"},
-                        format="json")
-        self.assertEqual(r.status_code, 409)
-        self.assertEqual(r.json()["motivo"], "CosteoSinVerificar")
-        self.assertEqual(Presupuesto.objects.get(pk=pid).status, Presupuesto.Status.DRAFT)
-        self.assertEqual(Filament.objects.get(pk=self.rojo.pk).stock_grams, Decimal("2000"))
-        self.w.post(f"/api/agentes/escritura/productos/{self.cortante.id}/verificar-costeo/",
-                    {"clave": "v1", "aprobo": "Maxi"}, format="json")
-        r = self.w.post(f"/api/agentes/escritura/presupuestos/{pid}/aprobar/", {"clave": "a2", "aprobo": "Lucas"},
                         format="json")
         self.assertEqual(r.status_code, 200, r.content)
 
