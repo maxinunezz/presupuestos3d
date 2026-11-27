@@ -130,6 +130,7 @@ SLACK_WEBHOOKS = {
     'trabajo_impreso': os.environ.get('SLACK_WEBHOOK_TRABAJO_IMPRESO', ''),
     'trabajo_imprimiendo': os.environ.get('SLACK_WEBHOOK_TRABAJO_IMPRIMIENDO', ''),
     'pedido_completado': os.environ.get('SLACK_WEBHOOK_PEDIDO_COMPLETADO', ''),
+    'presupuesto_vencido': os.environ.get('SLACK_WEBHOOK_PRESUPUESTO_VENCIDO', ''),
 }
 
 # Integración saliente hacia 3darg-backend (ver config/api_3darg.py): sync de

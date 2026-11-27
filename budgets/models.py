@@ -2222,6 +2222,43 @@ class Presupuesto(models.Model):
 
         return result
 
+    DIAS_VENCIMIENTO = 10  # 27/11/2026: Enviado sin respuesta del cliente → se cancela solo y se avisa
+
+    @classmethod
+    def vencer_sin_respuesta(cls, dias=None, simular=False):
+        """Cancela los presupuestos Enviados hace más de `dias` días (por defecto 10) y avisa a Slack para que le
+        llegue a quien vendió y a Lucas. Devuelve la lista de lo vencido. Con simular=True no toca nada."""
+        from datetime import timedelta
+
+        from django.db.models import Q
+        from django.db.models.functions import Coalesce
+
+        dias = cls.DIAS_VENCIMIENTO if dias is None else dias
+        limite = timezone.now() - timedelta(days=dias)
+        qs = (cls.objects.filter(status=cls.Status.SENT)
+              .annotate(_enviado=Coalesce("sent_at", "created_at"))
+              .filter(Q(_enviado__lt=limite)).order_by("_enviado"))
+        vencidos = []
+        for p in qs:
+            vencidos.append({"id": p.pk, "cliente": p.client_name, "vendedor": p.vendedor,
+                             "enviado": timezone.localtime(p._enviado).date().isoformat()})
+            if simular:
+                continue
+            nota = gettext("Cancelado solo: %(dias)s días sin respuesta del cliente (%(fecha)s).") % {
+                "dias": dias, "fecha": timezone.localdate().isoformat()}
+            p.description = (f"{p.description}\n\n{nota}" if p.description else nota)
+            p.save(update_fields=["description", "updated_at"])
+            p.cancel(old_status=cls.Status.SENT)
+        if vencidos and not simular:
+            from config.slack import notificar
+
+            lineas = "\n".join(f"• #{v['id']} {v['cliente']} — vendió {v['vendedor'] or 'sin vendedor'}"
+                                for v in vencidos)
+            notificar("presupuesto_vencido", gettext(
+                ":hourglass: Presupuestos cancelados por %(dias)s días sin respuesta:\n%(lineas)s")
+                % {"dias": dias, "lineas": lineas})
+        return vencidos
+
     def motivo_no_borrar(self) -> str:
         """Por qué este presupuesto NO se puede borrar ("" si se puede).
 
