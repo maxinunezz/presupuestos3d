@@ -119,3 +119,41 @@ class DeshacerTests(_Base):
         RegistroAgente.objects.create(operacion="editar", clave="e1", aprobo="Lucas", presupuesto=p, pedido={}, resultado={})
         r = self.deshacer("e1")
         self.assertEqual(r.status_code, 409)
+
+
+@override_settings(AGENTES_API_TOKEN="token-lectura", AGENTES_ESCRITURA_TOKEN=ESCRITURA)
+class PedidoConProductoNuevoTests(_Base):
+    """Flujo único: el pedido existe desde el primer día, aunque el producto sea nuevo (precio provisorio, en diseño)."""
+
+    def setUp(self):
+        super().setUp()
+        self.c = APIClient()
+        self.c.credentials(HTTP_X_AGENTES_ESCRITURA_TOKEN=ESCRITURA)
+
+    def test_crea_producto_en_diseno_y_el_pedido(self):
+        from .models import Producto
+
+        r = self.c.post("/api/agentes/escritura/presupuestos/", {
+            "clave": "p1", "aprobo": "Lucas", "cliente": "Pocho", "vendedor": "Lucas", "fecha_entrega": "2026-12-15",
+            "items": [{"producto_nuevo": {"nombre": "Jarra Farnetera", "precio": "5000"}, "cantidad": 10},
+                      {"producto_id": self.prod.id, "cantidad": 2}]}, format="json")
+        self.assertEqual(r.status_code, 201, r.content)
+        d = r.json()
+        nuevo = Producto.objects.get(name="Jarra Farnetera")
+        self.assertEqual((nuevo.estado_diseno, nuevo.diseno_listo, nuevo.sale_price),
+                         (Producto.EstadoDiseno.EN_DISENO, False, Decimal("5000.00")))
+        self.assertEqual(d["productos_nuevos"], [nuevo.id])
+        self.assertEqual({i["producto"] for i in d["items"]}, {"Jarra Farnetera", self.prod.name})
+        # deshacer: cancela el pedido y da de baja el producto nuevo que no se usa en otro lado
+        r = self.c.post("/api/agentes/escritura/deshacer/", {"clave": "d1", "aprobo": "Lucas", "clave_original": "p1"},
+                        format="json")
+        self.assertEqual(r.status_code, 200, r.content)
+        nuevo.refresh_from_db()
+        self.assertFalse(nuevo.is_active)
+        self.assertEqual(Presupuesto.objects.get(pk=d["id"]).status, Presupuesto.Status.CANCELLED)
+
+    def test_producto_nuevo_repetido_avisa(self):
+        r = self.c.post("/api/agentes/escritura/presupuestos/", {
+            "clave": "p2", "aprobo": "Lucas", "cliente": "X",
+            "items": [{"producto_nuevo": {"nombre": self.prod.name}, "cantidad": 1}]}, format="json")
+        self.assertEqual(r.status_code, 409)

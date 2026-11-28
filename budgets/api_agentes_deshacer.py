@@ -43,7 +43,11 @@ def _crear(reg):
     if p.pagos.exists():
         raise NoSePuede("tiene pagos cargados: deshacé primero el pago")
     p.cancel()
-    return f"presupuesto #{p.pk} cancelado"
+    nuevos = reg.resultado.get("productos_nuevos") or []
+    if nuevos:  # los productos que se dieron de alta con este pedido y no se usan en otro: se desactivan
+        Producto.objects.filter(pk__in=nuevos).exclude(presupuesto_items__presupuesto__status__in=[
+            s for s in Presupuesto.Status.values if s != Presupuesto.Status.CANCELLED]).update(is_active=False)
+    return f"presupuesto #{p.pk} cancelado" + (" y el producto nuevo dado de baja" if nuevos else "")
 
 
 def _aprobar(reg):
