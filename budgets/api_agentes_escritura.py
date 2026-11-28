@@ -87,14 +87,30 @@ class CrearPresupuestoEscritura(_VistaEscritura):
         items = d.get("items") or []
         if not d.get("cliente") or not items:
             return Response({"error": "Faltan 'cliente' e 'items'."}, status=400)
+        # 27/11/2026 (flujo único): un ítem puede traer {producto_nuevo: {nombre, precio}}: el producto se da de alta
+        # en el mismo paso con precio provisorio y «En diseño» (decisión 4: el pedido existe desde el primer día).
+        nuevos = {}
         try:
-            lineas = [(int(i["producto_id"]), int(i["cantidad"]),
-                       Decimal(str(i["precio"])) if i.get("precio") not in (None, "") else None) for i in items]
+            for n, i in enumerate(items):
+                if i.get("producto_nuevo"):
+                    nombre = str(i["producto_nuevo"].get("nombre") or "").strip()[:200]
+                    if not nombre:
+                        raise ValueError
+                    nuevos[n] = (nombre, Decimal(str(i["producto_nuevo"]["precio"]))
+                                 if i["producto_nuevo"].get("precio") not in (None, "") else None)
+            lineas = [(None if n in nuevos else int(i["producto_id"]), int(i["cantidad"]),
+                       Decimal(str(i["precio"])) if i.get("precio") not in (None, "") else None)
+                      for n, i in enumerate(items)]
         except (KeyError, ValueError, TypeError, InvalidOperation):
-            return Response({"error": "Ítems inválidos: [{producto_id, cantidad, precio}]"}, status=400)
-        productos = {p.id: p for p in Producto.objects.filter(pk__in=[x[0] for x in lineas], is_active=True)}
-        if len(productos) != len({x[0] for x in lineas}) or any(c <= 0 for _, c, _ in lineas):
+            return Response({"error": "Ítems inválidos: [{producto_id | producto_nuevo: {nombre, precio}, cantidad, "
+                                      "precio}]"}, status=400)
+        existentes = {x[0] for x in lineas if x[0] is not None}
+        productos = {p.id: p for p in Producto.objects.filter(pk__in=existentes, is_active=True)}
+        if len(productos) != len(existentes) or any(c <= 0 for _, c, _ in lineas):
             return Response({"error": "Algún producto no existe o la cantidad es inválida."}, status=400)
+        for nombre, _ in nuevos.values():
+            if Producto.objects.filter(name__iexact=nombre, is_active=True).exists():
+                return Response({"error": f"Ya existe el producto «{nombre}»: usá su id."}, status=409)
         from datetime import date, datetime, time
 
         extra = {}
@@ -115,6 +131,15 @@ class CrearPresupuestoEscritura(_VistaEscritura):
                 return Response({"error": f"estado_venta inválido ({', '.join(Presupuesto.EstadoVenta.values)})."}, status=400)
             extra["estado_venta"] = ev
         with transaction.atomic():
+            creados = []
+            for n, (nombre, precio_prov) in nuevos.items():
+                prod = Producto.objects.create(name=nombre, sale_price=precio_prov or Decimal("0"),
+                                               estado_diseno=Producto.EstadoDiseno.EN_DISENO, diseno_listo=False,
+                                               description=f"Alta por Roque (aprobó {aprobo}) al vender: falta el diseño "
+                                                           "y la ficha de costeo; el precio es provisorio.")
+                productos[prod.id] = prod
+                creados.append(prod.id)
+                lineas[n] = (prod.id, lineas[n][1], lineas[n][2])
             p = Presupuesto.objects.create(
                 client_name=str(d["cliente"])[:150], vendedor=str(d.get("vendedor") or "")[:60],
                 description=(str(d.get("notas") or "") + f"\n\nCargado por Roque · aprobó {aprobo}").strip(),
@@ -125,7 +150,9 @@ class CrearPresupuestoEscritura(_VistaEscritura):
                 # (se actualiza solo cuando Lucas marca Diseño listo).
                 PresupuestoItem.objects.create(presupuesto=p, producto=productos[pid], quantity=cantidad,
                                                unit_price=precio)
-            resultado = _estado(p)
+            resultado = {**_estado(p), "productos_nuevos": creados,
+                         "items": [{"producto_id": i.producto_id, "producto": i.producto.name, "cantidad": i.quantity}
+                                   for i in p.items.select_related("producto")]}
             self._registrar("crear", clave, aprobo, p, d, resultado)
         return Response(resultado, status=201)
 
@@ -144,6 +171,7 @@ class AprobarPresupuestoEscritura(_VistaEscritura):
             return Response({"error": "Ese presupuesto no existe."}, status=404)
         # 27/11/2026: el costeo verificado ya no es requisito para aprobar (decisión del dueño). Los endpoints de
         # verificar/costeos-pendientes quedan hasta adaptar Roque y después se borran.
+        status_antes = p.status
         try:
             r = p.approve()
         except (DisenoNoListoError, PresupuestoNotApprovableError) as exc:
@@ -156,7 +184,8 @@ class AprobarPresupuestoEscritura(_VistaEscritura):
                      "trabajos": len(trabajos), "maquinas": sorted({j.machine.name for j in trabajos if j.machine}),
                      "esperando_diseno": sorted(set(r.get("esperando_diseno", []))),
                      "aviso_fecha": ("La fecha estimada no cuenta la espera de la compra del material que falta."
-                                     if r.get("shortages") else "")}
+                                     if r.get("shortages") else ""),
+                     "_antes": {"status": status_antes}}
         self._registrar("aprobar", clave, aprobo, p, request.data, resultado)
         return Response(resultado)
 
